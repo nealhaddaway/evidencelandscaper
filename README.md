@@ -110,3 +110,19 @@ replaced with the local raw-file location. Conflicting source IDs cause
 the import to fail instead of silently choosing records. RIS import does not
 publish to Zenodo or initiate W01. The generated handoff still needs
 integration and validation against the future consolidated W00 dataset.
+
+
+## Accepting manual imports for a specific W00 run
+
+Manual imports remain outside individual W00 search runs and are **not**
+automatically included. Select exactly one validated import directory per
+source with `accept_w00_ris(plan, imports)`, where `imports` is a named vector
+(e.g. `c(cba = cab_dir, pqdt = pqdt_dir)`). This writes an immutable
+`accepted_manual_imports.json` to that W00 run, recording the accepted source,
+import location, record count, and manifest/handoff SHA-256 checksums.
+The function independently verifies archived raw RIS and handoff checksums
+and rejects source mismatches or repeated source IDs in the selection.
+A mistaken previous import is excluded simply by not selecting it.
+It does not alter either import or automatically execute W01.
+To change an accepted selection, prepare a new W00 run rather than rewriting
+a historical acceptance record.
