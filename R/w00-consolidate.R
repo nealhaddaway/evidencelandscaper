@@ -17,13 +17,17 @@ consolidate_w00 <- function(plan) {
                                                     "search_plan.json"))]
     has_manual <- file.exists(file.path(candidates, "accepted_manual_imports.json"))
     has_auto <- file.exists(file.path(candidates, "w00_retrieval_manifest.json"))
-    eligible <- candidates[has_manual | has_auto]
+    has_full <- file.exists(file.path(candidates, "w00_full_retrieval_manifest.json"))
+    eligible <- candidates[has_manual | has_auto | has_full]
     if (!length(eligible)) {
       stop("No W00 run with accepted RIS imports or retrieval results found.",
            call. = FALSE)
     }
-    # Prefer explicit manual acceptance over unrelated newer API-only tests.
-    if (any(has_manual)) {
+    # Full harvest is preferred over old sample/manual-only tests. Never mix
+    # independently planned runs without explicit acceptance of provenance.
+    if (any(has_full)) {
+      eligible <- candidates[has_full]
+    } else if (any(has_manual)) {
       eligible <- candidates[has_manual]
     }
     chosen <- sort(eligible, decreasing = TRUE)[[1L]]
@@ -60,7 +64,11 @@ consolidate_w00 <- function(plan) {
     stop("Existing consolidated output is incomplete or changed; refusing overwrite.",
          call. = FALSE)
   }
-  parent_file <- file.path(run_dir, "w00_retrieval_manifest.json")
+  full_file <- file.path(run_dir, "w00_full_retrieval_manifest.json")
+  sample_file <- file.path(run_dir, "w00_retrieval_manifest.json")
+  if (file.exists(full_file) && file.exists(sample_file))
+    stop("Both full and sample retrieval manifests exist; ambiguous source.", call. = FALSE)
+  parent_file <- if (file.exists(full_file)) full_file else sample_file
   accepted_file <- file.path(run_dir, "accepted_manual_imports.json")
   if (!file.exists(parent_file) && !file.exists(accepted_file)) {
     stop("No completed automatic retrieval or accepted manual RIS imports.",
@@ -70,7 +78,8 @@ consolidate_w00 <- function(plan) {
   sha <- function(p) digest::digest(file = p, algo = "sha256", serialize = FALSE)
   auto <- if (file.exists(parent_file)) read_json(parent_file) else NULL
   manual <- if (file.exists(accepted_file)) read_json(accepted_file) else NULL
-  if (!is.null(auto) && !identical(auto$status, "sample_success")) {
+  if (!is.null(auto) && !identical(auto$status,
+      if (identical(parent_file, full_file)) "success" else "sample_success")) {
     stop("Automated W00 retrieval is not successfully completed.", call. = FALSE)
   }
   if (!is.null(manual) && !identical(manual$run_id, basename(run_dir))) {
@@ -100,6 +109,7 @@ consolidate_w00 <- function(plan) {
     lines <- lines[nzchar(trimws(lines))]
     lapply(lines, jsonlite::fromJSON, simplifyVector = FALSE)
   }
+  `%||%` <- function(x, y) if (is.null(x)) y else x
   if (!is.null(auto)) for (src in names(auto$sources)) {
     entry <- auto$sources[[src]]
     if (!identical(entry$status, "success")) stop("Unsuccessful source: ", src, call. = FALSE)
@@ -107,6 +117,13 @@ consolidate_w00 <- function(plan) {
     mf <- file.path(dir, "manifest.json")
     if (!file.exists(mf)) stop("Missing source manifest: ", src, call. = FALSE)
     m <- read_json(mf)
+    declared <- if (src == "lens") m$unique_records_written else
+      if (src == "openalex") m$unique_records_exported else
+      if (src == "scopus") m$entries_retrieved else m$records_retrieved
+    if (is.null(declared) || length(declared) != 1L ||
+        as.integer(declared) != as.integer(entry$records)) {
+      stop("Parent/source manifest record count disagreement: ", src, call. = FALSE)
+    }
     if (!identical(m$status, "success") &&
         !(identical(src, "lens") && identical(m$status, "sample_success"))) {
       stop("Source manifest unsuccessful: ", src, call. = FALSE)
@@ -114,6 +131,24 @@ consolidate_w00 <- function(plan) {
     if (src == "openalex") {
       rows <- jsonl(file.path(dir, "unique_works.jsonl"))
       origin <- file.path("sources", src, "unique_works.jsonl")
+    } else if (src %in% c("scopus", "wos")) {
+      files <- sort(list.files(file.path(dir, "raw"),
+        pattern = "^response_[0-9]{6}[.]json$", full.names = TRUE))
+      if (!length(files) && as.integer(entry$records) > 0L)
+        stop("Missing raw retrieval pages: ", src, call. = FALSE)
+      rows <- unlist(lapply(files, function(f) {
+        page <- read_json(f)
+        if (src == "scopus") {
+          if (is.null(page[["search-results"]]))
+            stop("Malformed Scopus raw response: ", f, call. = FALSE)
+          page[["search-results"]][["entry"]] %||% list()
+        } else {
+          if (is.null(page$metadata))
+            stop("Malformed Web of Science raw response: ", f, call. = FALSE)
+          page$hits %||% list()
+        }
+      }), recursive = FALSE)
+      origin <- file.path("sources", src, "raw/response_*.json")
     } else if (src == "lens" || startsWith(src, "ebsco_")) {
       rows <- jsonl(file.path(dir, "records.jsonl"))
       origin <- file.path("sources", src, "records.jsonl")
