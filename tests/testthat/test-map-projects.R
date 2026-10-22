@@ -1,0 +1,10 @@
+test_that("maps are created separately from the package", {
+  root <- tempfile("evidence-maps-")
+  dir.create(root)
+  path <- create_map("sample_review", root = root)
+  expect_true(file.exists(file.path(path, "map.yml")))
+  expect_true(dir.exists(file.path(path, "data", "raw")))
+  expect_identical(open_map(path), normalizePath(path, winslash = "/"))
+  expect_error(create_map("sample_review", root = root), "already exists")
+  expect_error(create_map("../escape", root = root), "name must")
+})
