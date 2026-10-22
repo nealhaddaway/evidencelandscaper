@@ -85,7 +85,7 @@ prepare_w01 <- function(map) {
     expected <- as.integer(meta$sources[[src]]$records)
     input <- file.path(run, "sources", src)
     outdir <- file.path(dest, "adapters", src)
-    dir.create(outdir, recursive = TRUE)
+    if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
     output <- file.path(dest, paste0(src, ".jsonl"))
     if (file.exists(output)) {
       validate_output(output, src, expected)
