@@ -22,6 +22,8 @@ finalize_w04 <- function(map_path=NULL) {
     identical(manifest$screening_summary_status,"PASS")
   },logical(1))]
   if(!length(received))stop("No W04 run ready for finalisation: import the required human decisions first.")
+  full<-received[grepl("^full-",basename(received))]
+  if(length(full))received<-full
   if(length(received)>1L) {
     received<-received[order(file.info(file.path(received,"local_manifest.json"))$mtime,decreasing=TRUE)]
     warning("Multiple returned W04 runs found; using most recently returned: ",received[[1L]])
@@ -97,7 +99,7 @@ finalize_w04 <- function(map_path=NULL) {
      records=length(source),retain=sum(result_decisions=="retain"),
      exclude=sum(result_decisions=="exclude"),
      source_layer_sha256=sha(layer_path),
-     review_receipt_sha256=sha(file.path(return_dir,"receipt.json")),
+     review_receipt_sha256=if(has_review)sha(file.path(return_dir,"receipt.json")) else "",
      final_layer_sha256=sha(outfile)),
      summarypath,auto_unbox=TRUE,pretty=TRUE)
   message("[W04] Finalised ",kind,": ",sum(result_decisions=="retain"),
