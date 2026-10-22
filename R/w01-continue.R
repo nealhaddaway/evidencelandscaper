@@ -26,7 +26,13 @@ continue_w01 <- function(scored,run_llm=FALSE,
       stop("Previously prepared W01 queue failed checksum validation.")
     message("[W01] Reusing verified review-case preparation.")
   } else if(dir.exists(review_dir)) {
-    stop("Partially completed review preparation detected. Preserve files for inspection.")
+    existing <- list.files(review_dir, recursive=TRUE, all.files=TRUE,
+                           no..=TRUE, full.names=FALSE)
+    stop("W01 review preparation stopped before writing its completion manifest. ",
+         "The files have been preserved. Existing paths: ",
+         if(length(existing)) paste(head(existing, 25L),collapse=", ") else "(empty directory)",
+         ". Please share this error and the paths shown; do not delete or overwrite them.",
+         call.=FALSE)
   } else {
     queue<-prepare_w01_review(scored)
   }
