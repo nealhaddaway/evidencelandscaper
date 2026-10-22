@@ -44,6 +44,23 @@ consolidate_w00 <- function(plan) {
   run_dir <- normalizePath(dirname(dirname(plan$search_plan)),
                            winslash = "/", mustWork = TRUE)
   output <- file.path(run_dir, "consolidated")
+  # Preserve an already published consolidation. New manually accepted inputs
+  # create a separate immutable revision instead of rewriting its records.
+  accepted_now <- file.path(run_dir, "accepted_manual_imports.json")
+  base_manifest <- file.path(output, "manifest.json")
+  if (file.exists(accepted_now) && file.exists(base_manifest)) {
+    earlier <- tryCatch(jsonlite::fromJSON(base_manifest,
+      simplifyVector = FALSE), error = function(e) NULL)
+    latest_sha <- digest::digest(file = accepted_now, algo = "sha256",
+                                 serialize = FALSE)
+    if (!is.null(earlier) &&
+        !identical(earlier$manual_registry_sha256, latest_sha)) {
+      output <- file.path(run_dir,
+                         paste0("consolidated-manual-", substr(latest_sha, 1L, 12L)))
+      message("[W00] New manual acceptance detected; retaining earlier",
+              " consolidation and creating: ", basename(output))
+    }
+  }
   if (dir.exists(output)) {
     existing_manifest <- file.path(output, "manifest.json")
     existing_records <- file.path(output, "records.jsonl")
