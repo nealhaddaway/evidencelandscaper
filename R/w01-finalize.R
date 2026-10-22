@@ -80,12 +80,27 @@ finalize_w01 <- function(scored,llm_dir=NULL) {
   if(dir.exists(staging))stop("Finalisation input archive already exists.")
   dir.create(staging)
   pairs<-utils::read.csv(rescored,stringsAsFactors=FALSE,check.names=FALSE)
-  required<-c("record_i","record_j","stable_pair_key",
+  required<-c("record_i","record_j",
               "source_id_i","source_record_id_i","source_id_j",
               "source_record_id_j","rescored_classification","rescored_rule")
   if(length(setdiff(required,names(pairs))))
     stop("Rescored decisions lack immutable W01 source IDs.")
-  pairs$pair_key<-pairs$stable_pair_key
+  meta<-utils::read.csv(metadata,stringsAsFactors=FALSE)
+  i<-as.integer(pairs$record_i);j<-as.integer(pairs$record_j)
+  if(anyNA(i)||anyNA(j)||any(i<1L|i>nrow(meta)|j<1L|j>nrow(meta)))
+    stop("Invalid pair indices.")
+  if(!identical(as.character(pairs$source_id_i),as.character(meta$source[i]))||
+     !identical(as.character(pairs$source_record_id_i),as.character(meta$source_record_id[i]))||
+     !identical(as.character(pairs$source_id_j),as.character(meta$source[j]))||
+     !identical(as.character(pairs$source_record_id_j),as.character(meta$source_record_id[j])))
+    stop("Final W01 pair source IDs mismatch.")
+  identity<-function(src,id)paste0(nchar(src,type="bytes"),":",src,nchar(id,type="bytes"),":",id)
+  a<-identity(pairs$source_id_i,pairs$source_record_id_i)
+  b<-identity(pairs$source_id_j,pairs$source_record_id_j)
+  lo<-ifelse(a<=b,a,b);hi<-ifelse(a<=b,b,a)
+  pairs$pair_key<-vapply(seq_along(lo),function(k)
+    digest::digest(paste0(nchar(lo[[k]],type="bytes"),":",lo[[k]],hi[[k]]),
+      algo="sha256",serialize=FALSE),character(1))
   if(anyDuplicated(pairs$pair_key))stop("Duplicate stable pair keys.")
   combined<-file.path(staging,"combined_pair_decisions.csv")
   utils::write.csv(pairs,combined,row.names=FALSE,na="")
