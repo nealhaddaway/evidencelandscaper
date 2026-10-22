@@ -30,7 +30,7 @@ val<-function(x)if(is.null(x)||!length(x))"" else paste(unlist(x,use.names=FALSE
 utc<-function()format(Sys.time(),"%Y-%m-%dT%H:%M:%SZ",tz="UTC")
 ui<-fluidPage(
   tags$head(tags$style(HTML("body{max-width:1220px;margin:auto}.box{border:1px solid #ddd;border-radius:8px;padding:18px;overflow-wrap:anywhere}pre{white-space:pre-wrap;font-family:inherit}"))),
-  titlePanel("W04 · Collective action screening"),
+  titlePanel("W04 · Collective action screening (review v2)"),
   textOutput("reviewer"),h4(textOutput("progress")),
   conditionalPanel("output.ready && !output.complete",
     p(class="text-muted","Read the abstract and model assessment, choose a decision, and save. Use Previous/Next to review earlier decisions. Exclusions do not require a reason."),
@@ -149,8 +149,9 @@ server<-function(input,output,session){
     if(!input$decision %in% c("retain","exclude","uncertain"))
       return(showNotification("Select a decision",type="error"))
     reason<-trimws(val(input$reason))
-    if(!nzchar(reason) && !identical(input$decision,"exclude"))
-      return(showNotification("Provide a reason",type="error"))
+    # Reasons are optional for exclusions; required only for retain/uncertain.
+    if(input$decision %in% c("retain","uncertain") && !nzchar(reason))
+      return(showNotification("A reason is required only for Retain or Uncertain.",type="error"))
     e<-list(schema="local-w04-review-decision-v1",
       review_case_id=x$review_case_id,record_id=x$record_id,
       queue_sha256=queuehash,reviewer=reviewer(),decision=input$decision,
