@@ -13,9 +13,10 @@ import_w04_review <- function(w04, decisions_file=NULL, include_all=FALSE) {
   w04<-normalizePath(w04,winslash="/",mustWork=TRUE)
   queue<-prepare_w04_review(w04,include_all=include_all)
   if(is.null(queue))stop("There are no W04 review cases to import.")
+  reconciled<-identical(basename(queue),"reconciled_human_review_queue.jsonl")
   if(is.null(decisions_file))
     decisions_file<-file.path(w04,if(include_all)"validation_reviewer_state" else
-                             "reviewer_state","decisions.jsonl")
+                             if(reconciled)"reconciled_reviewer_state" else "reviewer_state","decisions.jsonl")
   decisions_file<-normalizePath(decisions_file,winslash="/",mustWork=TRUE)
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
   readjl<-function(p) {
@@ -51,7 +52,7 @@ import_w04_review <- function(w04, decisions_file=NULL, include_all=FALSE) {
   if(!setequal(names(final),qids))
     stop("Review return incomplete: ",length(final)," of ",length(qids),
          " decisions. All assigned cases must be completed.")
-  dest<-file.path(w04,if(include_all)"validation_returned" else "human_review_returned")
+  dest<-file.path(w04,if(include_all)"validation_returned" else if(reconciled)"reconciled_human_review_returned" else "human_review_returned")
   receipt<-file.path(dest,"receipt.json")
   export_copy<-file.path(dest,"reviewer_export.jsonl")
   if(file.exists(receipt)) {
