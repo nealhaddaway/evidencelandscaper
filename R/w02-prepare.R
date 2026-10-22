@@ -84,6 +84,8 @@ prepare_w02 <- function(scored) {
       manifestations=subset
     )
   })
+  if(length(rows)!=as.integer(w01$clusters) || nrow(map)!=as.integer(w01$source_manifestations))
+    stop("W02 input does not reconcile with final W01 counts.")
   dest<-file.path(root,"W02_main")
   file<-file.path(dest,"canonical_input.jsonl")
   provenance<-file.path(dest,"input_manifest.json")
