@@ -128,3 +128,7 @@ To change an accepted selection, prepare a new W00 run rather than rewriting
 a historical acceptance record.
 
 By default, `accept_w00_ris(plan)` automatically discovers the latest successful local CAB (`cba`) and PQD&T (`pqdt`) import. With multiple successful imports for a source it selects the newest and reports which was selected. All selected import files are hash-validated. Pass `sources=` for another set of database identifiers or an explicit named `imports=` vector to override automatic selection. This does not silently accept older imports.
+
+## EBSCOhost W00 sources
+
+The 17 configured EBSCO databases use the unchanged upstream EBSCO EIT R ingestion script via the local `run_w00_ebsco()` adapter, or the unified `run_w00()` parent. Provide `EBSCO_EHOST_UID` and `EBSCO_EHOST_PWD` in your user `.Renviron`. EBSCO database entitlements and configured search fields are checked against the live EIT Info response. Each selected EBSCO database has separate `sources/<source-id>/` output and provenance. Only bounded 1–100-record retrieval is enabled; this adapter has not yet been runtime-tested in RStudio.
