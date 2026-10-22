@@ -60,3 +60,23 @@ to reproduce in subsequent work.
 
 Use `devtools::test()` and `devtools::check()` locally to verify package
 behaviour. Runtime tests have not yet been executed in this environment.
+
+
+## Unified bounded W00 retrieval
+
+After creating a fresh `plan_w00()` result containing only `lens` and/or
+`openalex`, run:
+
+```r
+result <- run_w00(plan, max_records = 10L)
+jsonlite::fromJSON(result$manifest)
+```
+
+This runs the existing source adapters sequentially and writes
+`w00_retrieval_manifest.json` in the map's W00 run directory.
+The parent refuses unported sources, preflights credentials, retains existing
+outputs, and stops on any failed source. It does **not** perform a full-corpus
+harvest or provide a W01 handover. Create a new plan for each new retrieval:
+completed or failed source directories are not overwritten.
+
+The user must explicitly call `run_w00()`; planning itself makes no API calls.
