@@ -6,10 +6,27 @@
 #' @param prompt_file Path to a locally edited UTF-8 text prompt.
 #' @param max_records Number of W03-eligible records to test (0 = all).
 #' @param model OpenAI API model identifier.
-#' @param open_app Launch local Shiny when the run requires human review.
+#' @param open_app NULL prompts in an interactive R console (default); TRUE opens without asking; FALSE never opens.
 #' @return New local W04 run directory, invisibly.
 #' @export
-run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_app=TRUE) {
+run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_app=NULL) {
+  launch_review<-function(run_dir,status) {
+    if(!identical(status,"HUMAN_REVIEW_REQUIRED"))return(invisible(NULL))
+    if(identical(open_app,FALSE)) {
+      message("[W04] Review required. Open later with adjudicate_w04(w04).")
+      return(invisible(NULL))
+    }
+    if(isTRUE(open_app))return(adjudicate_w04(run_dir))
+    if(!interactive()) {
+      message("[W04] Non-interactive session: Shiny not opened. Use adjudicate_w04(w04) later.")
+      return(invisible(NULL))
+    }
+    answer<-tolower(trimws(readline(
+      "[W04] Human review is required. Open the Shiny adjudication app now? [y/N]: ")))
+    if(answer%in%c("y","yes"))adjudicate_w04(run_dir) else
+      message("[W04] Review deferred. Open later with adjudicate_w04(w04).")
+    invisible(NULL)
+  }
   scored<-normalizePath(scored,winslash="/",mustWork=TRUE)
   prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
   if(!grepl("\\.txt$",prompt_file,ignore.case=TRUE))
@@ -52,10 +69,8 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
        !identical(previous$prompt_sha256,prompt_hash))
       stop("Existing W04 run fails immutable input checks.")
     message("[W04] Reusing existing model results: ",dest)
-    if(isTRUE(open_app)) {
-      sm<-jsonlite::fromJSON(file.path(dest,"consensus","summary.json"))
-      if(identical(sm$status,"HUMAN_REVIEW_REQUIRED")) adjudicate_w04(dest)
-    }
+    sm<-jsonlite::fromJSON(file.path(dest,"consensus","summary.json"))
+    launch_review(dest,sm$status)
     return(invisible(dest))
   }
   if(dir.exists(dest)&&length(list.files(dest,all.files=TRUE,no..=TRUE)))
@@ -101,7 +116,6 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
   message("[W04] ",summary$status,
           ": ",summary$records_screened," records screened; ",
           "uncertain cases remain for human adjudication.")
-  if(isTRUE(open_app) && identical(summary$status,"HUMAN_REVIEW_REQUIRED"))
-    adjudicate_w04(dest)
+  launch_review(dest,summary$status)
   invisible(dest)
 }
