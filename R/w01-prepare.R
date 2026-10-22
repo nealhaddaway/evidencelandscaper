@@ -46,9 +46,9 @@ prepare_w01 <- function(map) {
     stop("W00 source-count reconciliation failed.", call. = FALSE)
   dest <- file.path(map, "runs", "W01", paste0("prepare-", meta$run_id,
                          "-", substr(meta$records_sha256, 1L, 12L)))
-  if (file.exists(dest) || dir.exists(dest)) {
-    stop("W01 preparation already exists; refusing overwrite: ", dest,
-         call. = FALSE)
+  if (file.exists(file.path(dest, "source_inputs.json"))) {
+    stop("Completed W01 preparation already exists: ",
+         file.path(dest, "source_inputs.json"), call. = FALSE)
   }
   asset <- function(name) {
     p <- system.file("w01", name, package = "evidencelandscaper")
@@ -64,14 +64,35 @@ prepare_w01 <- function(map) {
       stop("W01 main adapter ", name, " failed: ",
            paste(tail(res, 20L), collapse = "\n"), call. = FALSE)
   }
-  dir.create(dest, recursive = TRUE)
+  if (!dir.exists(dest)) dir.create(dest, recursive = TRUE)
   paths <- list()
+  validate_output <- function(output, src, expected) {
+    lines <- readLines(output, warn = FALSE, encoding = "UTF-8")
+    lines <- lines[nzchar(trimws(lines))]
+    if (length(lines) != expected)
+      stop("W01 source count mismatch: ", src, " expected ", expected,
+           " got ", length(lines), call. = FALSE)
+    ids <- vapply(lines, function(line) {
+      obj <- jsonlite::fromJSON(line, simplifyVector = FALSE)
+      if (src == "lens") obj$identity$lens_id else
+        obj$sidecar_identity$sidecar_record_id
+    }, character(1))
+    if (anyNA(ids) || any(!nzchar(ids)) || anyDuplicated(ids))
+      stop("W01 source IDs missing or duplicated: ", src, call. = FALSE)
+    invisible(TRUE)
+  }
   for (src in source_names) {
     expected <- as.integer(meta$sources[[src]]$records)
     input <- file.path(run, "sources", src)
     outdir <- file.path(dest, "adapters", src)
     dir.create(outdir, recursive = TRUE)
     output <- file.path(dest, paste0(src, ".jsonl"))
+    if (file.exists(output)) {
+      validate_output(output, src, expected)
+      paths[[src]] <- output
+      message("[W01 prepare] Reused verified ", src, ": ", expected, " records")
+      next
+    }
     if (expected == 0L) {
       file.create(output)
     } else if (src == "lens" || startsWith(src, "ebsco_")) {
@@ -83,8 +104,11 @@ prepare_w01 <- function(map) {
         scopus = "workflow_01s_scopus_sidecar_adapter.R",
         wos = "workflow_01w_wos_starter_sidecar_adapter.R",
         openalex = "workflow_01u_openalex_sidecar_adapter.R")
-      run_script(script, c("--input-dir", input, "--output-dir", outdir))
-      original <- file.path(outdir, paste0(src, "_sidecar_records.jsonl"))
+      original <- file.path(outdir, if (src == "wos")
+                            "wos_starter_sidecar_records.jsonl" else
+                            paste0(src, "_sidecar_records.jsonl"))
+      if (!file.exists(original)) run_script(script,
+        c("--input-dir", input, "--output-dir", outdir))
       if (!file.copy(original, output))
         stop("No adapted JSONL produced for ", src, call. = FALSE)
     } else if (src %in% c("agricola", "pubmed", "ethos", "epmc_preprints")) {
@@ -120,18 +144,7 @@ prepare_w01 <- function(map) {
           "--submission-id", basename(dirname(entry$import_directory)),
           "--output", output))
     } else stop("W01 main does not support source: ", src, call. = FALSE)
-    lines <- readLines(output, warn = FALSE, encoding = "UTF-8")
-    lines <- lines[nzchar(trimws(lines))]
-    if (length(lines) != expected)
-      stop("W01 source count mismatch: ", src, " expected ", expected,
-           " got ", length(lines), call. = FALSE)
-    ids <- vapply(lines, function(line) {
-      obj <- jsonlite::fromJSON(line, simplifyVector = FALSE)
-      if (src == "lens") obj$identity$lens_id else
-        obj$sidecar_identity$sidecar_record_id
-    }, character(1))
-    if (anyNA(ids) || any(!nzchar(ids)) || anyDuplicated(ids))
-      stop("W01 source IDs missing or duplicated: ", src, call. = FALSE)
+    validate_output(output, src, expected)
     paths[[src]] <- output
     message("[W01 prepare] ", src, ": ", expected, " records")
   }
