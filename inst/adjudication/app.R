@@ -159,4 +159,4 @@ server<-function(input,output,session) {
                         character(1)),file)
     })
 }
-shinyApp(ui,server)
+shiny::runApp(shinyApp(ui,server),launch.browser=TRUE)
