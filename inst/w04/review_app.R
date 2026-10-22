@@ -17,8 +17,10 @@ if(anyDuplicated(ids)||any(!vapply(cases,function(x)
 queuehash<-digest::digest(file=queue,algo="sha256",serialize=FALSE)
 identityfile<-file.path(out,"reviewer.json")
 eventfile<-file.path(out,"decisions.jsonl")
+abstractfile<-file.path(out,"abstract_corrections.jsonl")
 who<-if(file.exists(identityfile))jsonlite::fromJSON(identityfile)$reviewer else ""
 events<-if(file.exists(eventfile))readjl(eventfile) else list()
+abstract_events<-if(file.exists(abstractfile))readjl(abstractfile) else list()
 last_events<-function(e) {
   ans<-list()
   for(x in e)ans[[x$review_case_id]]<-x
@@ -32,19 +34,30 @@ ui<-fluidPage(
   textOutput("reviewer"),h4(textOutput("progress")),
   conditionalPanel("output.ready",
     fluidRow(column(6,actionButton("prev","Previous")),column(6,actionButton("next","Next"))),
-    fluidRow(column(8,uiOutput("bibliography")),column(4,uiOutput("model"))),
-    radioButtons("decision","Human screening decision",
-      choices=c("Retain"="retain","Exclude"="exclude","Uncertain"="uncertain"),
-      selected=character(0),inline=TRUE),
-    textAreaInput("reason","Reason for decision",rows=3,width="100%"),
-    actionButton("save","Save decision",class="btn-primary"),
-    downloadButton("export","Export adjudication decisions")
+    fluidRow(
+      column(8,uiOutput("bibliography"),uiOutput("model")),
+      column(4,div(class="box",
+        h4("Human screening decision"),
+        radioButtons("decision",NULL,
+          choices=c("Retain"="retain","Exclude"="exclude","Uncertain"="uncertain"),
+          selected=character(0)),
+        textAreaInput("reason","Reason for decision",rows=5,width="100%"),
+        actionButton("save","Save decision",class="btn-primary"),
+        tags$hr(),downloadButton("export","Export adjudication decisions"),
+        tags$p(class="text-muted","Human decisions are saved separately from model results.")
+      ))
+    )
   )
 )
 server<-function(input,output,session){
   reviewer<-reactiveVal(who)
   position<-reactiveVal(1L)
   saved<-reactiveVal(events)
+  abstract_saved<-reactiveVal(abstract_events)
+  corrected_abstract<-reactive({
+    ev<-last_events(abstract_saved())[[current()$review_case_id]]
+    if(is.null(ev))val(current()$bibliographic$abstract) else val(ev$abstract)
+  })
   output$ready<-reactive(nzchar(reviewer()))
   outputOptions(output,"ready",suspendWhenHidden=FALSE)
   observeEvent(TRUE,{
@@ -83,7 +96,28 @@ server<-function(input,output,session){
       tags$span("  "),
       tags$a(href=paste0("https://scholar.google.com/scholar?q=",
                         URLencode(title,reserved=TRUE)),target="_blank","Google Scholar"),
-      h5("Abstract"),tags$pre(val(x$abstract)))
+      h5("Abstract"),tags$pre(corrected_abstract()),
+      actionButton("edit_abstract","Edit abstract"))
+  })
+  observeEvent(input$edit_abstract,{
+    showModal(modalDialog(title="Edit abstract",size="l",easyClose=FALSE,
+      textAreaInput("edited_abstract","Abstract",value=corrected_abstract(),
+                    rows=14,width="100%"),
+      footer=tagList(modalButton("Cancel"),actionButton("save_abstract","Save abstract"))))
+  })
+  observeEvent(input$save_abstract,{
+    x<-current()
+    e<-list(schema="local-w04-abstract-correction-v1",
+      review_case_id=x$review_case_id,record_id=x$record_id,
+      queue_sha256=queuehash,reviewer=reviewer(),
+      original_abstract_sha256=digest::digest(val(x$bibliographic$abstract),
+                                      algo="sha256",serialize=FALSE),
+      abstract=val(input$edited_abstract),created_at_utc=utc())
+    cat(jsonlite::toJSON(e,auto_unbox=TRUE,null="null"),"\n",
+        file=abstractfile,append=TRUE,sep="")
+    abstract_saved(c(abstract_saved(),list(e)))
+    removeModal()
+    showNotification("Abstract correction saved separately from source record.",type="message")
   })
   output$model<-renderUI({
     x<-current()
