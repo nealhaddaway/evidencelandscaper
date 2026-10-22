@@ -25,7 +25,7 @@ server<-function(input,output,session){
   updateTextAreaInput(session,"abstract",value=if(is.null(x))"" else as.character(x$abstract))
  })
  observeEvent(input$prev,pos(max(1L,pos()-1L)))
- observeEvent(input$next,pos(min(length(cases),pos()+1L)))
+ observeEvent(input[['next']],pos(min(length(cases),pos()+1L)))
  observeEvent(input$save,{
   x<-current();value<-trimws(input$abstract)
   if(!nzchar(value)){showNotification("Enter an abstract first",type="error");return()}
