@@ -64,7 +64,7 @@ server<-function(input,output,session){
   output$progress<-renderText(paste(position(),"of",length(cases),"cases ·",
                                       length(last_events(saved())),"decisions saved"))
   observeEvent(input$prev,position(max(1L,position()-1L)))
-  observeEvent(input$next,position(min(length(cases),position()+1L)))
+  observeEvent(input[['next']],position(min(length(cases),position()+1L)))
   observeEvent(position(),{
     x<-last_events(saved())[[current()$review_case_id]]
     updateRadioButtons(session,"decision",selected=if(is.null(x))character() else x$decision)
