@@ -107,7 +107,7 @@ enrich_sciencedirect_abstracts <- function(scored,max_requests=0L,pause_seconds=
     utils::write.csv(plan,plan_file,row.names=FALSE)
     jsonlite::write_json(list(schema="local-w02-sciencedirect-plan-v1",
       w01_map_sha256=source_sha,plan_sha256=plan_sha,
-      clusters=nrow(groups),missing_abstract_clusters=nrow(plan)),
+      clusters=length(groups),missing_abstract_clusters=nrow(plan)),
       state_file,auto_unbox=TRUE,pretty=TRUE)
   }
   cat("[W02] ",length(groups)," clusters; ",nrow(plan),
@@ -123,6 +123,8 @@ enrich_sciencedirect_abstracts <- function(scored,max_requests=0L,pause_seconds=
   inst<-Sys.getenv("SCOPUS_INSTTOKEN")
   if(!nzchar(api_key)||!nzchar(inst))
     stop("Existing SCOPUS_API_TOKEN and SCOPUS_INSTTOKEN must be configured.")
+  if(!requireNamespace("xml2",quietly=TRUE))
+    stop("Package xml2 is required to parse ScienceDirect XML.")
   eligible<-plan[plan$reason=="eligible",,drop=FALSE]
   attempts<-0L
   for(i in seq_len(nrow(eligible))) {
