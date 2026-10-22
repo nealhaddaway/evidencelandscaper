@@ -1,0 +1,12 @@
+Package: evidencelandscaper
+Title: Local Projects for Reproducible Evidence Maps
+Version: 0.0.0.9000
+Authors@R: person("Neal", "Haddaway", role = c("aut", "cre"), email = "43783900+nealhaddaway@users.noreply.github.com")
+Description: Provides local project management for reproducible evidence maps.
+    Stores review-specific inputs, runs, and outputs outside the package source tree.
+License: MIT
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Suggests: testthat (>= 3.0.0)
+Config/testthat/edition: 3
