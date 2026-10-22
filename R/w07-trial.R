@@ -129,6 +129,7 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   jsonlite::write_json(c(provenance,list(status="TRIAL_COMPLETE",
        records=length(final),coding_sha256=sha(outpath))),
     file.path(dest,"summary.json"),pretty=TRUE,auto_unbox=TRUE)
-  message("[W07] Trial completed: ",dest)
+  export_w07_candidates(dest)
+  message("[W07] Coding completed: ",dest)
   invisible(dest)
 }
