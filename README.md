@@ -64,8 +64,8 @@ behaviour. Runtime tests have not yet been executed in this environment.
 
 ## Unified bounded W00 retrieval
 
-After creating a fresh `plan_w00()` result containing only `lens` and/or
-`openalex`, run:
+After creating a fresh `plan_w00()` result containing supported automated sources (`lens`, `openalex`, `agricola`,
+`pubmed`, `ethos`, or `epmc_preprints`), run:
 
 ```r
 result <- run_w00(plan, max_records = 10L)
@@ -80,3 +80,5 @@ harvest or provide a W01 handover. Create a new plan for each new retrieval:
 completed or failed source directories are not overwritten.
 
 The user must explicitly call `run_w00()`; planning itself makes no API calls.
+
+CAB Abstracts (`cba`) and ProQuest Dissertations & Theses (`pqdt`) are **manual RIS sources**. The W00 parent explicitly refuses automatic retrieval for either source. A local, provenance-preserving RIS import and W01 handover are separate pending steps; do not substitute Europe PMC's CBA collection for the licensed CAB Abstracts database.
