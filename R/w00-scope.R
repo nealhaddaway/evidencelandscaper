@@ -2,10 +2,15 @@
 #'
 #' Reuses the unchanged LivingEvidenceMap/main count-only R implementation.
 #' All outputs stay in this map's W00 run. Manual RIS sources are excluded.
-#' @param plan Existing plan_w00() result.
+#' @param plan A map name/path or an existing plan_w00() result.
 #' @return Count CSV path invisibly.
 #' @export
 scope_w00 <- function(plan) {
+  if (is.character(plan) && length(plan) == 1L && !is.na(plan)) {
+    plan <- plan_w00(plan)
+    message("[W00 scope] Created plan for all configured automated sources: ",
+            basename(plan$run_dir))
+  }
   if (!is.list(plan) || !is.character(plan$search_plan) ||
       length(plan$search_plan) != 1L || !file.exists(plan$search_plan) ||
       !is.character(plan$query_archive) ||
