@@ -3,7 +3,8 @@
 #' Produces a source-labelled record envelope (not yet W01-ready), with
 #' verified source counts and immutable pointers to original source data.
 #' No API calls, deduplication, Zenodo actions or W01 execution.
-#' @param plan An existing plan_w00() result, or a map name/path.\n#'   For a map, selects its latest eligible W00 run with accepted RIS imports;\n#'   otherwise the latest successfully retrieved run.
+#' @param plan An existing plan_w00() result, or a map name/path.\n#'   For a map, selects its latest eligible W00 run with accepted RIS imports;
+#'   otherwise the latest successfully retrieved run.
 #' @return Path of consolidated W00 manifest.
 #' @export
 consolidate_w00 <- function(plan) {
@@ -39,8 +40,25 @@ consolidate_w00 <- function(plan) {
   run_dir <- normalizePath(dirname(dirname(plan$search_plan)),
                            winslash = "/", mustWork = TRUE)
   output <- file.path(run_dir, "consolidated")
-  if (file.exists(output) || dir.exists(output)) {
-    stop("Consolidated output already exists; refusing overwrite.", call. = FALSE)
+  if (dir.exists(output)) {
+    existing_manifest <- file.path(output, "manifest.json")
+    existing_records <- file.path(output, "records.jsonl")
+    if (file.exists(existing_manifest) && file.exists(existing_records)) {
+      previous <- tryCatch(jsonlite::fromJSON(existing_manifest,
+        simplifyVector = FALSE), error = function(e) NULL)
+      if (!is.null(previous) && identical(previous$status, "success") &&
+          identical(previous$run_id, basename(run_dir)) &&
+          identical(previous$records_sha256,
+                    digest::digest(file = existing_records, algo = "sha256",
+                                   serialize = FALSE))) {
+        message("[W00] Existing consolidation verified: ",
+                previous$record_count, " records from ",
+                previous$source_count, " sources.")
+        return(invisible(existing_manifest))
+      }
+    }
+    stop("Existing consolidated output is incomplete or changed; refusing overwrite.",
+         call. = FALSE)
   }
   parent_file <- file.path(run_dir, "w00_retrieval_manifest.json")
   accepted_file <- file.path(run_dir, "accepted_manual_imports.json")
@@ -144,7 +162,7 @@ consolidate_w00 <- function(plan) {
   dir.create(output, recursive = TRUE, showWarnings = FALSE)
   data_path <- file.path(output, "records.jsonl")
   con <- file(data_path, "wt", encoding = "UTF-8")
-  on.exit(if (isOpen(con)) close(con), add = TRUE)
+  on.exit(try(close(con), silent = TRUE), add = TRUE)
   for (record in records) writeLines(jsonlite::toJSON(record,
     auto_unbox = TRUE, null = "null", na = "null"), con, useBytes = TRUE)
   close(con)
