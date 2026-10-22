@@ -42,7 +42,7 @@ ui<-fluidPage(
         radioButtons("decision",NULL,
           choices=c("Retain"="retain","Exclude"="exclude","Uncertain"="uncertain"),
           selected=character(0)),
-        textAreaInput("reason","Reason for decision",rows=5,width="100%"),
+        textAreaInput("reason","Reason (optional for exclusion)",rows=5,width="100%"),
         actionButton("save","Save decision",class="btn-primary"),
         tags$hr(),downloadButton("export","Export adjudication decisions"),
         tags$p(class="text-muted","Human decisions are saved separately from model results.")
