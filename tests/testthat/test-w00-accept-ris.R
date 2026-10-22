@@ -1,0 +1,20 @@
+test_that("Manual import acceptance is explicit and immutable", {
+  skip_if_not_installed("jsonlite")
+  skip_if_not_installed("digest")
+  root <- tempfile("maps-")
+  dir.create(root)
+  map <- create_map("accept_test", root)
+  strategy <- system.file("w00", "example-strategy.json",
+                          package = "evidencelandscaper")
+  plan <- plan_w00(map, strategy, sources = "openalex")
+  ris <- tempfile(fileext = ".ris")
+  writeLines(c("TY  - JOUR", "TI  - Demonstration", "ER  - "), ris)
+  imported <- import_ris(map, ris, "pqdt", "ProQuest Dissertations & Theses",
+                         "2026-10-22", "placeholder test query")
+  expect_error(accept_w00_ris(plan, c(cba = imported)), "Invalid import status")
+  selection <- accept_w00_ris(plan, c(pqdt = imported))
+  expect_true(file.exists(selection))
+  saved <- jsonlite::fromJSON(selection)
+  expect_equal(saved$imports$pqdt$records, 1)
+  expect_error(accept_w00_ris(plan, c(pqdt = imported)), "already exists")
+})
