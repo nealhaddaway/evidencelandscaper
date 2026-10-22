@@ -16,10 +16,14 @@ finalize_w04 <- function(map_path=NULL) {
   }),use.names=FALSE)
   runs<-runs[file.exists(file.path(runs,"local_manifest.json"))]
   if(!length(runs))stop("No completed local W04 screening runs found.")
-  received<-runs[file.exists(file.path(runs,"human_review_returned","receipt.json"))]
-  if(!length(received))stop("No returned W04 human adjudication found. First run import_w04_review().")
+  received<-runs[vapply(runs,function(run) {
+    if(file.exists(file.path(run,"human_review_returned","receipt.json")))return(TRUE)
+    manifest<-jsonlite::fromJSON(file.path(run,"local_manifest.json"))
+    identical(manifest$screening_summary_status,"PASS")
+  },logical(1))]
+  if(!length(received))stop("No W04 run ready for finalisation: import the required human decisions first.")
   if(length(received)>1L) {
-    received<-received[order(file.info(file.path(received,"human_review_returned","receipt.json"))$mtime,decreasing=TRUE)]
+    received<-received[order(file.info(file.path(received,"local_manifest.json"))$mtime,decreasing=TRUE)]
     warning("Multiple returned W04 runs found; using most recently returned: ",received[[1L]])
   }
   w04<-received[[1L]]
@@ -34,19 +38,21 @@ finalize_w04 <- function(map_path=NULL) {
   layer_path<-file.path(w04,"consensus","workflow04_consensus_layer.jsonl")
   return_dir<-file.path(w04,"human_review_returned")
   decision_path<-file.path(return_dir,"latest_decisions.jsonl")
-  receipt<-jsonlite::fromJSON(file.path(return_dir,"receipt.json"),simplifyVector=FALSE)
+  has_review<-file.exists(file.path(return_dir,"receipt.json"))
+  receipt<-if(has_review)jsonlite::fromJSON(file.path(return_dir,"receipt.json"),simplifyVector=FALSE) else NULL
   source<-readjl(layer_path)
-  if(!identical(scalar(receipt$status),"RETURNED")||
+  if(!identical(scalar(manifest$consensus_sha256),sha(layer_path))||
+     (has_review && (!identical(scalar(receipt$status),"RETURNED")||
      !identical(scalar(receipt$latest_decisions_sha256),sha(decision_path))||
-     !identical(scalar(receipt$queue_sha256),sha(file.path(w04,"human_review_queue.jsonl")))||
-     !identical(scalar(manifest$consensus_sha256),sha(layer_path)))
+     !identical(scalar(receipt$queue_sha256),sha(file.path(w04,"human_review_queue.jsonl"))))))
     stop("W04 return integrity checks failed.")
-  decisions<-readjl(decision_path)
+  decisions<-if(has_review)readjl(decision_path) else list()
   dmap<-setNames(decisions,vapply(decisions,function(z)scalar(z$record_id),character(1)))
   ids<-vapply(source,function(z)scalar(z$record_id),character(1))
   if(anyDuplicated(ids)||anyDuplicated(names(dmap)))stop("Duplicate W04 record IDs.")
   unresolved<-ids[vapply(source,function(z)
     identical(scalar(z$screening$decision),"uncertain"),logical(1))]
+  if(!has_review && length(unresolved))stop("W04 human adjudication is still required.")
   if(!setequal(names(dmap),unresolved))
     stop("Returned human decisions do not exactly match unresolved records.")
   for(i in seq_along(source)) {
@@ -75,7 +81,7 @@ finalize_w04 <- function(map_path=NULL) {
        !identical(scalar(previous$final_layer_sha256),sha(outfile))||
        !identical(scalar(previous$source_layer_sha256),sha(layer_path))||
        !identical(scalar(previous$review_receipt_sha256),
-                  sha(file.path(return_dir,"receipt.json"))))
+                  if(has_review)sha(file.path(return_dir,"receipt.json")) else ""))
       stop("Existing finalised W04 output differs; refusing overwrite.")
     message("[W04] Previously finalised output verified: ",resultdir)
     return(invisible(resultdir))
@@ -87,7 +93,7 @@ finalize_w04 <- function(map_path=NULL) {
       null="null",na="null",digits=NA),character(1)),outfile,useBytes=TRUE)
   kind<-scalar(manifest$run_type)
   jsonlite::write_json(list(schema="local-w04-finalisation-v1",status="final",
-     run_type=kind,authoritative_w05_handover=FALSE,
+     run_type=kind,authoritative_w05_handover=identical(kind,"full"),
      records=length(source),retain=sum(result_decisions=="retain"),
      exclude=sum(result_decisions=="exclude"),
      source_layer_sha256=sha(layer_path),
