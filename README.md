@@ -126,3 +126,5 @@ A mistaken previous import is excluded simply by not selecting it.
 It does not alter either import or automatically execute W01.
 To change an accepted selection, prepare a new W00 run rather than rewriting
 a historical acceptance record.
+
+By default, `accept_w00_ris(plan)` automatically discovers the latest successful local CAB (`cba`) and PQD&T (`pqdt`) import. With multiple successful imports for a source it selects the newest and reports which was selected. All selected import files are hash-validated. Pass `sources=` for another set of database identifiers or an explicit named `imports=` vector to override automatic selection. This does not silently accept older imports.
