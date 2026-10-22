@@ -17,9 +17,9 @@ prepare_w01_review <- function(scored) {
   if (!file.exists(file.path(union,"source_inputs.json")))
     stop("W01 source union missing.")
   destination <- file.path(parent,"review_preparation")
-  if (dir.exists(destination))
-    stop("Review preparation already exists; refusing overwrite: ",
-         destination,call.=FALSE)
+  if (file.exists(file.path(destination,"manifest.json")))
+    stop("Review preparation is already complete: ",
+         file.path(destination,"manifest.json"),call.=FALSE)
   asset <- function(name) {
     p <- system.file("w01",name,package="evidencelandscaper")
     if(!nzchar(p)) stop("Missing original W01 script: ",name)
@@ -34,10 +34,21 @@ prepare_w01_review <- function(scored) {
       stop("W01 ",name," failed:\n",paste(tail(o,25L),collapse="\n"),
            call.=FALSE)
   }
-  dir.create(destination,recursive=TRUE)
+  dir.create(destination,recursive=TRUE,showWarnings=FALSE)
   rescored<-file.path(destination,"rescored")
-  execute("workflow_01_deduplication_identifier_rescore.R",
+  csv<-file.path(rescored,"rescored_sample.csv")
+  if(file.exists(csv)) {
+    stopifnot(file.exists(file.path(rescored,"summary.json")))
+    rs<-jsonlite::fromJSON(file.path(rescored,"summary.json"))
+    if(!identical(rs$status,"success"))
+      stop("Existing W01 rescored state is not marked complete.")
+    message("[W01] Reusing completed identifier rescoring.")
+  } else {
+    if(dir.exists(rescored) && length(list.files(rescored,all.files=TRUE,no..=TRUE)))
+      stop("Incomplete identifier rescore output present; preserve it for inspection.")
+    execute("workflow_01_deduplication_identifier_rescore.R",
       c("--input-dir",scored,"--output-dir",rescored))
+  }
   csv<-file.path(rescored,"rescored_sample.csv")
   metadata<-file.path(scored,"normalised_metadata.csv")
   if(!file.exists(csv)||!file.exists(metadata))
@@ -51,24 +62,60 @@ prepare_w01_review <- function(scored) {
     stop("Identifier rescoring dropped candidate pairs.")
   # Stable indices are only accepted against exactly the metadata/union
   # snapshot that yielded the already validated scoring stage.
-  if(!"stable_pair_key" %in% names(pairs) ||
-     anyNA(pairs$stable_pair_key) ||
-     any(!grepl("^[0-9a-f]{64}$",pairs$stable_pair_key)))
-    stop("W01 stable source-identity pair keys missing or malformed.")
-  pairs$pair_key<-pairs$stable_pair_key
+  required_ids <- c("source_id_i","source_record_id_i",
+                    "source_id_j","source_record_id_j")
+  if(length(setdiff(required_ids,names(pairs))))
+    stop("W01 rescore lacks immutable source IDs.")
+  meta <- utils::read.csv(metadata,stringsAsFactors=FALSE,check.names=FALSE)
+  i <- as.integer(pairs$record_i)
+  j <- as.integer(pairs$record_j)
+  if(anyNA(i)||anyNA(j)||any(i<1L|i>nrow(meta)|j<1L|j>nrow(meta)))
+    stop("Invalid W01 pair positions.")
+  for(side in c("i","j")) {
+    pos <- if(side=="i") i else j
+    if(anyNA(pairs[[paste0("source_id_",side)]]) ||
+       anyNA(pairs[[paste0("source_record_id_",side)]]) ||
+       !identical(as.character(pairs[[paste0("source_id_",side)]]),
+                  as.character(meta$source[pos])) ||
+       !identical(as.character(pairs[[paste0("source_record_id_",side)]]),
+                  as.character(meta$source_record_id[pos])))
+      stop("W01 source identity changed since scoring.")
+  }
+  identity <- function(src,id) paste0(nchar(src,type="bytes"),":",src,
+                                       nchar(id,type="bytes"),":",id)
+  a<-identity(pairs$source_id_i,pairs$source_record_id_i)
+  b<-identity(pairs$source_id_j,pairs$source_record_id_j)
+  low<-ifelse(a<=b,a,b)
+  high<-ifelse(a<=b,b,a)
+  pairs$pair_key <- vapply(seq_along(low),function(k)
+    digest::digest(paste0(nchar(low[[k]],type="bytes"),":",
+                          low[[k]],high[[k]]),
+                   algo="sha256",serialize=FALSE),character(1))
   if(anyDuplicated(pairs$pair_key))
     stop("Repeated candidate-pair identity after rescoring.")
   review<-pairs[pairs$rescored_classification %in%
                   c("review","unresolved"),,drop=FALSE]
   path<-file.path(destination,"human_review_pairs.csv")
-  utils::write.csv(review,path,row.names=FALSE,na="")
   queue<-file.path(destination,"w01_review_cases.jsonl")
-  if(nrow(review)) {
-    execute("workflow_01_build_duplicate_adjudication_cases.R",
-      c("--review-pairs",path,"--metadata",metadata,
-        "--union-dir",union,"--output",queue))
+  if(file.exists(queue)) {
+    if(!file.exists(path))
+      stop("W01 review queue exists without its review-pair source.")
+    old<-utils::read.csv(path,stringsAsFactors=FALSE,check.names=FALSE)
+    if(nrow(old)!=nrow(review) ||
+       !identical(as.character(old$pair_key),as.character(review$pair_key)))
+      stop("Existing W01 review queue differs from rescored decisions.")
+    message("[W01] Reusing previously generated review cases.")
   } else {
-    file.create(queue)
+    if(file.exists(path))
+      stop("Partial review pair export exists without queue. Preserve for inspection.")
+    utils::write.csv(review,path,row.names=FALSE,na="")
+    if(nrow(review)) {
+      execute("workflow_01_build_duplicate_adjudication_cases.R",
+        c("--review-pairs",path,"--metadata",metadata,
+          "--union-dir",union,"--output",queue))
+    } else {
+      file.create(queue)
+    }
   }
   cases<-readLines(queue,warn=FALSE,encoding="UTF-8")
   cases<-cases[nzchar(trimws(cases))]
