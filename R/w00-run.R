@@ -53,7 +53,13 @@ run_w00 <- function(plan, max_records = 10L) {
       !nzchar(Sys.getenv("OPENALEX_API_TOKEN"))) {
     stop("OPENALEX_API_KEY is missing; no retrieval started.", call. = FALSE)
   }
-  if (any(sources %in% ebsco_sources) &&\n      (!nzchar(Sys.getenv("EBSCO_EHOST_UID")) ||\n       !nzchar(Sys.getenv("EBSCO_EHOST_PWD")))) {\n    stop("EBSCO_EHOST_UID and EBSCO_EHOST_PWD required; no retrieval started.",\n         call. = FALSE)\n  }\n  run_dir <- normalizePath(dirname(dirname(plan$search_plan)),
+  if (any(sources %in% ebsco_sources) &&
+      (!nzchar(Sys.getenv("EBSCO_EHOST_UID")) ||
+       !nzchar(Sys.getenv("EBSCO_EHOST_PWD")))) {
+    stop("EBSCO_EHOST_UID and EBSCO_EHOST_PWD required; no retrieval started.",
+         call. = FALSE)
+  }
+  run_dir <- normalizePath(dirname(dirname(plan$search_plan)),
                            winslash = "/", mustWork = TRUE)
   summary_path <- file.path(run_dir, "w00_retrieval_manifest.json")
   if (file.exists(summary_path)) {
@@ -89,7 +95,8 @@ run_w00 <- function(plan, max_records = 10L) {
         agricola = run_w00_epmc(plan, source, max_records),
         pubmed = run_w00_epmc(plan, source, max_records),
         ethos = run_w00_epmc(plan, source, max_records),
-        epmc_preprints = run_w00_epmc(plan, source, max_records),\n        run_w00_ebsco(plan, source, max_records))
+        epmc_preprints = run_w00_epmc(plan, source, max_records),
+        run_w00_ebsco(plan, source, max_records))
       source_manifest <- file.path(output_dir, "manifest.json")
       if (!file.exists(source_manifest)) stop("Missing source manifest.")
       manifest <- jsonlite::fromJSON(source_manifest, simplifyVector = FALSE)
