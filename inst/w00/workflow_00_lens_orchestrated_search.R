@@ -18,7 +18,8 @@ canonical_path <- arg('--output', 'data/canonical/current/repair/records.jsonl')
 manifest_path <- arg('--manifest', 'data/canonical/current/repair/manifest.json')
 audit_dir <- arg('--audit-dir', 'fresh_rebuild')
 max_records_arg <- arg('--max-records', 'all')
-if (!identical(max_records_arg, 'all') && (!grepl('^[0-9]+
+if (!identical(max_records_arg, 'all') &&
+    (!grepl('^[0-9]+
 
 api <- 'https://api.lens.org/scholarly/search'
 page_size <- if (is.finite(sample_limit)) min(500L, sample_limit) else 500L
@@ -199,7 +200,11 @@ writeLines(toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = 'null', na 
 writeLines(toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = 'null', na = 'null'), file.path(audit_dir, 'search_manifest.json'))
 message(toJSON(manifest, auto_unbox = TRUE, pretty = TRUE, null = 'null', na = 'null'))
 message('PASS: Lens harvest complete.')
-, max_records_arg) || as.integer(max_records_arg) < 1L)) stop('Invalid --max-records', call. = FALSE)
+, max_records_arg) ||
+     is.na(suppressWarnings(as.integer(max_records_arg))) ||
+     as.integer(max_records_arg) < 1L || as.integer(max_records_arg) > 100L)) {
+  stop('Invalid --max-records (expected 1..100 or all)', call. = FALSE)
+}
 sample_limit <- if (identical(max_records_arg, 'all')) Inf else as.integer(max_records_arg)
 
 api <- 'https://api.lens.org/scholarly/search'
