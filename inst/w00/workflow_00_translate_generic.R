@@ -121,11 +121,11 @@ render<-function(source,fields=NULL){
       return(paste(vapply(c("TI","AB","AK"),function(field)sprintf("%s=(%s)",field,expr),character(1)),collapse=" OR "))
     }
     if(source=="lens"&&is_pair){
-      a<-paste(vals[[tokens[[1L]]]],collapse=" OR ")
-      b<-paste(vals[[tokens[[3L]]]],collapse=" OR ")
-      return(paste0("(",paste(vapply(c("title","abstract","keyword"),function(field)
-        sprintf("(%s:(%s) AND %s:(%s))",field,a,field,b),character(1)),
-        collapse=" OR "),")"))
+      block<-function(t){
+        txt<-paste(t,collapse=" OR ")
+        sprintf("(title:(%s) OR abstract:(%s) OR keyword:(%s))",txt,txt,txt)
+      }
+      return(sprintf("(%s AND %s)",block(vals[[tokens[[1L]]]]),block(vals[[tokens[[3L]]]])))
     }
     if(is_pair&&!is.null(fields)){
       block<-function(v)paste0("(",paste(sprintf("%s (%s)",fields,paste(v,collapse=" OR ")),collapse=" OR "),")")
