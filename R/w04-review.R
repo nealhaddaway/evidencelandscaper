@@ -3,7 +3,7 @@
 #' @param include_all Include consensus records as optional human validation.
 #' @return Path to queue JSONL, or NULL if there are no review cases.
 #' @export
-prepare_w04_review <- function(w04,include_all=FALSE) {
+prepare_w04_review <- function(w04,include_all=FALSE,missing_abstracts=FALSE) {
   w04<-normalizePath(w04,winslash="/",mustWork=TRUE)
   layer<-file.path(w04,"consensus","workflow04_consensus_layer.jsonl")
   votes<-lapply(1:3,function(i)file.path(w04,"consensus",
@@ -22,7 +22,11 @@ prepare_w04_review <- function(w04,include_all=FALSE) {
   included<-Filter(function(x)include_all ||
     isTRUE(x$screening$requires_human_review) ||
     identical(x$screening$decision,"uncertain"),model)
-  destination<-file.path(w04,if(include_all)"validation_queue.jsonl" else "human_review_queue.jsonl")
+  if(missing_abstracts)included<-Filter(function(x) {
+    id<-as.character(x$record_id)
+    !nzchar(trimws(paste(unlist(src[[id]]$canonical$abstract),collapse=" ")))
+  },model)
+  destination<-file.path(w04,if(missing_abstracts)"missing_abstract_review_queue.jsonl" else if(include_all)"validation_queue.jsonl" else "human_review_queue.jsonl")
   metadata<-function(x) {
     c<-x$canonical
     scalar<-function(y)if(is.null(y)||!length(y))"" else
@@ -62,10 +66,10 @@ prepare_w04_review <- function(w04,include_all=FALSE) {
 #' @param include_all Display all screened records for validation instead of
 #'   only unresolved consensus records.
 #' @export
-adjudicate_w04 <- function(w04,include_all=FALSE) {
-  queue<-prepare_w04_review(w04,include_all=include_all)
+adjudicate_w04 <- function(w04,include_all=FALSE,missing_abstracts=FALSE) {
+  queue<-prepare_w04_review(w04,include_all=include_all,missing_abstracts=missing_abstracts)
   if(is.null(queue))return(invisible(NULL))
-  state<-file.path(w04,if(include_all)"validation_reviewer_state" else "reviewer_state")
+  state<-file.path(w04,if(missing_abstracts)"missing_abstract_reviewer_state" else if(include_all)"validation_reviewer_state" else "reviewer_state")
   dir.create(state,recursive=TRUE,showWarnings=FALSE)
   script<-system.file("w04","review_app.R",package="evidencelandscaper")
   if(!nzchar(script))stop("W04 Shiny reviewer app is not packaged.")
