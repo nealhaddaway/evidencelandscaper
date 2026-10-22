@@ -36,7 +36,7 @@ doi_link<-function(x) {
   d<-trimws(value(x))
   d<-sub("^https?://(dx[.])?doi[.]org/","",d,ignore.case=TRUE)
   if(!grepl("^10[.][0-9]{4,9}/",d)) return(NULL)
-  paste0("https://doi.org/",utils::URLencode(d,reserved=TRUE))
+  paste0("https://doi.org/",utils::URLencode(d,reserved=FALSE))
 }
 prior_name<-if(file.exists(identity_path)) value(jsonlite::fromJSON(identity_path)$reviewer) else ""
 ui<-fluidPage(
@@ -100,6 +100,7 @@ server<-function(input,output,session) {
       p(strong("Year: "),value(rec$year)),
       p(strong("Journal/source: "),value(fallback(rec$journal,rec$source))),
       p(strong("Volume/issue/pages: "),paste(value(rec$volume),value(rec$issue),value(rec$pages))),
+      p(strong("Keywords: "),value(rec$keywords)),
       p(strong("Source ID: "),record_key(rec)),
       if(!is.null(doi)) tags$a(href=doi,target="_blank",rel="noopener noreferrer","DOI"),
       tags$span("  "),
