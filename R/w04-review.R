@@ -6,6 +6,21 @@
 prepare_w04_review <- function(w04,include_all=FALSE,missing_abstracts=FALSE) {
   w04<-normalizePath(w04,winslash="/",mustWork=TRUE)
   layer<-file.path(w04,"consensus","workflow04_consensus_layer.jsonl")
+  reconcile_root<-file.path(w04,"reconciled")
+  if(dir.exists(reconcile_root) && !missing_abstracts) {
+    dirs<-list.dirs(reconcile_root,recursive=FALSE,full.names=TRUE)
+    dirs<-dirs[file.exists(file.path(dirs,"manifest.json"))]
+    if(length(dirs)>1L)stop("Multiple reconciled W04 layers; explicit selection required.")
+    if(length(dirs)==1L) {
+      m<-jsonlite::fromJSON(file.path(dirs[[1L]],"manifest.json"),simplifyVector=FALSE)
+      proposed<-file.path(dirs[[1L]],"workflow04_reconciled_layer.jsonl")
+      sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
+      if(!identical(m$source_w04_sha256,sha(layer)) ||
+         !identical(m$merged_sha256,sha(proposed)))
+        stop("W04 reconciled layer integrity failure.")
+      layer<-proposed
+    }
+  }
   votes<-lapply(1:3,function(i)file.path(w04,"consensus",
                     c("pass1.jsonl","pass2.jsonl","pass3_conflicts.jsonl")[[i]]))
   canonical<-file.path(dirname(dirname(w04)),"W02_main","finalised","canonical.jsonl")
