@@ -132,3 +132,7 @@ By default, `accept_w00_ris(plan)` automatically discovers the latest successful
 ## EBSCOhost W00 sources
 
 The 17 configured EBSCO databases use the unchanged upstream EBSCO EIT R ingestion script via the local `run_w00_ebsco()` adapter, or the unified `run_w00()` parent. Provide `EBSCO_EHOST_UID` and `EBSCO_EHOST_PWD` in your user `.Renviron`. EBSCO database entitlements and configured search fields are checked against the live EIT Info response. Each selected EBSCO database has separate `sources/<source-id>/` output and provenance. Only bounded 1–100-record retrieval is enabled; this adapter has not yet been runtime-tested in RStudio.
+
+## Local W00 consolidation
+
+`consolidate_w00(plan)` reads the **specified** run's successful automated outputs and its `accepted_manual_imports.json` (if present), rechecks the manual import checksums and source record counts, and writes `consolidated/records.jsonl` and `consolidated/manifest.json` without changing any original files. The output contains source-labelled original-record envelopes, **not a W01-ready canonical schema**. This is deliberate: downstream W01 format mapping and validation are separate work. A run with accepted RIS only can be consolidated; historical manual imports are never auto-included. The function refuses overwriting a previous consolidation.
