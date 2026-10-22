@@ -2,10 +2,10 @@
 #' @param prompt_file Local W04 TXT prompt.
 #' @param map_path Existing local map, defaults to Ostara.
 #' @param model OpenAI model.
-#' @param open_app Open human review UI if needed.
+#' @param open_app NULL asks in console (default), TRUE opens automatically, FALSE skips.
 #' @return W04 local run path, invisibly.
 #' @export
-run_w04_full <- function(prompt_file=NULL, map_path=NULL, model="gpt-5.6",open_app=TRUE) {
+run_w04_full <- function(prompt_file=NULL, map_path=NULL, model="gpt-5.6",open_app=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   if(is.null(prompt_file)) {
