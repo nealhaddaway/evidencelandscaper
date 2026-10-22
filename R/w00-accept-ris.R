@@ -4,7 +4,7 @@
 #' imports appear in this run's acceptance registry. Does not modify imports,
 #' retrieve data, combine records, or dispatch W01.
 #' @param plan Result of plan_w00() for the target run.
-#' @param imports Optional named character vector of import output directories.\n#'   If omitted, discovers successful imports; ambiguity requires explicit choice.\n#' @param sources Source IDs to auto-discover, defaults to cba and pqdt.
+#' @param imports Optional named character vector of import output directories.\n#'   If omitted, selects the latest successful import per source.\n#' @param sources Source IDs to auto-discover, defaults to cba and pqdt.
 #' @return Path to accepted_manual_imports.json, invisibly.
 #' @export
 accept_w00_ris <- function(plan, imports = NULL, sources = c("cba", "pqdt")) {
@@ -43,9 +43,12 @@ accept_w00_ris <- function(plan, imports = NULL, sources = c("cba", "pqdt")) {
         stop("No successful RIS import found for ", source, call. = FALSE)
       }
       if (length(candidates) > 1L) {
-        stop("Multiple successful RIS imports found for ", source,
-             "; select the intended import explicitly using imports=. Candidates: ",
-             paste(candidates, collapse = "; "), call. = FALSE)
+        # Import directory names include sortable UTC run timestamps.
+        candidates <- candidates[order(basename(dirname(candidates)),
+                                       decreasing = TRUE)]
+        message("Multiple RIS imports for ", source,
+                "; selecting most recent: ", candidates[[1L]],
+                ". To override, provide imports= explicitly.")
       }
       found[[source]] <- candidates[[1L]]
     }
