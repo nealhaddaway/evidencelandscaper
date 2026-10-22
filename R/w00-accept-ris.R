@@ -3,11 +3,32 @@
 #' Explicitly selects previously completed local RIS imports. Only selected
 #' imports appear in this run's acceptance registry. Does not modify imports,
 #' retrieve data, combine records, or dispatch W01.
-#' @param plan Result of plan_w00() for the target run.
+#' @param plan Existing plan_w00() result or review name/path.\n#'   Review name targets its latest successful full W00 retrieval run.
 #' @param imports Optional named character vector of import output directories.\n#'   If omitted, selects the latest successful import per source.\n#' @param sources Source IDs to auto-discover, defaults to cba and pqdt.
 #' @return Path to accepted_manual_imports.json, invisibly.
 #' @export
 accept_w00_ris <- function(plan, imports = NULL, sources = c("cba", "pqdt")) {
+  if (is.character(plan) && length(plan) == 1L && !is.na(plan)) {
+    map <- open_map(plan)
+    root <- file.path(map, "runs", "W00")
+    runs <- if (dir.exists(root)) list.dirs(root, recursive = FALSE,
+                                           full.names = TRUE) else character()
+    valid <- runs[vapply(runs, function(run) {
+      path <- file.path(run, "w00_full_retrieval_manifest.json")
+      if (!file.exists(path)) return(FALSE)
+      x <- tryCatch(jsonlite::fromJSON(path, simplifyVector = FALSE),
+                    error = function(e) NULL)
+      !is.null(x) && identical(x$status, "success") &&
+        file.exists(file.path(run, "plan", "search_plan.json"))
+    }, logical(1))]
+    if (!length(valid))
+      stop("No successful full W00 run found for review.", call. = FALSE)
+    run <- sort(valid, decreasing = TRUE)[[1L]]
+    message("[W00] Accepting RIS imports for full run: ", basename(run))
+    plan <- list(search_plan = file.path(run, "plan", "search_plan.json"),
+                 query_archive = file.path(run, "search_archive",
+                                           paste0("run-", basename(run))))
+  }
   if (!is.list(plan) || length(plan$search_plan) != 1L ||
       !file.exists(plan$search_plan) || length(plan$query_archive) != 1L ||
       !dir.exists(plan$query_archive)) {
