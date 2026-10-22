@@ -12,6 +12,7 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   ontology_file<-normalizePath(ontology_file,winslash="/",mustWork=TRUE)
   prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
+  archive_map_prompt(prompt_file,"W07",map_path)
   if(!nzchar(Sys.getenv("OPENAI_API_KEY")))stop("OPENAI_API_KEY is required.")
   n<-as.integer(n)
   if(is.na(n)||n<1L||n>50L)stop("n must be between 1 and 50.")
