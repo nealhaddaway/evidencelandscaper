@@ -49,6 +49,13 @@ import_w01_review <- function(package_dir, destination) {
     x <- readLines(corrections_file,warn=FALSE,encoding="UTF-8")
     lapply(x[nzchar(trimws(x))],jsonlite::fromJSON,simplifyVector=FALSE)
   } else list()
+  case_lookup <- list()
+  for(line in records) {
+    z <- jsonlite::fromJSON(line,simplifyVector=FALSE)
+    case_lookup[[z$review_case_id]] <- c(
+      paste(z$record_i$source,z$record_i$source_record_id,sep="::"),
+      paste(z$record_j$source,z$record_j$source_record_id,sep="::"))
+  }
   for(e in correction_events) {
     if (!identical(e$schema,"local-abstract-correction-v1") ||
         !identical(e$reviewer,who) ||
@@ -56,6 +63,7 @@ import_w01_review <- function(package_dir, destination) {
         !e$review_case_id %in% ids ||
         !e$action %in% c("edit","delete") ||
         !is.character(e$record_key) || length(e$record_key)!=1L ||
+        !e$record_key %in% case_lookup[[e$review_case_id]] ||
         !is.character(e$value) || length(e$value)!=1L) {
       stop("Invalid or foreign abstract correction event.")
     }
