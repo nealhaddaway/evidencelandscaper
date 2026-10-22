@@ -6,9 +6,10 @@
 #' @param prompt_file Path to a locally edited UTF-8 text prompt.
 #' @param max_records Number of W03-eligible records to test (0 = all).
 #' @param model OpenAI API model identifier.
+#' @param open_app Launch local Shiny when the run requires human review.
 #' @return New local W04 run directory, invisibly.
 #' @export
-run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6") {
+run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_app=TRUE) {
   scored<-normalizePath(scored,winslash="/",mustWork=TRUE)
   prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
   if(!grepl("\\.txt$",prompt_file,ignore.case=TRUE))
@@ -49,6 +50,10 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6") {
        !identical(previous$prompt_sha256,prompt_hash))
       stop("Existing W04 run fails immutable input checks.")
     message("[W04] Reusing existing model results: ",dest)
+    if(isTRUE(open_app)) {
+      sm<-jsonlite::fromJSON(file.path(dest,"consensus","summary.json"))
+      if(identical(sm$status,"HUMAN_REVIEW_REQUIRED")) adjudicate_w04(dest)
+    }
     return(invisible(dest))
   }
   if(dir.exists(dest)&&length(list.files(dest,all.files=TRUE,no..=TRUE)))
@@ -94,5 +99,7 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6") {
   message("[W04] ",summary$status,
           ": ",summary$records_screened," records screened; ",
           "uncertain cases remain for human adjudication.")
+  if(isTRUE(open_app) && identical(summary$status,"HUMAN_REVIEW_REQUIRED"))
+    adjudicate_w04(dest)
   invisible(dest)
 }
