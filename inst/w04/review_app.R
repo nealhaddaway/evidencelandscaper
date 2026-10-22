@@ -134,7 +134,7 @@ server<-function(input,output,session){
     if(!input$decision %in% c("retain","exclude","uncertain"))
       return(showNotification("Select a decision",type="error"))
     reason<-trimws(val(input$reason))
-    if(!nzchar(reason))
+    if(!nzchar(reason) && !identical(input$decision,"exclude"))
       return(showNotification("Provide a reason",type="error"))
     e<-list(schema="local-w04-review-decision-v1",
       review_case_id=x$review_case_id,record_id=x$record_id,
