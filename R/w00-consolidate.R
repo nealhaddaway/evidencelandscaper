@@ -3,12 +3,39 @@
 #' Produces a source-labelled record envelope (not yet W01-ready), with
 #' verified source counts and immutable pointers to original source data.
 #' No API calls, deduplication, Zenodo actions or W01 execution.
-#' @param plan Existing plan_w00() result.
+#' @param plan An existing plan_w00() result, or a map name/path.\n#'   For a map, selects its latest eligible W00 run with accepted RIS imports;\n#'   otherwise the latest successfully retrieved run.
 #' @return Path of consolidated W00 manifest.
 #' @export
 consolidate_w00 <- function(plan) {
-  if (!is.list(plan) || length(plan$search_plan) != 1L ||
-      !file.exists(plan$search_plan)) stop("Supply a valid W00 plan.", call. = FALSE)
+  if (is.character(plan) && length(plan) == 1L && !is.na(plan)) {
+    map <- open_map(plan)
+    root <- file.path(map, "runs", "W00")
+    candidates <- if (dir.exists(root)) list.dirs(root, recursive = FALSE,
+                                                  full.names = TRUE) else character()
+    candidates <- candidates[file.exists(file.path(candidates, "plan",
+                                                    "search_plan.json"))]
+    has_manual <- file.exists(file.path(candidates, "accepted_manual_imports.json"))
+    has_auto <- file.exists(file.path(candidates, "w00_retrieval_manifest.json"))
+    eligible <- candidates[has_manual | has_auto]
+    if (!length(eligible)) {
+      stop("No W00 run with accepted RIS imports or retrieval results found.",
+           call. = FALSE)
+    }
+    # Prefer explicit manual acceptance over unrelated newer API-only tests.
+    if (any(has_manual)) {
+      eligible <- candidates[has_manual]
+    }
+    chosen <- sort(eligible, decreasing = TRUE)[[1L]]
+    message("[W00] Selected run: ", basename(chosen))
+    message("[W00] Manual imports: ",
+            if (file.exists(file.path(chosen, "accepted_manual_imports.json")))
+              "accepted" else "none")
+    plan <- list(search_plan = file.path(chosen, "plan", "search_plan.json"))
+  }
+  if (!is.list(plan) || !is.character(plan$search_plan) ||
+      length(plan$search_plan) != 1L || !file.exists(plan$search_plan)) {
+    stop("Supply a map name/path or a valid W00 plan.", call. = FALSE)
+  }
   run_dir <- normalizePath(dirname(dirname(plan$search_plan)),
                            winslash = "/", mustWork = TRUE)
   output <- file.path(run_dir, "consolidated")
