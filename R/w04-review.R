@@ -41,7 +41,7 @@ prepare_w04_review <- function(w04,include_all=FALSE,missing_abstracts=FALSE) {
     id<-as.character(x$record_id)
     !nzchar(trimws(paste(unlist(src[[id]]$canonical$abstract),collapse=" ")))
   },model)
-  destination<-file.path(w04,if(missing_abstracts)"missing_abstract_review_queue.jsonl" else if(include_all)"validation_queue.jsonl" else "human_review_queue.jsonl")
+  destination<-file.path(w04,if(missing_abstracts)"missing_abstract_review_queue.jsonl" else if(include_all)"validation_queue.jsonl" else if(grepl("/reconciled/",layer,fixed=TRUE))"reconciled_human_review_queue.jsonl" else "human_review_queue.jsonl")
   metadata<-function(x) {
     c<-x$canonical
     scalar<-function(y)if(is.null(y)||!length(y))"" else
@@ -84,7 +84,7 @@ prepare_w04_review <- function(w04,include_all=FALSE,missing_abstracts=FALSE) {
 adjudicate_w04 <- function(w04,include_all=FALSE,missing_abstracts=FALSE) {
   queue<-prepare_w04_review(w04,include_all=include_all,missing_abstracts=missing_abstracts)
   if(is.null(queue))return(invisible(NULL))
-  state<-file.path(w04,if(missing_abstracts)"missing_abstract_reviewer_state" else if(include_all)"validation_reviewer_state" else "reviewer_state")
+  state<-file.path(w04,if(missing_abstracts)"missing_abstract_reviewer_state" else if(include_all)"validation_reviewer_state" else if(identical(basename(queue),"reconciled_human_review_queue.jsonl"))"reconciled_reviewer_state" else "reviewer_state")
   dir.create(state,recursive=TRUE,showWarnings=FALSE)
   script<-system.file("w04","review_app.R",package="evidencelandscaper")
   if(!nzchar(script))stop("W04 Shiny reviewer app is not packaged.")
