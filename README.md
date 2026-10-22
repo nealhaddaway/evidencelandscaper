@@ -82,3 +82,31 @@ completed or failed source directories are not overwritten.
 The user must explicitly call `run_w00()`; planning itself makes no API calls.
 
 CAB Abstracts (`cba`) and ProQuest Dissertations & Theses (`pqdt`) are **manual RIS sources**. The W00 parent explicitly refuses automatic retrieval for either source. A local, provenance-preserving RIS import and W01 handover are separate pending steps; do not substitute Europe PMC's CBA collection for the licensed CAB Abstracts database.
+
+
+## Manual RIS imports
+
+The same local ingester handles any RIS-exporting database, including CAB
+Abstracts and ProQuest Dissertations & Theses:
+
+```r
+ris_dir <- import_ris(
+  map = open_map("example_review"),
+  files = "/path/to/export.ris",
+  source = "cba",
+  database = "CAB Abstracts",
+  search_date = "2026-10-22",
+  search_string = "the actual database-specific query",
+  keyword_semantics = "unknown"
+)
+```
+
+Pass a vector of files for a multi-file export. Each import has its own
+immutable output directory under `runs/W00/manual/`; it contains the
+original RIS files, search metadata, SHA-256 checksums, duplicate-source-ID
+audits, a manifest and `handoff/records.jsonl`. The existing upstream RIS
+parser is reused; only its hardcoded Zenodo provenance description was
+replaced with the local raw-file location. Conflicting source IDs cause
+the import to fail instead of silently choosing records. RIS import does not
+publish to Zenodo or initiate W01. The generated handoff still needs
+integration and validation against the future consolidated W00 dataset.
