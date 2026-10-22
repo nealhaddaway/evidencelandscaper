@@ -37,7 +37,19 @@ edit_w04_missing_abstracts <- function(w04=NULL,map_path=NULL) {
 #' @param model OpenAI model.
 #' @return Isolated rescreen output.
 #' @export
-rescreen_w04_shiny_abstracts <- function(w04,model="gpt-5.6") {
+rescreen_w04_shiny_abstracts <- function(w04=NULL,model="gpt-5.6") {
+ if(is.null(w04)) {
+   map_path<-open_map("Ostara_collective_action_map")
+   roots<-list.dirs(file.path(map_path,"runs","W01"),recursive=FALSE,full.names=TRUE)
+   runs<-unlist(lapply(roots,function(z){
+     p<-file.path(z,"W04_local")
+     if(dir.exists(p))list.dirs(p,recursive=FALSE,full.names=TRUE) else character()
+   }),use.names=FALSE)
+   runs<-runs[grepl("^full-",basename(runs)) &
+     file.exists(file.path(runs,"missing_abstract_reviewer_state","abstract_corrections.jsonl"))]
+   if(length(runs)!=1L)stop("Expected one full W04 run with saved Shiny abstracts; found ",length(runs),". Supply w04 explicitly.")
+   w04<-runs[[1L]]
+ }
  w04<-normalizePath(w04,winslash="/",mustWork=TRUE)
  events_path<-file.path(w04,"missing_abstract_reviewer_state","abstract_corrections.jsonl")
  if(!file.exists(events_path))stop("No Shiny abstract edits found.")
