@@ -22,6 +22,8 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
   if(is.na(max_records)||max_records<0L)
     stop("max_records must be 0 (full corpus) or positive.")
   root<-dirname(scored)
+  map_path<-normalizePath(file.path(root,"..","..",".."),winslash="/",mustWork=TRUE)
+  archive_map_prompt(prompt_file,"W04",map_path)
   canonical<-file.path(root,"W02_main","finalised","canonical.jsonl")
   w03<-file.path(root,"W03_publication_status","full","publication_status.jsonl")
   w03meta<-file.path(root,"W03_publication_status","full","local_manifest.json")
