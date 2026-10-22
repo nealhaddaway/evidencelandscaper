@@ -5,15 +5,15 @@
 #' Zenodo writes, or downstream dispatches are performed.
 #'
 #' @param map Path to an existing evidence map or its configured name.
-#' @param strategy Path to a JSON file with named concepts and expression
+#' @param strategy Optional strategy JSON path; defaults to the single JSON in\n#'   inputs/search, or the filename named in inputs/search/active_strategy.txt.\n#'   Path to a JSON file with named concepts and expression
 #'   (or advanced_boolean), as accepted by the upstream W00 validator.
-#' @param sources Character vector of database source IDs for a full run.
+#' @param sources Optional database IDs for a full run. Defaults to all\n#'   automated databases (including Scopus, WoS and all configured EBSCO).
 #' @param mode One of full, fortnightly, expansion.
 #' @param expansion_target Concept being expanded (expansion only).
 #' @param additional_search_term New search term (expansion only).
 #' @return A list containing run directory and search-plan paths.
 #' @export
-plan_w00 <- function(map, strategy, sources = NULL,
+plan_w00 <- function(map, strategy = NULL, sources = NULL,
                      mode = c("full", "fortnightly", "expansion"),
                      expansion_target = "", additional_search_term = "") {
   mode <- match.arg(mode)
@@ -22,7 +22,35 @@ plan_w00 <- function(map, strategy, sources = NULL,
       !requireNamespace("digest", quietly = TRUE)) {
     stop("Install required packages jsonlite and digest.", call. = FALSE)
   }
+  if (is.null(strategy)) {
+    search_dir <- file.path(map, "inputs", "search")
+    active <- file.path(search_dir, "active_strategy.txt")
+    if (file.exists(active)) {
+      entry <- trimws(readLines(active, n = 1L, warn = FALSE))
+      if (!nzchar(entry) || basename(entry) != entry ||
+          !grepl("[.]json$", entry, ignore.case = TRUE)) {
+        stop("Invalid active_strategy.txt: provide a JSON filename.", call. = FALSE)
+      }
+      strategy <- file.path(search_dir, entry)
+    } else {
+      candidates <- sort(list.files(search_dir, pattern = "[.]json$",
+                                    full.names = TRUE, ignore.case = TRUE))
+      if (length(candidates) != 1L) {
+        stop("Expected one strategy JSON in inputs/search/; found ",
+             length(candidates), ". Set active_strategy.txt to a filename.",
+             call. = FALSE)
+      }
+      strategy <- candidates[[1L]]
+    }
+  }
   strategy <- normalizePath(path.expand(strategy), winslash = "/", mustWork = TRUE)
+  if (is.null(sources) && mode == "full") {
+    cfg <- system.file("w00", "config/workflow00_ebsco_sources.json",
+                       package = "evidencelandscaper")
+    ebsco <- names(jsonlite::fromJSON(cfg, simplifyVector = FALSE)$sources)
+    sources <- c("lens", "scopus", "openalex", "agricola", "pubmed",
+                 "ethos", "epmc_preprints", "wos", ebsco)
+  }
   if (mode == "full") {
     if (!is.character(sources) || !length(sources) ||
         anyNA(sources) || anyDuplicated(sources) || any(!nzchar(sources))) {
