@@ -59,7 +59,8 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   source<-setNames(canonical,vapply(canonical,function(x)x$identity$record_id,character(1)))
   id<-vapply(selected,function(x)x$record_id,character(1))
   if(any(!id %in% names(source)))stop("Selected W04 IDs missing from canonical W02.")
-  dest<-file.path(root,"W07_local",paste0("trial-",length(id),"-",
+  organise_w07_trials(map_path)
+  dest<-file.path(map_path,"runs","W07",paste0("trial-",length(id),"-",
           substr(sha(ontology_file),1,10),"-",substr(sha(prompt_file),1,10)))
   dir.create(dest,recursive=TRUE,showWarnings=FALSE)
   mpath<-file.path(dest,"manifest.json")
