@@ -1,4 +1,5 @@
 export(create_map)
 export(map_root)
 export(open_map)
+export(plan_w00)
 export(set_map_root)
