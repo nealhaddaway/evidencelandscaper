@@ -86,8 +86,26 @@ run_w00 <- function(plan, max_records = 10L) {
     jsonlite::write_json(out, summary_path, auto_unbox = TRUE,
                          pretty = TRUE, null = "null")
   }
+  run_start <- Sys.time()
+  display_name <- function(source) {
+    if (source %in% ebsco_sources) {
+      return(paste0("EBSCO: ", jsonlite::fromJSON(config_path,
+        simplifyVector = FALSE)$sources[[source]]$display_name))
+    }
+    switch(source, openalex = "OpenAlex", lens = "Lens",
+           agricola = "AGRICOLA", pubmed = "PubMed",
+           ethos = "EThOS", epmc_preprints = "Europe PMC preprints", source)
+  }
+  log_step <- function(...) message("[W00] ", paste0(..., collapse = ""))
+  log_step("Starting bounded retrieval | ", length(sources),
+           " sources | up to ", max_records, " records per source")
+  log_step("Run: ", basename(run_dir))
   write_summary("running")
-  for (source in sources) {
+  for (i in seq_along(sources)) {
+    source <- sources[[i]]
+    source_start <- Sys.time()
+    log_step("[", i, "/", length(sources), "] Searching ", display_name(source),
+             " (", source, ")...")
     outcome <- tryCatch({
       output_dir <- switch(source,
         openalex = run_w00_openalex(plan, max_records),
@@ -118,6 +136,14 @@ run_w00 <- function(plan, max_records = 10L) {
     }, error = function(e) {
       list(status = "failed", error = conditionMessage(e))
     })
+    elapsed <- as.numeric(difftime(Sys.time(), source_start, units = "secs"))
+    if (identical(outcome$status, "success")) {
+      log_step("[", i, "/", length(sources), "] Complete: ",
+               outcome$records, " records | ", sprintf("%.1f", elapsed), " s")
+    } else {
+      log_step("[", i, "/", length(sources), "] FAILED after ",
+               sprintf("%.1f", elapsed), " s: ", outcome$error)
+    }
     results[[source]] <- outcome
     write_summary(if (identical(outcome$status, "failed")) "failed" else "running")
     if (identical(outcome$status, "failed")) {
@@ -126,5 +152,10 @@ run_w00 <- function(plan, max_records = 10L) {
     }
   }
   write_summary("sample_success")
+  total <- sum(vapply(results, function(x) x$records, integer(1)))
+  elapsed_total <- as.numeric(difftime(Sys.time(), run_start, units = "secs"))
+  log_step("Complete | ", length(results), " sources | ", total,
+           " records | ", sprintf("%.1f", elapsed_total), " s")
+  log_step("Manifest: ", summary_path)
   invisible(list(manifest = summary_path, sources = results))
 }
