@@ -27,10 +27,10 @@ add_w02_sciencedirect <- function(scored,max_requests=0L) {
     if(!identical(m$input_sha256,sha(source))||
        !file.exists(output)||!identical(m$output_sha256,sha(output)))
       stop("ScienceDirect fallback cache failed checksum validation.")
-    message("[W02] Reusing verified ScienceDirect suggestions.")
-    return(invisible(outdir))
+    message("[W02] Verified previous ScienceDirect suggestions; checking for additional eligible requests.")
   }
-  if(dir.exists(outdir)&&length(list.files(outdir,all.files=TRUE,no..=TRUE)))
+  if(!file.exists(manifest) && dir.exists(outdir) &&
+     length(list.files(outdir,all.files=TRUE,no..=TRUE)))
     stop("Incomplete ScienceDirect fallback output; preserve for inspection.")
   max_requests<-as.integer(max_requests)
   if(is.na(max_requests)||max_requests<0L)stop("max_requests must be non-negative.")
@@ -51,11 +51,14 @@ add_w02_sciencedirect <- function(scored,max_requests=0L) {
   }
   requests<-0L
   suggestions<-list()
+  eligible_count<-0L
+  cached_count<-0L
   for(record in records) {
     if(nzchar(scalar(record$canonical$abstract))) next
     rid<-scalar(record$identity$record_id)
     doi<-normalize_doi(record$canonical$doi)
-    if(!grepl("^10\\.[0-9]{4,9}/",doi))next
+    if(!grepl("^10\\.[0-9]{4,9}/[^[:space:]]+$",doi))next
+    eligible_count<-eligible_count+1L
     cache_file<-file.path(cache,paste0("doi-",
       digest::digest(doi,algo="sha256",serialize=FALSE),".json"))
     if(!file.exists(cache_file) && requests<max_requests) {
@@ -99,6 +102,7 @@ add_w02_sciencedirect <- function(scored,max_requests=0L) {
       Sys.sleep(0.5)
     }
     if(!file.exists(cache_file))next
+    cached_count<-cached_count+1L
     cached<-jsonlite::fromJSON(cache_file,simplifyVector=FALSE)
     # A cached request may have been associated with a different cluster;
     # accept only by requested and returned DOI, never by cached cluster index.
@@ -112,16 +116,32 @@ add_w02_sciencedirect <- function(scored,max_requests=0L) {
       abstract=scalar(cached$abstract),
       cache_sha256=sha(cache_file),review_status="pending_identity_review")
   }
-  dir.create(outdir,recursive=TRUE)
+  dir.create(outdir,recursive=TRUE,showWarnings=FALSE)
+  previous<-if(file.exists(manifest)) jsonlite::fromJSON(manifest) else NULL
+  if(!is.null(previous) && requests==0L &&
+     identical(as.integer(previous$suggestions),as.integer(length(suggestions)))) {
+    message("[W02] No changes; ",eligible_count," DOI-linked records still missing abstracts; ",
+            cached_count," cached responses available.")
+    return(invisible(outdir))
+  }
+  if(file.exists(manifest)) {
+    previous_dir<-file.path(outdir,"previous")
+    dir.create(previous_dir,showWarnings=FALSE)
+    stamp<-format(Sys.time(),"%Y%m%dT%H%M%S",tz="UTC")
+    for(p in c(output,manifest)) if(file.exists(p) &&
+       !file.copy(p,file.path(previous_dir,paste0(stamp,"-",basename(p)))))
+      stop("Could not preserve previous W02 ScienceDirect overlay.")
+  }
   writeLines(vapply(suggestions,function(x)
     jsonlite::toJSON(x,auto_unbox=TRUE,null="null"),character(1)),output)
   jsonlite::write_json(list(schema="local-w02-sciencedirect-fallback-v1",
     input_sha256=sha(source),output_sha256=sha(output),
-    suggestions=length(suggestions),new_requests=requests,
+    suggestions=length(suggestions),eligible_missing_abstracts=eligible_count,
+    cached_responses=cached_count,new_requests=requests,
     automatic_changes_to_canonical=0L),
     manifest,auto_unbox=TRUE,pretty=TRUE)
-  message("[W02] ScienceDirect: ",length(suggestions),
-          " abstract suggestions; ",requests,
+  message("[W02] ScienceDirect: ",eligible_count," DOI-linked abstracts still missing; ",
+          length(suggestions)," suggestions; ",requests,
           " new requests. No canonical abstracts overwritten.")
   invisible(outdir)
 }
