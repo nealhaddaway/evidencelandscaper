@@ -9,7 +9,8 @@ License: MIT
 Encoding: UTF-8
 Imports:
     jsonlite,
-    digest
+    digest,
+    httr2
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Suggests: testthat (>= 3.0.0)
