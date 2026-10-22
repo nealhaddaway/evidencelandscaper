@@ -4,15 +4,52 @@
 #' imports appear in this run's acceptance registry. Does not modify imports,
 #' retrieve data, combine records, or dispatch W01.
 #' @param plan Result of plan_w00() for the target run.
-#' @param imports Named character vector of import output directories, where
-#'   names are source IDs (for example cba and pqdt).
+#' @param imports Optional named character vector of import output directories.\n#'   If omitted, discovers successful imports; ambiguity requires explicit choice.\n#' @param sources Source IDs to auto-discover, defaults to cba and pqdt.
 #' @return Path to accepted_manual_imports.json, invisibly.
 #' @export
-accept_w00_ris <- function(plan, imports) {
+accept_w00_ris <- function(plan, imports = NULL, sources = c("cba", "pqdt")) {
   if (!is.list(plan) || length(plan$search_plan) != 1L ||
       !file.exists(plan$search_plan) || length(plan$query_archive) != 1L ||
       !dir.exists(plan$query_archive)) {
     stop("Supply an existing plan_w00() result.", call. = FALSE)
+  }
+  if (is.null(imports)) {
+    if (!is.character(sources) || !length(sources) || anyNA(sources) ||
+        anyDuplicated(sources) ||
+        any(!grepl("^[a-z0-9][a-z0-9_-]*$", sources))) {
+      stop("sources must be unique, valid source IDs.", call. = FALSE)
+    }
+    run_dir0 <- normalizePath(dirname(dirname(plan$search_plan)),
+                              winslash = "/", mustWork = TRUE)
+    map0 <- normalizePath(file.path(run_dir0, "..", "..", ".."),
+                          winslash = "/", mustWork = TRUE)
+    root0 <- file.path(map0, "runs", "W00", "manual")
+    dirs <- if (dir.exists(root0)) list.dirs(root0, recursive = FALSE,
+                                              full.names = TRUE) else character()
+    found <- list()
+    for (source in sources) {
+      candidates <- character()
+      for (d in dirs) {
+        mf <- file.path(d, "import", "manifest.json")
+        if (!file.exists(mf)) next
+        meta <- tryCatch(jsonlite::fromJSON(mf, simplifyVector = FALSE),
+                         error = function(e) NULL)
+        if (!is.null(meta) && identical(meta$source, source) &&
+            identical(meta$status, "success")) {
+          candidates <- c(candidates, file.path(d, "import"))
+        }
+      }
+      if (!length(candidates)) {
+        stop("No successful RIS import found for ", source, call. = FALSE)
+      }
+      if (length(candidates) > 1L) {
+        stop("Multiple successful RIS imports found for ", source,
+             "; select the intended import explicitly using imports=. Candidates: ",
+             paste(candidates, collapse = "; "), call. = FALSE)
+      }
+      found[[source]] <- candidates[[1L]]
+    }
+    imports <- unlist(found, use.names = TRUE)
   }
   if (!is.character(imports) || !length(imports) ||
       is.null(names(imports)) || anyNA(imports) ||
