@@ -52,12 +52,17 @@ if(!is.null(concepts)){
 if(run_type=="expansion"&&!target%in%names(terms))stop(sprintf("W00: expansion target '%s' is not a defined concept",target),call.=FALSE)
 # Preserve all existing concepts in the expansion and replace only the selected concept
 # with the new term, subtracting its original matches. Native-ID deduplication remains downstream.
+# Only Lens expands a terminal wildcard in a quoted phrase.
 lens_expand_phrase <- function(term) {
   if (!startsWith(term, '"') || !endsWith(term, '*"')) return(term)
   phrase <- substr(term, 2L, nchar(term) - 1L)
-  if (length(gregexpr('*', phrase, fixed = TRUE)[[1L]]) != 1L) return(term)
+  star <- gregexpr('*', phrase, fixed = TRUE)[[1L]]
+  if (length(star) != 1L || star[[1L]] < 0L) return(term)
   base <- substr(phrase, 1L, nchar(phrase) - 1L)
-  if (!grepl('[[:alpha:]]
+  if (!grepl('[[:alpha:]]$', base)) return(term)
+  paste0('("', base, '" OR "', base, 's")')
+}
+render<-function(source,fields=NULL){
   override<-cfg$database_overrides[[source]]
   if(!is.null(override)){
     if(run_type=="expansion"){
@@ -144,129 +149,6 @@ lens_expand_phrase <- function(term) {
   amended<-terms
   amended[[target]]<-c(terms[[target]],additional)
   expanded<-render_complete(if(source=='lens') lapply(amended, function(v) vapply(v, lens_expand_phrase, character(1))) else amended)
-  # Parenthesise complete source query; source-specific SRC filters must remain
-  # scoped to both branches. This preserves nested AND/OR/NOT semantics.
-  sprintf("((%s) AND NOT (%s))",expanded,base)
-}
-supported<-c("lens","scopus","openalex","agricola","pubmed","ethos","cba","epmc_preprints","wos",names(ebsco$sources))
-if(length(setdiff(selected,supported)))stop(sprintf("W00: no translator for selected source(s): %s",paste(setdiff(selected,supported),collapse=", ")),call.=FALSE)
-source_names<-selected
-# Fortnightly overrides are complete source queries. Do not first translate the
-# base strategy: that would incorrectly demand baseline overrides for sources
-# whose dated query has been explicitly supplied.
-queries<-if(run_type=="fortnightly")list() else setNames(lapply(source_names,function(n){
-  fields<-if(n%in%names(ebsco$sources))unlist(ebsco$sources[[n]]$search_fields,use.names=FALSE) else NULL
-  render(n,fields)
-}),source_names)
-if(run_type=="fortnightly"){
-  # Explicit full provider queries preserve the user's selected indexing/publication
-  # date semantics. Never replace a query with an arbitrary publication-year filter.
-  missing<-setdiff(source_names,names(cfg$fortnightly_overrides))
-  if(length(missing))stop(sprintf("W00: fortnightly mode needs explicit dated queries for: %s",paste(missing,collapse=", ")),call.=FALSE)
-  queries<-setNames(lapply(source_names,function(name){
-    q<-cfg$fortnightly_overrides[[name]]
-    if(!is.character(q)||length(q)!=1L||!nzchar(trimws(q)))stop(sprintf("W00: empty/invalid fortnightly override for %s",name),call.=FALSE)
-    q
-  }),source_names)
-}
-dir.create(output_dir,recursive=TRUE,showWarnings=FALSE)
-plan<-list(workflow="00",status="planned",run_type=run_type,search_version=cfg$search_version,
-  source_queries=queries,expansion=list(target=if(run_type=="expansion")target else NULL,term=if(run_type=="expansion")additional else NULL),
-  translation="topic-agnostic-v1",fortnightly_window=NULL,
-  source_mode_support=setNames(lapply(source_names,function(x)list(full=TRUE,fortnightly=TRUE,expansion=TRUE)),source_names))
-writeLines(toJSON(plan,auto_unbox=TRUE,pretty=TRUE,null="null"),file.path(output_dir,"search_plan.json"))
-writeLines(toJSON(queries,auto_unbox=TRUE,pretty=TRUE,null="null"),file.path(output_dir,"source_queries.json"))
-message(sprintf("W00: translated %d database queries (no API calls)",length(queries)))
-, base)) return(term)
-  paste0('("', base, '" OR "', base, 's")')
-}
-render<-function(source,fields=NULL){
-  override<-cfg$database_overrides[[source]]
-  if(!is.null(override)){
-    if(run_type=="expansion"){
-      mode_overrides<-cfg$expansion_overrides
-      specific<-if(!is.null(mode_overrides))mode_overrides[[source]] else NULL
-      if(is.null(specific))stop(sprintf("W00: %s uses a fixed query override; expansion requires expansion_overrides.%s for the selected concept",source,source),call.=FALSE)
-      override<-specific
-    }
-    if(!is.character(override)||length(override)!=1L||!nzchar(trimws(override)))stop(sprintf("W00: override for %s must be a non-empty string",source),call.=FALSE)
-    return(override)
-  }
-  if(is.null(concepts)){
-    expr<-as.character(cfg$advanced_boolean)
-    if(length(expr)!=1L||!nzchar(trimws(expr)))stop("W00: missing advanced Boolean expression",call.=FALSE)
-    if(source=="openalex")return(sprintf("works where title-abstract-keywords has (%s)",expr))
-    if(source=="lens")return(sprintf("(title:(%s) OR abstract:(%s) OR keyword:(%s))",expr,expr,expr))
-    if(source=="scopus")return(sprintf("TITLE-ABS-KEY(%s)",expr))
-    if(source%in%c("agricola","pubmed","ethos","cba","epmc_preprints")){
-      src<-c(agricola="AGR",pubmed="MED",ethos="ETH",cba="CBA",epmc_preprints="PPR")[[source]]
-      return(sprintf("SRC:%s AND TITLE_ABS:(%s)",src,expr))
-    }
-    if(source=="wos")return(paste(vapply(c("TI","AB","AK"),function(tag)sprintf("(%s=(%s))",tag,expr),character(1)),collapse=" OR "))
-    if(!is.null(fields))return(paste0("(",paste(sprintf("%s (%s)",fields,expr),collapse=" OR "),")"))
-    stop(sprintf("W00: unsupported source %s",source),call.=FALSE)
-  }
-  # Render the complete Boolean expression inside one search field when the
-  # source's legacy grammar scopes AND/OR within that field (Scopus/Europe PMC/WoS).
-  plain<-function(vals){
-    paste(vapply(tokens,function(t){
-      if(t%in%names(vals))return(paste0("(",paste(vals[[t]],collapse=" OR "),")"))
-      if(t%in%c("(",")"))return(t)
-      toupper(t)
-    },character(1)),collapse=" ")
-  }
-  fielded<-function(vals){
-    joined<-lapply(vals,function(v)paste(v,collapse=" OR "))
-    paste(vapply(tokens,function(t){
-      if(t%in%names(joined)){
-        term<-joined[[t]]
-        if(source=="lens")return(paste0("(",paste(sprintf("%s:(%s)",c("title","abstract","keyword"),term),collapse=" OR "),")"))
-        if(!is.null(fields))return(paste0("(",paste(sprintf("%s (%s)",fields,term),collapse=" OR "),")"))
-      }
-      if(t%in%c("(",")"))return(t)
-      toupper(t)
-    },character(1)),collapse=" ")
-  }
-  render_complete<-function(vals){
-    expr<-plain(vals)
-    # Match established legacy grouping exactly for two-concept AND searches.
-    is_pair<-length(tokens)==3L && tokens[[2L]]=="AND" &&
-      tokens[[1L]]%in%names(vals) && tokens[[3L]]%in%names(vals)
-    if(is_pair){
-      pair_expr<-sprintf("(%s) AND (%s)",
-        paste(vals[[tokens[[1L]]]],collapse=" OR "),
-        paste(vals[[tokens[[3L]]]],collapse=" OR "))
-    } else pair_expr<-expr
-    if(source=="openalex")return(sprintf("works where title-abstract-keywords has (%s)",pair_expr))
-    if(source=="scopus")return(sprintf("TITLE-ABS-KEY(%s)",pair_expr))
-    if(source%in%c("agricola","pubmed","ethos","cba","epmc_preprints")){
-      src<-c(agricola="AGR",pubmed="MED",ethos="ETH",cba="CBA",epmc_preprints="PPR")[[source]]
-      return(sprintf("SRC:%s AND TITLE_ABS:(%s)",src,pair_expr))
-    }
-    if(source=="wos"){
-      if(is_pair)return(paste(vapply(c("TI","AB","AK"),function(field)
-        sprintf("(%s=(%s))",field,pair_expr),character(1)),collapse=" OR "))
-      return(paste(vapply(c("TI","AB","AK"),function(field)sprintf("%s=(%s)",field,expr),character(1)),collapse=" OR "))
-    }
-    if(source=="lens"&&is_pair){
-      block<-function(t){
-        txt<-paste(t,collapse=" OR ")
-        sprintf("(title:(%s) OR abstract:(%s) OR keyword:(%s))",txt,txt,txt)
-      }
-      return(sprintf("(%s AND %s)",block(vals[[tokens[[1L]]]]),block(vals[[tokens[[3L]]]])))
-    }
-    if(is_pair&&!is.null(fields)){
-      block<-function(v)paste0("(",paste(sprintf("%s (%s)",fields,paste(v,collapse=" OR ")),collapse=" OR "),")")
-      return(sprintf("(%s AND %s)",block(vals[[tokens[[1L]]]]),block(vals[[tokens[[3L]]]])))
-    }
-    if(source=="lens"||!is.null(fields))return(fielded(vals))
-    stop(sprintf("W00: %s has no verified generic translation; supply database_overrides.%s",source,source),call.=FALSE)
-  }
-  base<-render_complete(terms)
-  if(run_type!="expansion")return(base)
-  amended<-terms
-  amended[[target]]<-c(terms[[target]],additional)
-  expanded<-render_complete(amended)
   # Parenthesise complete source query; source-specific SRC filters must remain
   # scoped to both branches. This preserves nested AND/OR/NOT semantics.
   sprintf("((%s) AND NOT (%s))",expanded,base)
