@@ -1,0 +1,8 @@
+{
+  "search_version": "example-v1",
+  "concepts": {
+    "topic": {"terms": ["greenhouse*", "protected cultivation"]},
+    "geography": {"terms": ["Almeria", "Spain"]}
+  },
+  "expression": "topic AND geography"
+}
