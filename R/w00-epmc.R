@@ -3,7 +3,7 @@
 #' Retains the upstream AGRICOLA and Europe PMC source ingestion scripts.
 #' All results are local; no deduplication or W01 dispatch occurs.
 #' @param plan Existing result of plan_w00().
-#' @param source One of agricola, pubmed, ethos, cba, epmc_preprints.
+#' @param source One of agricola, pubmed, ethos, epmc_preprints.
 #' @param max_records Maximum records, 1 to 100.
 #' @return Source output directory, invisibly.
 #' @export
@@ -12,7 +12,6 @@ run_w00_epmc <- function(plan, source, max_records = 10L) {
     agricola = c("AGR", "agricola"),
     pubmed = c("MED", "pubmed"),
     ethos = c("ETH", "ethos"),
-    cba = c("CBA", "cba"),
     epmc_preprints = c("PPR", "epmc_preprints")
   )
   if (!is.character(source) || length(source) != 1L ||
