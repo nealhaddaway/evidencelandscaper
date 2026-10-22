@@ -19,7 +19,14 @@ manifest_path <- arg('--manifest', 'data/canonical/current/repair/manifest.json'
 audit_dir <- arg('--audit-dir', 'fresh_rebuild')
 max_records_arg <- arg('--max-records', 'all')
 if (!identical(max_records_arg, 'all') &&
-    (!grepl('^[0-9]+
+    (grepl('[^0-9]', max_records_arg) ||
+     !nzchar(max_records_arg) ||
+     is.na(suppressWarnings(as.integer(max_records_arg))) ||
+     as.integer(max_records_arg) < 1L ||
+     as.integer(max_records_arg) > 100L)) {
+  stop('Invalid --max-records (expected 1..100 or all)', call. = FALSE)
+}
+sample_limit <- if (identical(max_records_arg, 'all')) Inf else as.integer(max_records_arg)
 
 api <- 'https://api.lens.org/scholarly/search'
 page_size <- if (is.finite(sample_limit)) min(500L, sample_limit) else 500L
