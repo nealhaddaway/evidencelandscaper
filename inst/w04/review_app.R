@@ -32,7 +32,8 @@ ui<-fluidPage(
   tags$head(tags$style(HTML("body{max-width:1220px;margin:auto}.box{border:1px solid #ddd;border-radius:8px;padding:18px;overflow-wrap:anywhere}pre{white-space:pre-wrap;font-family:inherit}"))),
   titlePanel("W04 · Collective action screening"),
   textOutput("reviewer"),h4(textOutput("progress")),
-  conditionalPanel("output.ready",
+  conditionalPanel("output.ready && !output.complete",
+    p(class="text-muted","Read the abstract and model assessment, choose a decision, and save. Use Previous/Next to review earlier decisions. Exclusions do not require a reason."),
     fluidRow(column(6,actionButton("prev","Previous")),column(6,actionButton("next","Next"))),
     fluidRow(
       column(8,uiOutput("bibliography"),uiOutput("model")),
@@ -47,12 +48,26 @@ ui<-fluidPage(
         tags$p(class="text-muted","Human decisions are saved separately from model results.")
       ))
     )
-  )
+  ),
+  conditionalPanel("output.ready && output.complete",
+    div(class="box",h3("Adjudications complete"),
+      p("Every record in this review queue has a saved human decision."),
+      p("You can review or revise any decision. Changes are saved as new review events without overwriting earlier entries."),
+      actionButton("review_again","Back to review decisions",class="btn-primary"),
+      downloadButton("export_complete","Export decisions")))
 )
 server<-function(input,output,session){
   reviewer<-reactiveVal(who)
   position<-reactiveVal(1L)
   saved<-reactiveVal(events)
+  reviewing<-reactiveVal(FALSE)
+  complete<-reactive({all(ids %in% names(last_events(saved())))})
+  output$complete<-reactive(complete() && !reviewing())
+  outputOptions(output,"complete",suspendWhenHidden=FALSE)
+  observeEvent(input$review_again,{
+    position(1L)
+    reviewing(TRUE)
+  })
   abstract_saved<-reactiveVal(abstract_events)
   corrected_abstract<-reactive({
     ev<-last_events(abstract_saved())[[current()$review_case_id]]
@@ -78,7 +93,7 @@ server<-function(input,output,session){
                                       length(last_events(saved())),"decisions saved"))
   observeEvent(input$prev,position(max(1L,position()-1L)))
   observeEvent(input[['next']],position(min(length(cases),position()+1L)))
-  observeEvent(position(),{
+  observeEvent(list(position(),saved()),{
     x<-last_events(saved())[[current()$review_case_id]]
     updateRadioButtons(session,"decision",selected=if(is.null(x))character() else x$decision)
     updateTextAreaInput(session,"reason",value=if(is.null(x))"" else x$reason)
@@ -144,13 +159,15 @@ server<-function(input,output,session){
     cat(jsonlite::toJSON(e,auto_unbox=TRUE,null="null"),"\n",
         file=eventfile,append=TRUE,sep="")
     saved(c(saved(),list(e)))
+    if(complete()) reviewing(FALSE)
     showNotification("Decision saved",type="message")
   })
-  output$export<-downloadHandler(filename=function()"w04_human_decisions.jsonl",
-    content=function(file) {
+  export_decisions<-function(file) {
       e<-last_events(saved())
       writeLines(vapply(e,function(z)jsonlite::toJSON(z,auto_unbox=TRUE),
                         character(1)),file,useBytes=TRUE)
-    })
+  }
+  output$export<-downloadHandler(filename=function()"w04_human_decisions.jsonl",content=export_decisions)
+  output$export_complete<-downloadHandler(filename=function()"w04_human_decisions.jsonl",content=export_decisions)
 }
 shiny::runApp(shinyApp(ui,server),launch.browser=TRUE)
