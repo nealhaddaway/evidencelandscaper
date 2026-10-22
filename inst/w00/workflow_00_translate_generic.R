@@ -52,11 +52,12 @@ if(!is.null(concepts)){
 if(run_type=="expansion"&&!target%in%names(terms))stop(sprintf("W00: expansion target '%s' is not a defined concept",target),call.=FALSE)
 # Preserve all existing concepts in the expansion and replace only the selected concept
 # with the new term, subtracting its original matches. Native-ID deduplication remains downstream.
-# Lens does not reliably expand truncation within a quoted phrase.
-# Restrict expansion to a terminal * on the final word (e.g. "supply chain*").
-# All other wildcards remain untouched; never silently change their semantics.
-lens_expand_phrase<-function(term){
-  if(!grepl('^"[^"]*[*]"
+lens_expand_phrase <- function(term) {
+  if (!startsWith(term, '"') || !endsWith(term, '*"')) return(term)
+  phrase <- substr(term, 2L, nchar(term) - 1L)
+  if (length(gregexpr('*', phrase, fixed = TRUE)[[1L]]) != 1L) return(term)
+  base <- substr(phrase, 1L, nchar(phrase) - 1L)
+  if (!grepl('[[:alpha:]]
   override<-cfg$database_overrides[[source]]
   if(!is.null(override)){
     if(run_type=="expansion"){
@@ -81,9 +82,6 @@ lens_expand_phrase<-function(term){
     if(source=="wos")return(paste(vapply(c("TI","AB","AK"),function(tag)sprintf("(%s=(%s))",tag,expr),character(1)),collapse=" OR "))
     if(!is.null(fields))return(paste0("(",paste(sprintf("%s (%s)",fields,expr),collapse=" OR "),")"))
     stop(sprintf("W00: unsupported source %s",source),call.=FALSE)
-  }
-  if(source=="lens") {
-    vals_lens <- lapply(terms, function(v) unlist(lapply(v, lens_expand_phrase), use.names=FALSE))
   }
   # Render the complete Boolean expression inside one search field when the
   # source's legacy grammar scopes AND/OR within that field (Scopus/Europe PMC/WoS).
@@ -141,11 +139,11 @@ lens_expand_phrase<-function(term){
     if(source=="lens"||!is.null(fields))return(fielded(vals))
     stop(sprintf("W00: %s has no verified generic translation; supply database_overrides.%s",source,source),call.=FALSE)
   }
-  base<-render_complete(if(source=="lens") vals_lens else terms)
+  base<-render_complete(if(source=='lens') lapply(terms, function(v) vapply(v, lens_expand_phrase, character(1))) else terms)
   if(run_type!="expansion")return(base)
   amended<-terms
   amended[[target]]<-c(terms[[target]],additional)
-  expanded<-render_complete(if(source=="lens") lapply(amended, function(v) unlist(lapply(v,lens_expand_phrase),use.names=FALSE)) else amended)
+  expanded<-render_complete(if(source=='lens') lapply(amended, function(v) vapply(v, lens_expand_phrase, character(1))) else amended)
   # Parenthesise complete source query; source-specific SRC filters must remain
   # scoped to both branches. This preserves nested AND/OR/NOT semantics.
   sprintf("((%s) AND NOT (%s))",expanded,base)
@@ -179,13 +177,8 @@ plan<-list(workflow="00",status="planned",run_type=run_type,search_version=cfg$s
 writeLines(toJSON(plan,auto_unbox=TRUE,pretty=TRUE,null="null"),file.path(output_dir,"search_plan.json"))
 writeLines(toJSON(queries,auto_unbox=TRUE,pretty=TRUE,null="null"),file.path(output_dir,"source_queries.json"))
 message(sprintf("W00: translated %d database queries (no API calls)",length(queries)))
-,term))return(term)
-  phrase<-substring(term,2L,nchar(term)-1L)
-  if(lengths(regmatches(phrase,gregexpr("*",phrase,fixed=TRUE)))!=1L ||
-     !grepl("[A-Za-z][*]$",phrase))return(term)
-  singular<-sub("[*]$","",phrase)
-  plural<-paste0(singular,"s")
-  paste0('("',singular,'" OR "',plural,'")')
+, base)) return(term)
+  paste0('("', base, '" OR "', base, 's")')
 }
 render<-function(source,fields=NULL){
   override<-cfg$database_overrides[[source]]
