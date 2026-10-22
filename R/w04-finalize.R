@@ -17,7 +17,9 @@ finalize_w04 <- function(map_path=NULL) {
   runs<-runs[file.exists(file.path(runs,"local_manifest.json"))]
   if(!length(runs))stop("No completed local W04 screening runs found.")
   received<-runs[vapply(runs,function(run) {
-    if(file.exists(file.path(run,"human_review_returned","receipt.json")))return(TRUE)
+    if(file.exists(file.path(run,"human_review_returned","receipt.json")) ||
+       file.exists(file.path(run,"reconciled_human_review_returned","receipt.json")))return(TRUE)
+    if(dir.exists(file.path(run,"reconciled")))return(TRUE)
     manifest<-jsonlite::fromJSON(file.path(run,"local_manifest.json"))
     identical(manifest$screening_summary_status,"PASS")
   },logical(1))]
@@ -37,8 +39,23 @@ finalize_w04 <- function(map_path=NULL) {
   scalar<-function(x) if(is.null(x)||length(x)!=1L||is.na(x)) "" else as.character(x)
   manifest<-jsonlite::fromJSON(file.path(w04,"local_manifest.json"),simplifyVector=FALSE)
   if(!identical(scalar(manifest$status),"screened"))stop("Unfinished W04 model run.")
-  layer_path<-file.path(w04,"consensus","workflow04_consensus_layer.jsonl")
-  return_dir<-file.path(w04,"human_review_returned")
+  original_layer<-file.path(w04,"consensus","workflow04_consensus_layer.jsonl")
+  layer_path<-original_layer
+  recon_root<-file.path(w04,"reconciled")
+  reconciled<-FALSE
+  if(dir.exists(recon_root)){
+    dirs<-list.dirs(recon_root,recursive=FALSE,full.names=TRUE)
+    dirs<-dirs[file.exists(file.path(dirs,"manifest.json"))]
+    if(length(dirs)!=1L)stop("Expected exactly one reconciled W04 layer.")
+    m<-jsonlite::fromJSON(file.path(dirs[[1]],"manifest.json"),simplifyVector=FALSE)
+    target<-file.path(dirs[[1]],"workflow04_reconciled_layer.jsonl")
+    if(!identical(scalar(m$source_w04_sha256),sha(original_layer))||
+       !identical(scalar(m$merged_sha256),sha(target)))
+      stop("Reconciled W04 checksum validation failed.")
+    layer_path<-target
+    reconciled<-TRUE
+  }
+  return_dir<-file.path(w04,if(reconciled)"reconciled_human_review_returned" else "human_review_returned")
   decision_path<-file.path(return_dir,"latest_decisions.jsonl")
   has_review<-file.exists(file.path(return_dir,"receipt.json"))
   receipt<-if(has_review)jsonlite::fromJSON(file.path(return_dir,"receipt.json"),simplifyVector=FALSE) else NULL
@@ -46,7 +63,7 @@ finalize_w04 <- function(map_path=NULL) {
   if(!identical(scalar(manifest$consensus_sha256),sha(layer_path))||
      (has_review && (!identical(scalar(receipt$status),"RETURNED")||
      !identical(scalar(receipt$latest_decisions_sha256),sha(decision_path))||
-     !identical(scalar(receipt$queue_sha256),sha(file.path(w04,"human_review_queue.jsonl"))))))
+     !identical(scalar(receipt$queue_sha256),sha(file.path(w04,if(reconciled)"reconciled_human_review_queue.jsonl" else "human_review_queue.jsonl"))))))
     stop("W04 return integrity checks failed.")
   decisions<-if(has_review)readjl(decision_path) else list()
   dmap<-setNames(decisions,vapply(decisions,function(z)scalar(z$record_id),character(1)))
@@ -54,7 +71,7 @@ finalize_w04 <- function(map_path=NULL) {
   if(anyDuplicated(ids)||anyDuplicated(names(dmap)))stop("Duplicate W04 record IDs.")
   unresolved<-ids[vapply(source,function(z)
     identical(scalar(z$screening$decision),"uncertain"),logical(1))]
-  if(!has_review && length(unresolved))stop("W04 human adjudication is still required.")
+  if(!has_review && length(unresolved))stop("W04 human adjudication is still required; run adjudicate_w04(w04), then import_w04_review(w04).")
   if(!setequal(names(dmap),unresolved))
     stop("Returned human decisions do not exactly match unresolved records.")
   for(i in seq_along(source)) {
@@ -99,6 +116,8 @@ finalize_w04 <- function(map_path=NULL) {
      records=length(source),retain=sum(result_decisions=="retain"),
      exclude=sum(result_decisions=="exclude"),
      source_layer_sha256=sha(layer_path),
+     original_consensus_sha256=sha(original_layer),
+     reconciled_abstracts=reconciled,
      review_receipt_sha256=if(has_review)sha(file.path(return_dir,"receipt.json")) else "",
      final_layer_sha256=sha(outfile)),
      summarypath,auto_unbox=TRUE,pretty=TRUE)
