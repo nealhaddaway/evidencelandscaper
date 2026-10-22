@@ -17,6 +17,7 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   n<-as.integer(n)
   if(is.na(n)||n<0L||n>50000L)stop("n must be 0 (all) or a positive integer.")
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
+  `%||%`<-function(x,y)if(is.null(x))y else x
   rows<-utils::read.csv(ontology_file,stringsAsFactors=FALSE,
                         fileEncoding="UTF-8-BOM",check.names=FALSE)
   required<-c("category_id","mechanism_id","mechanism_source_label",
@@ -44,7 +45,7 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   if(!identical(summary$status,"final")||
      (n==0L && !identical(summary$run_type,"full"))||
      !identical(summary$final_layer_sha256,sha(final_path))||
-     !identical(summary$source_layer_sha256,
+     !identical(summary$original_consensus_sha256 %||% summary$source_layer_sha256,
                 sha(file.path(w04,"consensus","workflow04_consensus_layer.jsonl"))))
     stop("W04 trial finalisation checksum validation failed.")
   readjl<-function(p) {
@@ -60,6 +61,17 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   canonical<-readjl(canonical_file)
   source<-setNames(canonical,vapply(canonical,function(x)x$identity$record_id,character(1)))
   id<-vapply(selected,function(x)x$record_id,character(1))
+  amended<-list()
+  if(isTRUE(summary$reconciled_abstracts)) {
+    rescreens<-list.dirs(file.path(w04,"abstract_rescreens"),recursive=FALSE,full.names=TRUE)
+    rescreens<-rescreens[file.exists(file.path(rescreens,"manifest.json"))]
+    if(length(rescreens)!=1L)stop("Cannot uniquely locate corrected W04 abstracts.")
+    correction_file<-file.path(rescreens[[1]],"inputs","submitted_abstracts.csv")
+    if(!file.exists(correction_file))stop("Missing corrected W04 abstracts.")
+    corrections<-utils::read.csv(correction_file,stringsAsFactors=FALSE,fileEncoding="UTF-8-BOM")
+    if(anyDuplicated(corrections$record_id))stop("Duplicate corrected abstract IDs.")
+    amended<-setNames(as.list(corrections$abstract),corrections$record_id)
+  }
   if(any(!id %in% names(source)))stop("Selected W04 IDs missing from canonical W02.")
   organise_w07_trials(map_path)
   dest<-file.path(map_path,"runs","W07",paste0(if(n==0L)"full-" else "trial-",length(id),"-",
@@ -96,7 +108,8 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
     "\n\nReturn only the requested JSON object. Preserve the supplied record_id.")
   for(record_id in id[!id%in%done_ids]){
     z<-source[[record_id]]$canonical
-    record<-list(record_id=record_id,title=z$title,abstract=z$abstract,
+    abstract<-if(!is.null(amended[[record_id]]))amended[[record_id]] else z$abstract
+    record<-list(record_id=record_id,title=z$title,abstract=abstract,
                  keywords=z$keywords)
     body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
       input=list(list(role="system",content=list(list(type="input_text",text=instructions))),
