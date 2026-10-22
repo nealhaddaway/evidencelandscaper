@@ -51,8 +51,11 @@ prepare_w01_review <- function(scored) {
     stop("Identifier rescoring dropped candidate pairs.")
   # Stable indices are only accepted against exactly the metadata/union
   # snapshot that yielded the already validated scoring stage.
-  pairs$pair_key<-paste(pmin(pairs$record_i,pairs$record_j),
-                        pmax(pairs$record_i,pairs$record_j),sep="::")
+  if(!"stable_pair_key" %in% names(pairs) ||
+     anyNA(pairs$stable_pair_key) ||
+     any(!grepl("^[0-9a-f]{64}$",pairs$stable_pair_key)))
+    stop("W01 stable source-identity pair keys missing or malformed.")
+  pairs$pair_key<-pairs$stable_pair_key
   if(anyDuplicated(pairs$pair_key))
     stop("Repeated candidate-pair identity after rescoring.")
   review<-pairs[pairs$rescored_classification %in%
