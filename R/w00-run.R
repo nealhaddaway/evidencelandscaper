@@ -26,7 +26,7 @@ run_w00 <- function(plan, max_records = 10L) {
   if (!length(sources) || anyDuplicated(sources)) {
     stop("W00 plan must contain unique source queries.", call. = FALSE)
   }
-  supported <- c("openalex", "lens")
+  supported <- c("openalex", "lens", "agricola", "pubmed", "ethos", "cba", "epmc_preprints")
   unknown <- setdiff(sources, supported)
   if (length(unknown)) {
     stop("W00 retrieval is not yet implemented for: ",
@@ -77,7 +77,12 @@ run_w00 <- function(plan, max_records = 10L) {
     outcome <- tryCatch({
       output_dir <- switch(source,
         openalex = run_w00_openalex(plan, max_records),
-        lens = run_w00_lens(plan, max_records))
+        lens = run_w00_lens(plan, max_records),
+        agricola = run_w00_epmc(plan, source, max_records),
+        pubmed = run_w00_epmc(plan, source, max_records),
+        ethos = run_w00_epmc(plan, source, max_records),
+        cba = run_w00_epmc(plan, source, max_records),
+        epmc_preprints = run_w00_epmc(plan, source, max_records))
       source_manifest <- file.path(output_dir, "manifest.json")
       if (!file.exists(source_manifest)) stop("Missing source manifest.")
       manifest <- jsonlite::fromJSON(source_manifest, simplifyVector = FALSE)
@@ -88,7 +93,8 @@ run_w00 <- function(plan, max_records = 10L) {
         stop("OpenAlex sample status is not successful.")
       }
       count <- if (source == "lens") manifest$unique_records_written
-               else manifest$unique_records_exported
+               else if (source == "openalex") manifest$unique_records_exported
+               else manifest$records_retrieved
       if (is.null(count) || as.integer(count) > max_records ||
           as.integer(count) < 0L) {
         stop("Invalid sample record count.")
