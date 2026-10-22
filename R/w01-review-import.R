@@ -12,6 +12,7 @@ import_w01_review <- function(package_dir, destination) {
   queue_file <- file.path(package_dir,"assigned_cases.jsonl")
   decision_file <- file.path(package_dir,"reviewer_state","decisions.jsonl")
   reviewer_file <- file.path(package_dir,"reviewer_state","reviewer.json")
+  corrections_file <- file.path(package_dir,"reviewer_state","abstract_corrections.jsonl")
   necessary <- c(meta_file,queue_file,decision_file,reviewer_file)
   if (any(!file.exists(necessary)))
     stop("Returned reviewer package missing manifest, queue, identity or decisions.")
@@ -44,6 +45,21 @@ import_w01_review <- function(package_dir, destination) {
   }
   last <- list()
   for(e in events) last[[e$review_case_id]] <- e
+  correction_events <- if(file.exists(corrections_file)) {
+    x <- readLines(corrections_file,warn=FALSE,encoding="UTF-8")
+    lapply(x[nzchar(trimws(x))],jsonlite::fromJSON,simplifyVector=FALSE)
+  } else list()
+  for(e in correction_events) {
+    if (!identical(e$schema,"local-abstract-correction-v1") ||
+        !identical(e$reviewer,who) ||
+        !identical(e$queue_sha256,meta$assigned_queue_sha256) ||
+        !e$review_case_id %in% ids ||
+        !e$action %in% c("edit","delete") ||
+        !is.character(e$record_key) || length(e$record_key)!=1L ||
+        !is.character(e$value) || length(e$value)!=1L) {
+      stop("Invalid or foreign abstract correction event.")
+    }
+  }
   if (!dir.exists(destination)) dir.create(destination,recursive=TRUE)
   # Import digest names never depend on untrusted reviewer text.
   layer_id <- substr(sha(decision_file),1L,20L)
@@ -53,9 +69,13 @@ import_w01_review <- function(package_dir, destination) {
   dir.create(target)
   file.copy(decision_file,file.path(target,"decision_events.jsonl"))
   file.copy(reviewer_file,file.path(target,"reviewer.json"))
+  if(file.exists(corrections_file))
+    file.copy(corrections_file,file.path(target,"abstract_corrections.jsonl"))
   file.copy(meta_file,file.path(target,"bundle_manifest.json"))
   jsonlite::write_json(list(schema="local-w01-review-import-v1",
     reviewer=who,case_count=length(last),event_count=length(events),
+    abstract_correction_events=length(correction_events),
+    abstract_corrections_sha256=if(file.exists(corrections_file)) sha(corrections_file) else NULL,
     queue_sha256=meta$assigned_queue_sha256,
     decision_sha256=sha(decision_file),
     imported_at_utc=format(Sys.time(),tz="UTC",format="%Y-%m-%dT%H:%M:%SZ")),
