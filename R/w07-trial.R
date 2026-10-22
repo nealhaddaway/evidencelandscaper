@@ -2,7 +2,7 @@
 #' @param map_path Project directory; defaults to Ostara project.
 #' @param ontology_file Path to mechanism ontology CSV.
 #' @param prompt_file Path to W07 coding prompt TXT.
-#' @param n Number of W04 trial retained records to code (default 5).
+#' @param n Number of retained records to code; 0 codes all from finalised full W04.
 #' @param model OpenAI Responses model.
 #' @return Local W07 trial directory.
 #' @export
@@ -15,7 +15,7 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   archive_map_prompt(prompt_file,"W07",map_path)
   if(!nzchar(Sys.getenv("OPENAI_API_KEY")))stop("OPENAI_API_KEY is required.")
   n<-as.integer(n)
-  if(is.na(n)||n<1L||n>50L)stop("n must be between 1 and 50.")
+  if(is.na(n)||n<0L||n>50000L)stop("n must be 0 (all) or a positive integer.")
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
   rows<-utils::read.csv(ontology_file,stringsAsFactors=FALSE,
                         fileEncoding="UTF-8-BOM",check.names=FALSE)
@@ -33,8 +33,8 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
     list.dirs(path,recursive=FALSE,full.names=TRUE)
   }),use.names=FALSE)
   options<-options[file.exists(file.path(options,"finalised","summary.json"))]
-  options<-options[grepl("^trial-",basename(options))]
-  if(!length(options))stop("A finalised W04 screening trial is required.")
+  options<-options[if(n==0L)grepl("^full-",basename(options)) else grepl("^trial-",basename(options))]
+  if(!length(options))stop("No appropriate finalised W04 screening run: full W04 required when n=0.")
   options<-options[order(file.info(file.path(options,"finalised","summary.json"))$mtime,
                          decreasing=TRUE)]
   w04<-options[[1L]]
@@ -42,6 +42,7 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   final_path<-file.path(w04,"finalised","workflow04_final_screening_layer.jsonl")
   summary<-jsonlite::fromJSON(summary_path)
   if(!identical(summary$status,"final")||
+     (n==0L && !identical(summary$run_type,"full"))||
      !identical(summary$final_layer_sha256,sha(final_path))||
      !identical(summary$source_layer_sha256,
                 sha(file.path(w04,"consensus","workflow04_consensus_layer.jsonl"))))
@@ -53,7 +54,7 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   screened<-readjl(final_path)
   retained<-Filter(function(x)identical(x$screening$decision,"retain"),screened)
   if(!length(retained))stop("No retained W04 trial records found.")
-  selected<-head(retained,n)
+  selected<-if(n==0L)retained else head(retained,n)
   root<-dirname(dirname(w04))
   canonical_file<-file.path(root,"W02_main","finalised","canonical.jsonl")
   canonical<-readjl(canonical_file)
@@ -61,13 +62,13 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   id<-vapply(selected,function(x)x$record_id,character(1))
   if(any(!id %in% names(source)))stop("Selected W04 IDs missing from canonical W02.")
   organise_w07_trials(map_path)
-  dest<-file.path(map_path,"runs","W07",paste0("trial-",length(id),"-",
+  dest<-file.path(map_path,"runs","W07",paste0(if(n==0L)"full-" else "trial-",length(id),"-",
           substr(sha(ontology_file),1,10),"-",substr(sha(prompt_file),1,10)))
   dir.create(dest,recursive=TRUE,showWarnings=FALSE)
   mpath<-file.path(dest,"manifest.json")
   outpath<-file.path(dest,"coding.jsonl")
   provenance<-list(schema="local-w07-abstract-trial-v1",
-    source_type="W04_FINALISED_TRIAL_ONLY",source_w04=w04,
+    source_type=if(n==0L)"W04_FINALISED_FULL" else "W04_FINALISED_TRIAL_ONLY",source_w04=w04,
     source_w04_sha256=sha(final_path),
     canonical_w02_sha256=sha(canonical_file),
     ontology_sha256=sha(ontology_file),prompt_sha256=sha(prompt_file),
