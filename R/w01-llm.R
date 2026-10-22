@@ -24,9 +24,9 @@ run_w01_llm <- function(queue, model = Sys.getenv("OPENAI_DUPLICATE_MODEL","gpt-
   if(is.na(batch_size)||batch_size<1L) stop("batch_size must be positive.")
   lines<-readLines(queue,warn=FALSE,encoding="UTF-8")
   lines<-lines[nzchar(trimws(lines))]
-  ids<-vapply(lines,function(line) {
+  ids<-unname(vapply(lines,function(line) {
     jsonlite::fromJSON(line,simplifyVector=FALSE)$review_case_id
-  },character(1))
+  },character(1)))
   if(anyDuplicated(ids)||any(!nzchar(ids))) stop("Invalid case identities.")
   sha<-function(p) digest::digest(file=p,algo="sha256",serialize=FALSE)
   dest<-file.path(dirname(queue),"llm_adjudication")
@@ -66,8 +66,8 @@ run_w01_llm <- function(queue, model = Sys.getenv("OPENAI_DUPLICATE_MODEL","gpt-
          as.integer(m$start_row)!=min(rows)||
          as.integer(m$end_row)!=max(rows))
         stop("Previously completed LLM chunk failed provenance validation: ",k)
-      found<-vapply(readLines(output,warn=FALSE),function(x)
-        jsonlite::fromJSON(x,simplifyVector=FALSE)$review_case_id,character(1))
+      found<-unname(vapply(readLines(output,warn=FALSE),function(x)
+        jsonlite::fromJSON(x,simplifyVector=FALSE)$review_case_id,character(1)))
       if(!identical(found,ids[rows]))
         stop("LLM chunk has unexpected case identifiers: ",k)
       message("[W01 LLM] Reused verified chunk ",k,"/",length(chunks))
@@ -101,8 +101,8 @@ run_w01_llm <- function(queue, model = Sys.getenv("OPENAI_DUPLICATE_MODEL","gpt-
   human_records<-unlist(lapply(seq_along(chunks),function(k)
       readLines(file.path(dest,sprintf("chunk-%05d.human_review.jsonl",k)),
                 warn=FALSE)),use.names=FALSE)
-  actual<-vapply(all_records,function(x)
-    jsonlite::fromJSON(x,simplifyVector=FALSE)$review_case_id,character(1))
+  actual<-unname(vapply(all_records,function(x)
+    jsonlite::fromJSON(x,simplifyVector=FALSE)$review_case_id,character(1)))
   if(!identical(actual,ids))stop("Merged LLM case IDs do not match input.")
   writeLines(all_records,output,useBytes=TRUE)
   writeLines(human_records,human,useBytes=TRUE)
