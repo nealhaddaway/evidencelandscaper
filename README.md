@@ -136,3 +136,5 @@ The 17 configured EBSCO databases use the unchanged upstream EBSCO EIT R ingesti
 ## Local W00 consolidation
 
 `consolidate_w00(plan)` reads the **specified** run's successful automated outputs and its `accepted_manual_imports.json` (if present), rechecks the manual import checksums and source record counts, and writes `consolidated/records.jsonl` and `consolidated/manifest.json` without changing any original files. The output contains source-labelled original-record envelopes, **not a W01-ready canonical schema**. This is deliberate: downstream W01 format mapping and validation are separate work. A run with accepted RIS only can be consolidated; historical manual imports are never auto-included. The function refuses overwriting a previous consolidation.
+
+For convenience, `consolidate_w00("example_review")` discovers the map's most recent run with accepted manual RIS imports (or, if none exist, the latest run with retrieval results). The selected run ID is printed. Supply an explicit `plan_w00()` object to target another run. Neither method overwrites a completed consolidation.
