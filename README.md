@@ -150,3 +150,15 @@ Put the strategy JSON in `<map>/inputs/search/`. With one JSON it is automatical
 ## W01-main first-run deduplication preparation
 
 For a fully consolidated map, run `inputs <- prepare_w01("Ostara_collective_action_map")`. It reads the latest complete W00 consolidation (including accepted CAB/PQDT RIS files), uses W01-main source adapters for Scopus, OpenAlex, WoS and Europe PMC, reuses supported Lens/EBSCO sidecars, creates source-specific stable IDs for manual RIS, and writes an original W01 source-input manifest. It does not run candidate scoring. Once preparation has been validated, use `candidates <- run_w01_initial(inputs)` to execute the original W01-main first-run union and candidate-generation scripts. **Neither command establishes a deduplicated corpus**; classification, human review, clustering and canonical publication remain separate. Both fail on output collisions and do not modify W00 source files, `LivingEvidenceMap`, or cloud publication. These commands have not yet received live RStudio validation.
+
+## Local W01 adjudication prototype
+
+prepare_w01_review(scored) runs the unchanged W01-main identifier rescoring and creates a review-case queue. This is NOT yet filtered through the LLM, and does not finalise any duplicates.
+
+adjudicate_w01(queue) launches a local Shiny app, prompts for reviewer identity, displays bibliographic metadata and DOI/Google Scholar links, and allows Edit/Delete abstract corrections. It appends locally attributed decision events and abstract correction events. Original W00 and W01 records remain unchanged.
+
+package_w01_review(queue, destination, case_ids=...) creates a portable reviewer folder containing only assigned cases, a standalone app.R, launch.R and task manifest. A collaborator needs R plus shiny, jsonlite and digest; from the assigned folder they run source('launch.R'). Return the whole folder including reviewer_state.
+
+import_w01_review(package_dir, destination) verifies assigned case identifiers, reviewer identity and queue checksums, then archives a separate attributed decision layer. It does not merge the decisions with the corpus or finalise clusters.
+
+Current limitations: the LLM and cluster-finalisation stages are not integrated; W02 and W04-W07 interfaces are not yet implemented. The new local Shiny app has not been runtime-tested in RStudio here. Do not treat this as a complete W01 pipeline.
