@@ -179,6 +179,7 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
   }
   message("[W08] Progress: ",length(done_ids)," of ",length(selected)," records completed; ",length(selected)-length(done_ids)," remaining.")
   progress_index<-length(done_ids)
+  failures<-character()
   for(record_id in selected[!selected %in% done_ids]) {
     can<-source[[record_id]]$canonical
     abs<-if(!is.null(corrected[[record_id]]))corrected[[record_id]] else can$abstract
@@ -209,7 +210,18 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
       issue<-tryCatch({validate(z,record_id,txt);NULL},
                       error=function(e)conditionMessage(e))
       if(is.null(issue))break
-      if(attempt==2L || !startsWith(issue,"W08 evidence excerpt not in input:"))
+      if(attempt==2L && startsWith(issue,"W08 evidence excerpt not in input:")) {
+        failures<-c(failures,record_id)
+        issue_path<-file.path(dest,"invalid_evidence_responses.jsonl")
+        cat(jsonlite::toJSON(list(record_id=record_id,model=model,
+          validation_error=issue,response=z,attempts=attempt),
+          auto_unbox=TRUE,null="null"),"\n",file=issue_path,
+          append=TRUE,sep="")
+        message("[W08] ",record_id,
+                " still has an unsupported quotation; retained for review; continuing.")
+        break
+      }
+      if(!startsWith(issue,"W08 evidence excerpt not in input:"))
         stop(issue)
       message("[W08] Invalid model quotation for ",record_id,
               "; retrying once with explicit source-verbatim instruction.")
@@ -221,6 +233,7 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
         "change punctuation, or quote text from elsewhere. If no exact ",
         "evidence can be found, do not report a supported case.")
     }
+    if(record_id %in% failures)next
     cat(jsonlite::toJSON(z,auto_unbox=TRUE,null="null"),"\n",
         file=out,append=TRUE,sep="")
     progress_index<-progress_index+1L
@@ -229,7 +242,13 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
   }
   all<-readjl(out)
   if(length(all)!=n || !setequal(vapply(all,function(z)z$record_id,character(1)),
-                                  selected))stop("W08 pilot incomplete.")
+                                  selected)) {
+    missing_ids<-setdiff(selected,vapply(all,function(z)z$record_id,character(1)))
+    message("[W08] Partial run: ",length(all)," of ",n,
+            " validated records. Unresolved IDs: ",paste(missing_ids,collapse=", "),
+            ". Invalid responses saved separately.")
+    return(invisible(dest))
+  }
   summary<-table(factor(vapply(all,function(z)z$case_evidence_status,character(1)),
                         levels=c("specific_case","multiple_cases",
                                  "no_identifiable_case","unclear")))
