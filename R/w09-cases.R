@@ -3,13 +3,13 @@
 #' Creates a six-publication retrieval queue, without downloading anything.
 #' Existing W04, W07 and W08 files are read-only.
 #' @param map_path Ostara map, or another compatible map.
-#' @param record_ids Selected case-candidate publication IDs.
+#' @param record_ids Selected case-candidate publication IDs.\n#' @param w04_run Optional explicit finalised W04 run, including selected-record runs.
 #' @return W09 run folder.
 #' @export
 prepare_w09_cases <- function(map_path=NULL,record_ids=c(
  "work-e35e229f44c00c48","work-87a2aaa8f5ab66fd",
  "work-a98a0ec08d809374","work-dfee6fc216d262be",
- "work-40763e339da408a7","work-5996de5c2a387c4c")) {
+ "work-40763e339da408a7","work-5996de5c2a387c4c"),w04_run=NULL) {
  if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
  map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
  if(!length(record_ids)||anyDuplicated(record_ids)||anyNA(record_ids))
@@ -24,9 +24,8 @@ prepare_w09_cases <- function(map_path=NULL,record_ids=c(
    p<-file.path(r,"W04_local")
    if(dir.exists(p))list.dirs(p,recursive=FALSE,full.names=TRUE) else character()
  }),use.names=FALSE)
- runs<-runs[grepl("^full-",basename(runs)) &
-            file.exists(file.path(runs,"finalised","summary.json"))]
- if(length(runs)!=1L)stop("Expected one finalised W04 full run.")
+ if(!is.null(w04_run)) {\n   w04_run<-normalizePath(w04_run,winslash="/",mustWork=TRUE)\n   runs<-runs[runs==w04_run]\n } else runs<-runs[grepl("^full-",basename(runs))]\n runs<-runs[file.exists(file.path(runs,"finalised","summary.json"))]
+ if(length(runs)!=1L)stop("Expected one finalised W04 run; supply w04_run explicitly.")
  w04<-runs[[1L]]
  final<-file.path(w04,"finalised","workflow04_final_screening_layer.jsonl")
  meta<-jsonlite::fromJSON(file.path(w04,"finalised","summary.json"))
