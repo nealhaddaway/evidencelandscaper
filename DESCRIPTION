@@ -18,5 +18,6 @@ Suggests:
     shiny,
     xml2,
     stringi,
-    ggplot2
+    ggplot2,
+    pdftools
 Config/testthat/edition: 3
