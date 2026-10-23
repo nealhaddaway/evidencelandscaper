@@ -19,10 +19,12 @@ process_w09_remaining <- function(w09,grobid_url=Sys.getenv("GROBID_URL")) {
  existing<-if(file.exists(log))lapply(readLines(log,warn=FALSE),
    jsonlite::fromJSON,simplifyVector=FALSE) else list()
  previous<-vapply(existing,function(z)z$record_id,character(1))
- if(anyDuplicated(previous))stop("Duplicate processing log IDs.")
+ # Log records are append-only; retry failed/configuration-blocked attempts.
+ latest<-if(length(existing))existing[!duplicated(previous,fromLast=TRUE)] else list()
+ completed<-vapply(Filter(function(z) z$status%in%c("converted_tei_unverified_identity","existing_conversion_preserved","identity_supported_by_header"),latest),function(z)z$record_id,character(1))
  for(i in seq_len(nrow(selected))) {
    z<-selected[i,,drop=FALSE];id<-z$record_id[[1]]
-   if(id%in%previous) {
+   if(id%in%completed) {
      message("[W09 processing] ",i,"/",nrow(selected)," ",id," already assessed")
      next
    }
@@ -57,7 +59,7 @@ process_w09_remaining <- function(w09,grobid_url=Sys.getenv("GROBID_URL")) {
          if(!file.exists(source))stop("Source document missing.")
          url<-paste0(sub("/+$","",grobid_url),"/api/processFulltextDocument")
          response<-httr2::request(url)|>
-           httr2::req_body_multipart(input=httr2::upload_file(source))|>
+           httr2::req_body_multipart(input=curl::form_file(source))|>
            httr2::req_timeout(180)|>httr2::req_perform()
          raw<-httr2::resp_body_raw(response)
          tmp<-tempfile(fileext=".xml")
@@ -83,6 +85,8 @@ process_w09_remaining <- function(w09,grobid_url=Sys.getenv("GROBID_URL")) {
  }
  all<-lapply(readLines(log,warn=FALSE),jsonlite::fromJSON,
               simplifyVector=FALSE)
+ all_ids<-vapply(all,function(z)z$record_id,character(1))
+ all<-all[!duplicated(all_ids,fromLast=TRUE)]
  rows<-do.call(rbind,lapply(all,function(z)data.frame(
    record_id=z$record_id,previous_status=z$previous_status,
    status=z$status,output=if(is.null(z$output))"" else z$output,
