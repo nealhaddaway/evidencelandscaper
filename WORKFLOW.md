@@ -218,3 +218,18 @@ w09 <- prepare_w09_cases()
 ```
 
 The model response is archived per publication in `fulltext_case_registry.jsonl`, never overwriting v1 `fulltext_extraction.jsonl`. The extraction uses a single JSON object per publication with separate nested country, location, commodity, supply-chain stage and mechanism arrays. These outputs remain provisional pending human checks against source texts. W04 and W07 are read-only.
+
+### Cumulative model API usage (new requests only)
+
+W07, W08, W09 v1 and W09 v2 now append token usage after successful OpenAI responses to `<map>/api_costs/usage.jsonl`, outside the code repository. Each response has a provider response ID (for duplicate protection), workflow, publication ID, model, UTC timestamp, input tokens, cached input tokens, output tokens. The ledger records token usage and **does not by itself contain verified billed amounts**. OpenAI pricing is time/model dependent, so to calculate estimates first record verified USD-per-million-token rates for a model with `set_api_pricing(map_path, model, input_usd_per_m, cached_input_usd_per_m, output_usd_per_m)`. Then use `api_cost_summary(map_path)` to see cumulative estimates by workflow and a TOTAL row. Without model-specific rates, costs remain NA with `unpriced_requests`; no amounts are fabricated. Previous requests made before this change cannot be reconstructed without response usage saved elsewhere. Pricing changes over time require preserved price versions before modifying historical rates.
+
+```r
+remotes::install_github("nealhaddaway/evidencelandscaper",dependencies=FALSE,force=TRUE)
+library(evidencelandscaper)
+map <- open_map("Ostara_collective_action_map")
+api_cost_summary(map)
+# After verifying published pricing for the exact model:
+# set_api_pricing(map,"gpt-5.6",input_usd_per_m=...,cached_input_usd_per_m=...,output_usd_per_m=...)
+```
+
+W04 and W01 model usage logging require a separate check of their request adapter and are **not yet instrumented**. Avoid treating this as a complete historical bill.
