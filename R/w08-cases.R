@@ -194,7 +194,6 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6",
       httr2::req_body_json(body,auto_unbox=TRUE) |>
       httr2::req_timeout(180) |> httr2::req_perform() |>
       httr2::resp_body_json(simplifyVector=FALSE)
-   record_api_usage(map_path,"W08",record_id,resp,model=model)
     pieces<-unlist(lapply(resp$output,function(item)
       unlist(lapply(item$content,function(x)
         if(identical(x$type,"output_text"))x$text else NULL),
