@@ -137,6 +137,8 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
      rows[,required,drop=FALSE],row.names=FALSE)),collapse="\n")
   instructions<-paste(prompt,"\n\nCONTROLLED ONTOLOGY CSV:\n",ontology_text,
     "\n\nReturn only the requested JSON object. Preserve the supplied record_id.")
+  message("[W07] Progress: ",length(done_ids)," of ",length(id)," records completed; ",length(id)-length(done_ids)," remaining.")
+  progress_index<-length(done_ids)
   for(record_id in id[!id%in%done_ids]){
     z<-source[[record_id]]$canonical
     abstract<-if(!is.null(amended[[record_id]]))amended[[record_id]] else z$abstract
@@ -166,7 +168,8 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
       stop("Invalid W07 coding status for ",record_id)
     cat(jsonlite::toJSON(result,auto_unbox=TRUE,null="null"),"\n",
         file=outpath,append=TRUE,sep="")
-    message("[W07] Coded ",record_id,": ",length(assigned)," mechanism(s)")
+    progress_index<-progress_index+1L
+    message("[W07] Record ",progress_index," of ",length(id),": ",record_id,"; ",length(assigned)," mechanism(s)")
   }
   final<-readjl(outpath)
   if(length(final)!=length(id))stop("W07 trial incomplete.")
