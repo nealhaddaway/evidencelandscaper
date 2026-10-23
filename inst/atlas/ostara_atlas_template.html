@@ -1,12 +1,12 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ostara | Evidence atlas</title>
-<style>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css"><style>
 :root{--ink:#233a35;--muted:#667b73;--accent:#cf7049;--pale:#f3f5f1}
 *{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui, sans-serif;background:#fafbf9;color:var(--ink)}
 header{padding:20px 28px;background:white;border-bottom:1px solid #dae3dc}h1{font:32px/1.2 Georgia,serif;margin:2px 0 7px}
 small{color:var(--muted)}main{display:grid;grid-template-columns:350px 1fr;height:calc(100vh - 119px);min-height:570px}
 aside{background:white;border-right:1px solid #dae3dc;overflow-y:auto;padding:18px}
 input,select{width:100%;border:1px solid #cedbd3;padding:10px;margin:4px 0 12px;border-radius:5px;background:white}
-#maparea{position:relative;overflow:hidden;background:#e9efe8}#world{width:100%;height:100%;display:block;touch-action:pan-y}
+#maparea{position:relative;overflow:hidden;background:#e9efe8}#positron{position:absolute;inset:0;display:none;z-index:2}#popup{z-index:5}.notice{z-index:4}#world{width:100%;height:100%;display:block;touch-action:pan-y}
 .land{fill:#d4ded5;stroke:#b5c7b9;stroke-width:.55}.graticule{stroke:#d7e4dd;stroke-width:.55;fill:none}
 .marker{fill:var(--accent);stroke:white;stroke-width:1.25;cursor:pointer}.marker:hover,.marker.selected{fill:#a64728;stroke:var(--ink);stroke-width:1.7}
 .item{cursor:pointer;border-bottom:1px solid #e4eae5;padding:10px 3px}.item:hover{background:#f1f5ef}.item strong{display:block}
@@ -16,8 +16,8 @@ input,select{width:100%;border:1px solid #cedbd3;padding:10px;margin:4px 0 12px;
 @media(max-width:780px){main{display:flex;flex-direction:column-reverse;height:auto}aside{max-height:45vh}#maparea{height:54vh;min-height:320px}}
 </style></head><body><header><small>OSTARA / EVIDENCE SYNTHESIS</small><h1>Collective action evidence atlas</h1><small id="summary">Verified publication–case observations · indicative geography</small></header><main>
 <aside><label for="find">Search cases or articles</label><input id="find" placeholder="Search evidence"><label for="country">Country</label><select id="country"><option value="">All countries</option></select><label for="mechanism">Mechanism</label><select id="mechanism"><option value="">All mechanisms</option></select><div id="count"></div><div id="listing"></div></aside>
-<section id="maparea"><svg id="world" viewBox="0 0 1000 510" role="img" aria-label="World map of indicative Ostara case coordinates"><rect width="1000" height="510" fill="#e9efe8"/><g id="geography">__MAP_PATHS__</g><g id="markers"></g></svg><div id="popup"><button class="close" id="close">Close</button><div id="info"></div></div><div class="notice">Built-in world boundaries · no map tiles, API key or internet required · positions indicative</div></section></main>
-<script id="case-data" type="application/json">__CASE_DATA__</script>
+<section id="maparea"><div id="positron"></div><svg id="world" viewBox="0 0 1000 510" role="img" aria-label="World map of indicative Ostara case coordinates"><rect width="1000" height="510" fill="#e9efe8"/><g id="geography">__MAP_PATHS__</g><g id="markers"></g></svg><div id="popup"><button class="close" id="close">Close</button><div id="info"></div></div><div class="notice">Built-in world boundaries · no map tiles, API key or internet required · positions indicative</div></section></main>
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script><script id="case-data" type="application/json">__CASE_DATA__</script>
 <script>
 "use strict";
 const cases=JSON.parse(document.getElementById("case-data").textContent).cases||[];
@@ -42,23 +42,44 @@ $("info").innerHTML=v;$("popup").style.display="block";
 $("close").onclick=()=>$("popup").style.display="none";
 function pos(c){const k=c.coordinates,lat=Number(k.latitude),lon=Number(k.longitude);if(k.latitude==null||k.longitude==null||!Number.isFinite(lat)||!Number.isFinite(lon))return null;return [500+lon*1000/360,255-lat*510/180]}
 const ns="http://www.w3.org/2000/svg";
+let positronMap=null, positronMarkers=[];
+function initPositron(){
+ if(typeof maplibregl==="undefined")return;
+ try {
+   const mp=new maplibregl.Map({container:"positron",style:"https://tiles.openfreemap.org/styles/positron",center:[0,17],zoom:1.35,attributionControl:true});
+   let ready=false;
+   mp.on("load",()=>{
+      ready=true;
+      positronMap=mp;
+      $("positron").style.display="block";
+      mp.resize();
+      render();
+      $("summary").textContent=cases.length+" publication–case observations · Positron basemap · embedded fallback";
+   });
+   mp.on("error",e=>{
+      if(!ready){mp.remove();$("positron").style.display="none";positronMap=null}
+   });
+ }catch(e){$("positron").style.display="none";positronMap=null}
+}
+
 const unique=(arr)=>[...new Set(arr)].sort();
 for(const name of unique(cases.flatMap(countries)))$("country").add(new Option(name,name));
 for(const name of unique(cases.flatMap(codes)))$("mechanism").add(new Option(name,name));
 function render(){
 const q=$("find").value.toLowerCase().trim(),country=$("country").value,code=$("mechanism").value;
 const filtered=cases.filter(c=>(!country||countries(c).includes(country))&&(!code||codes(c).includes(code))&&(!q||[c.case.case_name,c.case.case_description,c.publication.title,...countries(c)].join(" ").toLowerCase().includes(q)));
-$("markers").replaceChildren();$("listing").replaceChildren();let mapped=0;
+$("markers").replaceChildren();$("listing").replaceChildren();for(const m of positronMarkers)m.remove();positronMarkers=[];let mapped=0;
 for(const c of filtered){
 const p=pos(c);const item=document.createElement("div");item.className="item";
 item.innerHTML="<strong>"+esc(c.case.case_name||"Unnamed case")+"</strong><small>"+esc(c.publication.title)+"</small>";
 item.onclick=()=>view(c);$("listing").appendChild(item);
 if(p){mapped++;const m=document.createElementNS(ns,"circle");m.setAttribute("cx",p[0]);m.setAttribute("cy",p[1]);m.setAttribute("r","5");m.setAttribute("class","marker");m.setAttribute("tabindex","0");m.setAttribute("aria-label",c.case.case_name||"Case");
-m.onclick=()=>view(c);m.onkeydown=e=>{if(e.key==="Enter")view(c)};$("markers").appendChild(m)}
+m.onclick=()=>view(c);m.onkeydown=e=>{if(e.key==="Enter")view(c)};$("markers").appendChild(m);if(positronMap){const dot=document.createElement("button");dot.type="button";dot.style.cssText="width:15px;height:15px;border-radius:50%;border:2px solid white;background:#cf7049;cursor:pointer;box-shadow:0 1px 5px #4447";dot.title=c.case.case_name||"Case";dot.onclick=()=>view(c);positronMarkers.push(new maplibregl.Marker({element:dot}).setLngLat([Number(c.coordinates.longitude),Number(c.coordinates.latitude)]).addTo(positronMap))}}
 }
 $("count").textContent=filtered.length+" cases · "+mapped+" indicative points";
 }
 for(const id of ["find","country","mechanism"])$(id).addEventListener(id==="find"?"input":"change",render);
 $("summary").textContent=cases.length+" publication–case observations · linked evidence · offline world basemap";
 render();
+initPositron();
 </script></body></html>
