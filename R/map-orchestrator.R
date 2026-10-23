@@ -91,7 +91,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     message("[",run_name,"] W01–W04 multi-run input adapter is not yet validated. ",
       "STOPPING instead of mixing this expansion with a prior run.")
     state$status <- "handoff_required"
-    state$blocking_stage <- "W01-W04 multi-run deduplication and sampled screening"
+    state$blocking_stage <- "W01-W04 first-run handover and sampled screening"
     .orchestrator_save(state)
     return(invisible(state))
   }
@@ -108,7 +108,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     if(!identical(state$status,"planned"))stop("Scope already started; inspect run status.")
     message("[",run_name,"] W00 Planning and scoping across the existing map.")
     plan <- plan_w00(map,strategy=strategy,sources=sources,mode="full")
-    state$w00 <- list(plan=plan$run_dir,search_plan=plan$search_plan)
+    state$w00 <- plan
     state$status <- "scoping"
     .orchestrator_save(state)
     counts <- scope_w00(plan)
@@ -132,13 +132,21 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     if(!identical(state$status,"scoped_counts_only"))
       stop("W00 scope must complete before retrieval.")
     message("[",run_name,"] Running immutable W00 full retrieval from the scoped plan.")
-    # Existing run_w00_full accepts a plan list. Reconstructing a plan with an
-    # archive is unsupported until the W00 plan descriptor is persisted.
-    state$status <- "handoff_required"
-    state$blocking_stage <- "W00 plan rehydration for safe full retrieval"
+    if(is.null(state$w00$run_dir) || is.null(state$w00$search_plan) ||
+       is.null(state$w00$query_archive) || is.null(state$w00$source_selection))
+      stop("Saved W00 plan is incomplete; refusing new retrieval plan.")
+    plan <- state$w00
+    if(!file.exists(plan$search_plan) || !dir.exists(plan$query_archive) ||
+       !file.exists(plan$source_selection))
+      stop("Saved W00 plan files missing; cannot safely retrieve.")
+    state$status <- "retrieving"
     .orchestrator_save(state)
-    message("[",run_name,"] STOP: W00 plan descriptor is not yet persisted. ",
-      "No duplicate W00 search plan created.")
+    retrieval <- run_w00_full(plan)
+    state$w00$retrieval_manifest <- retrieval
+    state$status <- "retrieved"
+    .orchestrator_save(state)
+    message("[",run_name,"] W00 retrieval completed; input checksum preserved.")
+    message("[",run_name,"] Next: isolated first-run W01 deduplication adapter.")
     return(invisible(state))
   }
   .orchestrator_summary(state)
