@@ -6,7 +6,7 @@
 #' @param model OpenAI Responses model.
 #' @return Local W07 trial directory.
 #' @export
-trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6",
+trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-luna",
                       map_path=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
