@@ -6,11 +6,11 @@
 #' @param coordinates_csv Optional reviewed geocoding CSV. For exact continuity
 #'   specify the same audited file used at the previous publication.
 #' @param extraction_dir Optional explicitly selected completed W09 extraction.
-#' @param w09_run Explicit W09 run for named expansions; prevents historical pilot selection.
+#' @param w09_run Explicit W09 run for named expansions; prevents historical pilot selection.\n#' @param named_run Optional method-expansion identifier for provenance-bound reporting.\n#' @param w00_run,w04_run,w07_run,w08_run Explicit upstream runs for a named report.
 #' @return Named paths to the HTML atlas, W09 report, full-review HTML and
 #'   validated export.
 #' @export
-publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_dir=NULL,w09_run=NULL) {
+publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_dir=NULL,w09_run=NULL,\n                                 named_run=NULL,w00_run=NULL,w04_run=NULL,\n                                 w07_run=NULL,w08_run=NULL) {
   if(is.null(map_path)) map_path <- open_map("Ostara_collective_action_map")
   map_path <- normalizePath(map_path,winslash="/",mustWork=TRUE)
   root <- file.path(map_path,"runs","W09")
@@ -65,6 +65,22 @@ publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_d
   report <- republish_w09_report(w09,extraction_dir,coordinates_csv)
   message("[Ostara publication] 2/3 W09 PDF report complete")
   full_report <- NULL
+  if(!is.null(named_run)) {
+    if(!is.character(named_run)||length(named_run)!=1L||
+       !grepl("^[A-Za-z][A-Za-z0-9_-]*$",named_run))
+      stop("Invalid named review run.")
+    stages<-list(w00=w00_run,w04=w04_run,w07=w07_run,w08=w08_run)
+    if(any(vapply(stages,is.null,logical(1))))
+      stop("Named publication requires explicit W00, W04, W07 and W08 run paths.")
+    for(nm in names(stages)){
+      p<-normalizePath(stages[[nm]],winslash="/",mustWork=TRUE)
+      if(!startsWith(p,paste0(map_path,"/runs/")))
+        stop("Named report source run outside map: ",nm)
+      stages[[nm]]<-p
+    }
+    w00_run<-stages$w00;w04_run<-stages$w04
+    w07_run<-stages$w07;w08_run<-stages$w08
+  }
   template <- system.file("reports","Ostara_evidence_review.Rmd",package="evidencelandscaper")
   if(!nzchar(template))stop("Installed full-review report template missing.")
   if(!requireNamespace("rmarkdown",quietly=TRUE))
@@ -77,7 +93,7 @@ publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_d
   if(!file.exists(output)) {
     rmarkdown::render(template,output_file=basename(output),
       output_dir=dirname(output),
-      params=list(map_path=map_path,w09_run=w09,w09_extract_run=extraction_dir),
+      params=list(map_path=map_path,w00_run=w00_run,w04_run=w04_run,\n        w07_run=w07_run,w08_run=w08_run,w09_run=w09,\n        w09_extract_run=extraction_dir,named_run=named_run),
       envir=new.env(parent=globalenv()),quiet=TRUE)
   }
   full_report <- output
