@@ -64,7 +64,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","deduplicate","status"),
+                                step=c("auto","scope","retrieve","deduplicate","finish_w01","status"),
                                 screening=NULL,extraction=NULL,sources=NULL) {
   step <- match.arg(step)
   map <- open_map(map)
@@ -126,6 +126,48 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
             state$scope$unknown_source_counts," source counts unavailable.")
     message("[",run_name,"] These are GROSS database hits, not deduplicated records.")
     message("[",run_name,"] Retrieval/deduplication required before sampling checkpoint 1.")
+    return(invisible(state))
+  }
+  if(step=="finish_w01") {
+    if(!state$status %in% c("w01_scored","w01_review_pending"))
+      stop("W01 scoring must complete before finalisation.")
+    scored<-state$w01$scored
+    if(!dir.exists(scored))stop("Original W01 scoring directory missing.")
+    if(!file.exists(file.path(dirname(scored),"finalised","summary.json"))) {
+      if(!file.exists(file.path(dirname(scored),"review_preparation","llm_adjudication","summary.json"))) {
+        state$status<-"w01_review_pending"
+        .orchestrator_save(state)
+        message("[",run_name,"] W01 LLM review still needed. Use continue_w01(scored,run_llm=TRUE), ",
+                "then resume_evidence_map(...,step='finish_w01').")
+        return(invisible(state))
+      }
+      finalized<-finalize_w01(scored)
+    } else {
+      finalized<-file.path(dirname(scored),"finalised")
+    }
+    summary<-jsonlite::fromJSON(file.path(finalized,"summary.json"),simplifyVector=FALSE)
+    if(!identical(summary$status,"final"))
+      stop("W01 summary is not final.")
+    cluster<-file.path(finalized,"manifestation_cluster_map.csv")
+    if(!file.exists(cluster))stop("W01 cluster map missing.")
+    d<-utils::read.csv(cluster,stringsAsFactors=FALSE)
+    if(!"cluster_id"%in% names(d))
+      stop("W01 cluster map missing cluster_id; inspect before using as screening corpus.")
+    ids<-unique(as.character(d$cluster_id))
+    if(anyNA(ids)||any(!nzchar(ids)))stop("Invalid W01 cluster identifiers.")
+    ids<-sort(ids,method="radix")
+    ids_file<-file.path(home,"w01_screening_population.csv")
+    if(file.exists(ids_file))stop("W01 checkpoint population exists; refusing overwrite.")
+    utils::write.csv(data.frame(cluster_id=ids),ids_file,row.names=FALSE)
+    state$w01$finalised<-finalized
+    state$scope$eligible_records<-length(ids)
+    state$scope$population_path<-ids_file
+    state$scope$population_sha256<-sha(ids_file)
+    state$status<-"awaiting_screening_scope"
+    .orchestrator_save(state)
+    message("[",run_name,"] CHECKPOINT 1 (after W01): ",length(ids),
+            " deduplicated publication clusters. Choose all, n, or percent",
+            " AND uncertain='exclude' or 'adjudicate'.")
     return(invisible(state))
   }
   if(step=="deduplicate") {
