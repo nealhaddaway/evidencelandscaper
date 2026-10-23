@@ -64,8 +64,8 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","status"),
-                                screening=NULL,extraction=NULL,sources=NULL) {
+                                step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","screen","finalize_screen","code","status"),
+                                screening=NULL,extraction=NULL,sources=NULL,\n                                screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,\n                                w08_prompt=NULL,model="gpt-6-luna") {
   step <- match.arg(step)
   map <- open_map(map)
   home <- file.path(map,"runs","orchestrated",run_name)
@@ -138,6 +138,68 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
             state$scope$unknown_source_counts," source counts unavailable.")
     message("[",run_name,"] These are GROSS database hits, not deduplicated records.")
     message("[",run_name,"] Retrieval/deduplication required before sampling checkpoint 1.")
+    return(invisible(state))
+  }
+  if(step=="screen") {
+    if(!identical(state$status,"w03_complete"))
+      stop("W02/W03 and checkpoint 1 must complete before W04.")
+    if(is.null(screening_prompt))stop("Supply the approved screening_prompt explicitly.")
+    selected<-state$decision1$selected_ids_path
+    if(!file.exists(selected) ||
+       !identical(sha(selected),state$decision1$selected_ids_sha256))
+      stop("Archived exact screening sample no longer verifies.")
+    scored<-state$w01$scored
+    state$status<-"screening"
+    .orchestrator_save(state)
+    w04<-run_w04(scored= scored,prompt_file=screening_prompt,max_records=0L,
+                 model=model,open_app=FALSE,record_ids_csv=selected)
+    state$w04<-list(run=w04)
+    state$status<-"w04_screened"
+    .orchestrator_save(state)
+    message("[",run_name,"] W04 screened selected record IDs. ",
+            "Finalise with step='finalize_screen' to apply the uncertainty policy.")
+    return(invisible(state))
+  }
+  if(step=="finalize_screen") {
+    if(!identical(state$status,"w04_screened"))
+      stop("W04 must finish before screening finalisation.")
+    w04<-state$w04$run
+    policy<-state$decision1$uncertain_policy
+    final<-finalize_w04(map_path=map,w04=w04,uncertain=policy)
+    state$w04$finalised<-final
+    state$status<-"w04_final"
+    .orchestrator_save(state)
+    report<-jsonlite::fromJSON(file.path(final,"summary.json"))
+    message("[",run_name,"] W04 final: ",report$retain," retained; ",
+            report$exclude," excluded; policy exclusions: ",
+            report$policy_uncertain_excluded)
+    return(invisible(state))
+  }
+  if(step=="code") {
+    if(!identical(state$status,"w04_final"))
+      stop("Final W04 screening must exist before W07 and W08.")
+    if(is.null(w07_prompt)||is.null(ontology_file))
+      stop("Provide approved w07_prompt and ontology_file explicitly.")
+    w04<-state$w04$run
+    state$status<-"coding"
+    .orchestrator_save(state)
+    w07<-trial_w07(ontology_file=ontology_file,prompt_file=w07_prompt,
+                   n=0L,map_path=map,model=model,w04_run=w04)
+    state$w07<-list(run=w07)
+    .orchestrator_save(state)
+    w08<-trial_w08_cases(n=0L,map_path=map,model=model,
+                         prompt_file=w08_prompt,w04_run=w04)
+    state$w08<-list(run=w08)
+    state$status<-"awaiting_extraction_scope"
+    # Read line-delimited records independently; publication count is not
+    # the extracted case count.
+    statuses<-lapply(readLines(file.path(w08,"case_assessments.jsonl"),
+                               warn=FALSE),jsonlite::fromJSON)
+    state$case_bearing_publications<-sum(vapply(statuses,function(z)
+      z$case_evidence_status %in% c("specific_case","multiple_cases"),logical(1)))
+    .orchestrator_save(state)
+    message("[",run_name,"] CHECKPOINT 2: ",state$case_bearing_publications,
+            " case-bearing publications. Choose extraction scope and uncertain policy.")
     return(invisible(state))
   }
   if(step=="enrich") {
