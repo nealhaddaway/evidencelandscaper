@@ -148,11 +148,13 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
       phase<-state$status
       next_step<-switch(phase,
         planned="scope",scoping="scope",scoped_counts_only="retrieve",
-        retrieved="deduplicate",w01_scored="finish_w01",\n        w01_classifying="finish_w01",w01_review_pending="finish_w01",
+        retrieved="deduplicate",w01_scored="finish_w01",
+        w01_classifying="finish_w01",w01_review_pending="finish_w01",
         screening_scope_saved="enrich",enriching="enrich",w03_complete="screen",
         w04_screened="finalize_screen",w04_final="code",
         extraction_scope_saved="prepare_extraction",
-        w09_prepared="retrieve_fulltexts",retrieving_fulltexts="retrieve_fulltexts",\n        fulltexts_ready="extract",extracting="extract",
+        w09_prepared="retrieve_fulltexts",retrieving_fulltexts="retrieve_fulltexts",
+        fulltexts_ready="extract",extracting="extract",
         extracted="publish",NULL)
       if(is.null(next_step))break
       message("[",run_name,"] Orchestrator: ",phase," -> ",next_step)
