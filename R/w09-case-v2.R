@@ -6,9 +6,11 @@
 #' @param record_ids Human-verified full-text publication IDs.
 #' @param model OpenAI model.
 #' @param max_pages PDF page limit, 0 for all; XML/JSON are not truncated.
+#' @param w07_run Optional explicit full W07 archive path. Required when more
+#'   than one completed full W07 run exists; avoids silently selecting v2.
 #' @return W09 v2 directory.
 #' @export
-analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6",max_pages=0L) {
+analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6",max_pages=0L,w07_run=NULL) {
  if(!requireNamespace("countrycode",quietly=TRUE))
    stop("Install countrycode: install.packages('countrycode')")
  if(!nzchar(Sys.getenv("OPENAI_API_KEY")))stop("OPENAI_API_KEY is required.")
@@ -33,9 +35,15 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6",max_pages=0L) {
    file.exists(file.path(runs,"ontology.csv")) &
    file.exists(file.path(runs,"manifest.json")) &
    file.exists(file.path(runs,"summary.json"))]
- if(length(runs)!=1L)
-   stop("Expected exactly one archived completed W07 full-corpus run.")
- w07<-runs[[1L]]
+ if(is.null(w07_run)) {
+   if(length(runs)!=1L)
+     stop("Multiple (or no) completed W07 full runs. Supply w07_run explicitly; do not mix ontology versions.")
+   w07<-runs[[1L]]
+ } else {
+   w07<-normalizePath(w07_run,winslash="/",mustWork=TRUE)
+   if(!w07%in%normalizePath(runs,winslash="/",mustWork=TRUE))
+     stop("Selected w07_run is not a completed full W07 archive within this map.")
+ }
  manifest<-jsonlite::fromJSON(file.path(w07,"manifest.json"),
                              simplifyVector=FALSE)
  ontpath<-file.path(w07,"ontology.csv")
