@@ -129,7 +129,7 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
   # Content-addressed output avoids replacing or mixing extractions.
   inputs <- c(inv_path,registry_path,manifest_path,prompt_path,ontology_path)
   if(!is.null(coordinates_csv)) inputs <- c(inputs,coordinates_csv)
-  digest_key <- digest::digest(vapply(inputs,sha,character(1)),algo="sha256",serialize=TRUE)
+  digest_key <- digest::digest(c("w09-linked-evidence-atlas-v2",vapply(inputs,sha,character(1))),algo="sha256",serialize=TRUE)
   output <- file.path(w09,"atlas_exports",paste0("linked-",substr(digest_key,1,12)))
   dir.create(output,recursive=TRUE,showWarnings=FALSE)
   output_json <- file.path(output,"case_evidence.json")
@@ -159,10 +159,10 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
     return(invisible(output))
   }
   if(file.exists(output_json) || file.exists(output_csv))stop("Existing partial atlas export: ",output)
-  jsonlite::write_json(list(schema="w09-linked-evidence-atlas-v1",cases=cases),
+  jsonlite::write_json(list(schema="w09-linked-evidence-atlas-v2",cases=cases),
                        output_json,auto_unbox=TRUE,pretty=TRUE,null="null")
   utils::write.csv(index,output_csv,row.names=FALSE,na="")
-  meta <- list(schema="w09-linked-evidence-atlas-manifest-v1",
+  meta <- list(schema="w09-linked-evidence-atlas-manifest-v2",
     input_files=basename(inputs),input_sha256=unname(vapply(inputs,sha,character(1))),
     publication_count=length(records),case_count=length(cases),
     output_sha256=list(case_evidence=sha(output_json),case_index=sha(output_csv)))
