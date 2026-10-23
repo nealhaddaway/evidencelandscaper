@@ -13,7 +13,7 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6",max_pages=0L) {
    stop("Install countrycode: install.packages('countrycode')")
  if(!nzchar(Sys.getenv("OPENAI_API_KEY")))stop("OPENAI_API_KEY is required.")
  w09<-normalizePath(w09,winslash="/",mustWork=TRUE)
- map<-dirname(dirname(w09))
+ map<-dirname(dirname(dirname(w09)))
  queue<-utils::read.csv(file.path(w09,"retrieval_queue.csv"),
                        stringsAsFactors=FALSE)
  if(missing(record_ids)||!length(record_ids)||anyDuplicated(record_ids)||
