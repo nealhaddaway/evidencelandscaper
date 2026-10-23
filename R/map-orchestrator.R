@@ -444,10 +444,34 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     if(!dir.exists(scored))stop("Original W01 scoring directory missing.")
     if(!file.exists(file.path(dirname(scored),"finalised","summary.json"))) {
       if(!file.exists(file.path(dirname(scored),"review_preparation","llm_adjudication","summary.json"))) {
-        state$status<-"w01_review_pending"
+        state$status<-"w01_classifying"
         .orchestrator_save(state)
-        message("[",run_name,"] W01 LLM review still needed. Use continue_w01(scored,run_llm=TRUE), ",
-                "then resume_evidence_map(...,step='finish_w01').")
+        classified<-continue_w01(scored,run_llm=TRUE,open_app=FALSE,
+                  model=Sys.getenv("OPENAI_DUPLICATE_MODEL","gpt-5.6"))
+        state$w01$llm_dir<-classified$llm_dir
+        state$w01$human_cases<-classified$human_cases
+        state$status<-"w01_scored"
+        .orchestrator_save(state)
+        message("[",run_name,"] W01 LLM classification completed; ",
+                classified$human_cases," review-uncertain pairs.")
+      }
+      queue<-file.path(dirname(scored),"review_preparation",
+                       "llm_adjudication","human_review_cases.jsonl")
+      if(!file.exists(queue))stop("W01 LLM human-review queue missing.")
+      pending<-readLines(queue,warn=FALSE,encoding="UTF-8")
+      pending<-pending[nzchar(trimws(pending))]
+      if(length(pending)>0L) {
+        # Never convert a duplicate uncertainty into a made-up affirmative
+        # duplicate or nonduplicate decision. A safe record-quarantine policy
+        # needs stable cluster membership before it can exclude records.
+        state$status<-"w01_review_pending"
+        state$blocking_stage<-"W01 unresolved duplicate pairs: safe case quarantine or review required"
+        state$w01$human_cases<-length(pending)
+        .orchestrator_save(state)
+        message("[",run_name,"] W01 has ",length(pending),
+                " unresolved duplicate pairs. The two sampling checkpoints ",
+                "remain after final W01 and after case identification. ",
+                "Cannot finalise while record identities are ambiguous.")
         return(invisible(state))
       }
       finalized<-finalize_w01(scored)
