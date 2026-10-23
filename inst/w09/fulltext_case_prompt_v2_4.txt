@@ -1,0 +1,71 @@
+W09 CASE REGISTRY FULL-TEXT EXTRACTION — V2.4
+
+PURPOSE
+Describe distinct cases of collective action for environmental or social sustainability, confirm or correct the abstract-level W07 mechanism assignments, and capture broad supply-chain and geographical context. Do not evaluate effectiveness or analyse statistical results.
+
+DECISION RULES
+A case is a distinguishable real-world coordination arrangement among actors. Do not mistake a research project, a single commercial service, generic recommendation, or a named location for collective action. Retain multiple distinct cases per publication.
+
+MECHANISM VALIDATION
+You will receive an archived W07 ontology CSV and the original publication-level W07 mechanism assignments. Use exactly those mechanism codes and definitions, not an invented or newer ontology. For every abstract-assigned code report confirmed, not_supported or unclear, a short rationale, and a verbatim excerpt plus source anchor if confirmed. not_supported means no substantiation in supplied full text, not proof of absence. Identify additional supported ontology codes per CASE separately. Flag plausible uncategorised mechanisms in ontology_gaps, describing the arrangement in ordinary language. Do not force unsupported codes. Farmer-support mechanism codes require evidence of an organised farmer-support arrangement meeting the precise W07 ontology definition. Do not assign farmer support merely because grantees or participant organisations include gardens, farms, agricultural producers, or organisations serving farmers. Broad grant funding, cohort membership or capacity building alone is not sufficient. Where a funding and convening arrangement is plausible collective action but lacks an applicable W07 code, preserve it in ontology_gaps with a source quote instead of forcing a code. Apply these rules equally to original abstract-assigned codes and new case-level codes.
+
+W07 original records remain unchanged.
+
+SUPPLY CHAIN
+Identify all commodities and supply-chain stages directly associated with each collective action initiative.
+
+Assign a supply-chain stage only where the initiative itself undertakes or coordinates activities at that stage. Do not assign stages simply because the initiative buys from, sells to, or collaborates with organisations operating at those stages. For example, selling produce to supermarkets does not itself constitute retail activity.
+
+For grant-making, philanthropic funding, cohort convening, networking, or capacity-building programmes, do not assign the stages performed by grantees, participants, beneficiaries, or partner organisations merely because the programme funds or convenes them. Assign a stage only when the case-level coordinating arrangement itself directly undertakes or explicitly coordinates that stage, with direct source support. Funding a farm does not establish programme-level production; funding retailers does not establish programme-level retail. Where activities across stages are explicitly coordinated but individual stages cannot be identified, use cross_cutting; otherwise use unclear rather than guessing.
+
+Multiple stages may be assigned where the source explicitly supports them. Do not infer stages solely from the commodity, sector or type of organisation.
+
+Use cross_cutting ONLY where the initiative demonstrably coordinates activities spanning multiple stages, but the available evidence does not allow those stages to be identified individually. Where specific stages can be identified, assign them instead. NEVER return cross_cutting alongside an individually identifiable stage.
+
+Use the following controlled stage codes:
+input_provision, production, processing, aggregation_storage, transport_logistics, trading_distribution, retail, consumption, cross_cutting, unclear.
+
+Record commodities separately using the names reported in the source.
+GEOGRAPHY
+For each case, list countries of operation separately from subnational operating locations. Return country_name as the English country name and country_iso3 as its three-letter ISO 3166-1 alpha-3 code. Avoid guessing; if the country is unclear, return empty arrays. Subnational operating locations are separate objects with location_name, location_type (region | province | district | municipality | community | other | unclear) and country_iso3. Do not treat author affiliations or funder offices as operational geography. The R pipeline will verify/normalise ISO3 against the country-name lookup. For transnational initiatives return multiple country objects.
+
+SIMPLE CASE PROFILE
+Describe case name and summary, objectives, actors, collaboration activities, governance (if reported), resources/incentives (if reported), enablers and barriers.
+
+Extract only explicit retrospective or current conclusions made by the PUBLICATION'S AUTHORS, normally in the discussion or conclusions, describing what the initiative actually did or experienced, achievements or impacts the authors explicitly report as having occurred, and observed difficulties, failures or limitations.
+
+EXCLUDE hypothetical, prospective, conditional or counterfactual propositions about possible effects, even when they appear in the discussion or conclusion. In particular, statements using "could", "might", "may", "would", "should", "has the potential to", "can help", "if implemented", "is expected to", or similar language about what an initiative COULD achieve do not belong in author_conclusions. Do not convert them into actual impacts, nor extract them as author conclusions merely because the authors endorse them. Also exclude objectives, intentions, anticipated benefits, recommendations, policy implications, transferability suggestions and future plans. Put explicit aims under objectives; omit other prospective statements from author_conclusions.
+
+Distinguish cautious interpretations of PAST OBSERVATIONS from speculative future effects: a statement such as "our findings suggest the cooperative improved access to markets" may be included, clearly attributed and qualified, if it refers to evidence gathered about that initiative; "cooperatives could improve access to markets" must be excluded. Do not infer observed results from purpose, participation, formation or activities alone.
+
+For each retained conclusion, provide a brief source-attributed paraphrase, an exact short verbatim quotation and a source anchor. Preserve qualifications and author uncertainty. If there are no explicitly reported retrospective or current conclusions, return an empty author_conclusions array. Do not independently assess effectiveness. Do not extract statistical estimates, hypothesis-test results or detailed numerical comparisons. A nonsignificant result is NOT evidence that an initiative failed. Do not invent or overstate conclusions.
+
+CITATION ANCHORS
+Inputs use [PAGE n], [SECTION n], or [TEXT BLOCK n]. For every mechanism-supported statement and author conclusion, give an exact short quote and one exact anchor. Do not invent page numbers for XML/JSON. Never invent quotations or fill unreported fields.
+
+RETURN ONLY JSON
+{
+ "record_id":"exact input ID",
+ "verification_status":"cases_confirmed | no_collective_action_case | uncertain | fulltext_unreadable",
+ "cases":[{
+  "case_name":null,
+  "case_description":"...",
+  "objectives":["..."],
+  "actors":["..."],
+  "collaboration_activities":["..."],
+  "governance":["..."],
+  "resources_incentives":["..."],
+  "enablers":["..."],
+  "barriers":["..."],
+  "commodities":["coffee"],
+  "supply_chain_stages":["production","trading_distribution"],
+  "countries":[{"country_name":"Colombia","country_iso3":"COL"}],
+  "locations":[{"location_name":"...","location_type":"region","country_iso3":"COL"}],
+  "additional_mechanisms":[{"mechanism_id":"existing ontology code","source_quote":"...","source_anchor":"[PAGE 2]"}],
+  "author_conclusions":[{"conclusion":"The authors explicitly report ...","source_quote":"...","source_anchor":"[PAGE 7]"}]
+ }],
+ "abstract_mechanism_validation":[{"mechanism_id":"existing W07 abstract code","status":"confirmed | not_supported | unclear","reason":"...","source_quote":null,"source_anchor":null}],
+ "ontology_gaps":[{"description":"...","source_quote":"...","source_anchor":"..."}],
+ "assessment_reason":"..."
+}
+Use empty arrays for unreported information. Include every W07 abstract mechanism in abstract_mechanism_validation, even if no case confirmed. Additional mechanisms must be listed per case, never as unsupported speculation.
