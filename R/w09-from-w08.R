@@ -6,9 +6,10 @@
 #' @param w08 W08 run directory.
 #' @param include_unvalidated Include failed quotation IDs provisionally.
 #' @param map_path Evidence-map directory.
+#' @param include_unclear Include uncertain records (FALSE by default: cases only).
 #' @return Prepared W09 directory with an auditable selection CSV.
 #' @export
-prepare_w09_from_w08 <- function(w08,include_unvalidated=TRUE,map_path=NULL) {
+prepare_w09_from_w08 <- function(w08,include_unvalidated=TRUE,map_path=NULL,include_unclear=FALSE) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,mustWork=TRUE)
   w08<-normalizePath(w08,mustWork=TRUE)
@@ -25,7 +26,7 @@ prepare_w09_from_w08 <- function(w08,include_unvalidated=TRUE,map_path=NULL) {
   ids<-vapply(valid,function(x)x$record_id,character(1))
   if(anyDuplicated(ids))stop("Duplicated W08 record IDs.")
   eligible<-Filter(function(z)z$case_evidence_status%in%
-    c("specific_case","multiple_cases","unclear"),valid)
+    c("specific_case","multiple_cases",if(isTRUE(include_unclear))"unclear"),valid)
   candidates<-vapply(eligible,function(z)z$record_id,character(1))
   reasons<-setNames(vapply(eligible,function(z)z$case_evidence_status,
                           character(1)),candidates)
