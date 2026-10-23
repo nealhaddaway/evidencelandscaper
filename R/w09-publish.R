@@ -5,7 +5,8 @@
 #' @param map_path Optional Ostara map directory; defaults to open_map().
 #' @param coordinates_csv Optional reviewed geocoding CSV. For exact continuity
 #'   specify the same audited file used at the previous publication.
-#' @param extraction_dir Optional explicitly selected completed W09 extraction.\n#' @param w09_run Explicit W09 run for named expansions; prevents historical pilot selection.
+#' @param extraction_dir Optional explicitly selected completed W09 extraction.
+#' @param w09_run Explicit W09 run for named expansions; prevents historical pilot selection.
 #' @return Named paths to the HTML atlas, W09 report, full-review HTML and
 #'   validated export.
 #' @export
