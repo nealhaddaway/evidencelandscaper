@@ -157,7 +157,11 @@ server<-function(input,output,session){
     cat(jsonlite::toJSON(e,auto_unbox=TRUE,null="null"),"\n",
         file=eventfile,append=TRUE,sep="")
     saved(c(saved(),list(e)))
-    if(complete()) reviewing(FALSE)
+    if(complete()) {
+      reviewing(FALSE)
+    } else if(position()<length(cases)) {
+      position(position()+1L)
+    }
     showNotification("Decision saved",type="message")
   })
   export_decisions<-function(file) {
