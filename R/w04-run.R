@@ -5,7 +5,8 @@
 #' @param scored Completed W01 full-scoring directory.
 #' @param prompt_file Path to a locally edited UTF-8 text prompt.
 #' @param max_records Number of W03-eligible records to test (0 = all).
-#' @param record_ids_csv Optional exact selected record_id CSV. Requires max_records=0.\n#' @param model OpenAI API model identifier.
+#' @param record_ids_csv Optional exact selected record_id CSV. Requires max_records=0.
+#' @param model OpenAI API model identifier.
 #' @param open_app NULL prompts in an interactive R console (default); TRUE opens without asking; FALSE never opens.
 #' @return New local W04 run directory, invisibly.
 #' @export
@@ -38,7 +39,15 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
   max_records<-as.integer(max_records)
   if(is.na(max_records)||max_records<0L)
     stop("max_records must be 0 (full corpus) or positive.")
-  if(!is.null(record_ids_csv)){\n    if(max_records!=0L)stop("For exact record IDs set max_records=0.")\n    record_ids_csv<-normalizePath(record_ids_csv,winslash="/",mustWork=TRUE)\n    selected<-utils::read.csv(record_ids_csv,stringsAsFactors=FALSE)\n    if(!identical(names(selected),"record_id")||anyDuplicated(selected$record_id)||\n       anyNA(selected$record_id)||any(!nzchar(selected$record_id)))\n      stop("record_ids_csv must contain unique nonempty record_id values.")\n  }\n  root<-dirname(scored)
+  if(!is.null(record_ids_csv)){
+    if(max_records!=0L)stop("For exact record IDs set max_records=0.")
+    record_ids_csv<-normalizePath(record_ids_csv,winslash="/",mustWork=TRUE)
+    selected<-utils::read.csv(record_ids_csv,stringsAsFactors=FALSE)
+    if(!identical(names(selected),"record_id")||anyDuplicated(selected$record_id)||
+       anyNA(selected$record_id)||any(!nzchar(selected$record_id)))
+      stop("record_ids_csv must contain unique nonempty record_id values.")
+  }
+  root<-dirname(scored)
   map_path<-normalizePath(file.path(root,"..","..",".."),winslash="/",mustWork=TRUE)
   archive_map_prompt(prompt_file,"W04",map_path)
   canonical<-file.path(root,"W02_main","finalised","canonical.jsonl")
@@ -57,7 +66,9 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
     stop("OPENAI_API_KEY must be configured.")
   normalized_prompt<-paste(lines,collapse="\n")
   prompt_hash<-digest::digest(normalized_prompt,algo="sha256",serialize=FALSE)
-  selection_hash<-if(is.null(record_ids_csv))NULL else sha(record_ids_csv)\n  run_type<-if(!is.null(selection_hash))paste0("selected-",substr(selection_hash,1L,12L)) else\n    if(max_records==0L)"full" else paste0("trial-",max_records)
+  selection_hash<-if(is.null(record_ids_csv))NULL else sha(record_ids_csv)
+  run_type<-if(!is.null(selection_hash))paste0("selected-",substr(selection_hash,1L,12L)) else
+    if(max_records==0L)"full" else paste0("trial-",max_records)
   dest<-file.path(root,"W04_local",paste0(run_type,"-",substr(prompt_hash,1L,12L)))
   config<-file.path(dest,"screening_config.json")
   copied_prompt<-file.path(dest,"screening_prompt.txt")
@@ -66,7 +77,8 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
     previous<-jsonlite::fromJSON(manifest)
     if(!identical(previous$input_w02_sha256,sha(canonical))||
        !identical(previous$input_w03_sha256,sha(w03))||
-       !identical(previous$prompt_sha256,prompt_hash)||\n       !identical(previous$selection_sha256,selection_hash))
+       !identical(previous$prompt_sha256,prompt_hash)||
+       !identical(previous$selection_sha256,selection_hash))
       stop("Existing W04 run fails immutable input checks.")
     message("[W04] Reusing existing model results: ",dest)
     sm<-jsonlite::fromJSON(file.path(dest,"consensus","summary.json"))
@@ -89,7 +101,8 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
   output<-file.path(dest,"consensus")
   args<-c(script,"--canonical",canonical,"--workflow03-status",w03,
           "--screening-config",config,"--output-dir",output,
-          "--model",model,"--max-records",as.character(max_records),\n          if(!is.null(record_ids_csv))c("--include-record-ids",record_ids_csv),
+          "--model",model,"--max-records",as.character(max_records),
+          if(!is.null(record_ids_csv))c("--include-record-ids",record_ids_csv),
           "--checkpoint-every","10")
   cat("[W04] Running original screening engine; model API requests will incur costs.\n")
   log<-suppressWarnings(system2(file.path(R.home("bin"),"Rscript"),
@@ -110,7 +123,8 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
     schema="local-w04-consensus-handover-v1",status="screened",
     run_type=run_type,input_w02_sha256=sha(canonical),
     input_w03_sha256=sha(w03),prompt_sha256=prompt_hash,
-    model=model,selection_sha256=selection_hash,\n    selected_record_ids_csv=record_ids_csv,screening_summary_status=summary$status,
+    model=model,selection_sha256=selection_hash,
+    selected_record_ids_csv=record_ids_csv,screening_summary_status=summary$status,
     consensus_sha256=sha(file.path(output,"workflow04_consensus_layer.jsonl"))),
     manifest,auto_unbox=TRUE,pretty=TRUE)
   message("[W04] ",summary$status,
