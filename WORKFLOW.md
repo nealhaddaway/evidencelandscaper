@@ -168,3 +168,9 @@ inventory_w09_pdfs(w09)
 ```
 
 Avoid running W08 v2 or W09 full-text model calls until their respective pilot inputs and cost are understood; neither is triggered by preparation. W09 does not overwrite or revise the completed W08 v1, W07, or W04 layers.
+
+### W09 retrieval update: OpenAlex, then ScienceDirect only
+
+Use `retrieve_w09_fulltexts(w09, max_records=6)` to retry **only missing PDFs** in the existing W09 pilot. OpenAlex attempts DOI identification first and exact-normalised-title matching when DOI lookup fails. Candidates with conflicting DOIs or ambiguous identities are not downloaded. When OpenAlex provides no downloadable PDF, the function attempts Elsevier's authorised ScienceDirect Full Text Article Retrieval API by DOI, using `SCOPUS_API_TOKEN` and optional `SCOPUS_INSTTOKEN`. ScienceDirect PDF availability requires separate full-text/API entitlement; the API key alone is insufficient. A record without a usable DOI cannot be sent to the ScienceDirect DOI endpoint. No Europe PMC, Unpaywall or additional providers are queried.
+
+Existing PDFs are never replaced; the prior `oa_retrieval.jsonl` is immutable. New attempts are logged in `w09_retrieval_v2.jsonl`. A downloaded file remains `downloaded_unverified` until a human confirms publication identity and that its contents are readable. Repeat calls skip successfully downloaded files and records already assessed by v2. `inventory_w09_pdfs()` archives its earlier inventory when counts change. Neither function initiates model analysis.
