@@ -120,7 +120,6 @@ analyse_w09_cases <- function(w09,record_ids,model="gpt-5.6",max_pages=0L) {
      httr2::req_body_json(body,auto_unbox=TRUE) |>
      httr2::req_timeout(300) |> httr2::req_perform() |>
      httr2::resp_body_json(simplifyVector=FALSE)
-   record_api_usage(dirname(dirname(dirname(w09))),"W09_v1",id,resp,model=model)
    chunks<-unlist(lapply(resp$output,function(item)
      unlist(lapply(item$content,function(x)
        if(identical(x$type,"output_text"))x$text else NULL),
