@@ -64,7 +64,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","publish","status"),
+                                step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","publish","status"),
                                 screening=NULL,extraction=NULL,sources=NULL,\n                                screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,\n                                w08_prompt=NULL,model="gpt-6-luna",\n                                extraction_dir=NULL,coordinates_csv=NULL) {
   step <- match.arg(step)
   map <- open_map(map)
@@ -154,9 +154,61 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     message("[",run_name,"] Retrieval/deduplication required before sampling checkpoint 1.")
     return(invisible(state))
   }
+  if(step=="retrieve_fulltexts") {
+    if(!state$status %in% c("w09_prepared","retrieving_fulltexts","fulltexts_ready"))
+      stop("Checkpoint 2 and W09 selection required before retrieval.")
+    w09<-state$w09$run
+    queue<-utils::read.csv(file.path(w09,"retrieval_queue.csv"),stringsAsFactors=FALSE)
+    if(!nrow(queue))stop("No selected full-text publications.")
+    state$status<-"retrieving_fulltexts"
+    .orchestrator_save(state)
+    message("[",run_name,"] W09: checking full-text availability for ",nrow(queue),
+            " publications.")
+    check_w09_fulltext(w09)
+    retrieve_w09_from_availability(w09)
+    retrieve_w09_structured(w09,max_records=nrow(queue))
+    validated<-validate_w09_fulltexts(w09)
+    v<-utils::read.csv(validated,stringsAsFactors=FALSE)
+    if(!setequal(v$record_id,queue$record_id))
+      stop("W09 validation and retrieval queue differ.")
+    state$w09$validation_csv<-validated
+    state$w09$validation_sha256<-sha(validated)
+    state$w09$ready_count<-sum(v$status=="extraction_ready")
+    state$w09$other_statuses<-as.list(table(v$status))
+    if(state$w09$ready_count>0L) {
+      inv<-finalise_w09_inventory(w09)
+      state$w09$inventory<-inv
+      state$w09$inventory_sha256<-sha(inv)
+      state$status<-"fulltexts_ready"
+    } else state$status<-"fulltext_review_required"
+    .orchestrator_save(state)
+    message("[",run_name,"] W09: ",state$w09$ready_count," / ",nrow(queue),
+            " extraction-ready; see validation CSV for outstanding documents.")
+    return(invisible(state))
+  }
+  if(step=="extract") {
+    if(!identical(state$status,"fulltexts_ready"))
+      stop("Verified full-text inventory required before model extraction.")
+    w09<-state$w09$run
+    inv<-state$w09$inventory
+    if(!file.exists(inv)||!identical(sha(inv),state$w09$inventory_sha256))
+      stop("Full-text inventory changed after validation.")
+    df<-utils::read.csv(inv,stringsAsFactors=FALSE)
+    if(anyDuplicated(df$record_id)||!nrow(df))stop("No unique extraction-ready IDs.")
+    state$status<-"extracting"
+    .orchestrator_save(state)
+    extraction<-analyse_w09_cases_v2(w09,record_ids=as.character(df$record_id),
+                         w07_run=state$w07$run,model=model,max_pages=0L)
+    state$w09$extraction_dir<-extraction
+    state$status<-"extracted"
+    .orchestrator_save(state)
+    message("[",run_name,"] W09 extraction saved: ",extraction)
+    return(invisible(state))
+  }
   if(step=="publish") {
-    if(!state$status %in% c("w09_prepared","published"))
+    if(!state$status %in% c("extracted","published"))
       stop("Checkpoint 2 and W09 preparation must complete before publication.")
+    if(is.null(extraction_dir))extraction_dir<-state$w09$extraction_dir
     if(is.null(extraction_dir))
       stop("Supply the explicit approved completed W09 extraction directory.")
     if(is.null(state$w09$run)||!dir.exists(state$w09$run))
