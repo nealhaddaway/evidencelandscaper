@@ -6,7 +6,9 @@
 #' @param w08 W08 run directory.
 #' @param include_unvalidated Include failed quotation IDs provisionally.
 #' @param map_path Evidence-map directory.
-#' @param include_unclear Include uncertain records (FALSE by default: cases only).\n#' @param record_ids_csv Optional exact sampled publication IDs from checkpoint 2.\n#' @param w04_run Explicit finalised source W04 run for this expansion.
+#' @param include_unclear Include uncertain records (FALSE by default: cases only).
+#' @param record_ids_csv Optional exact sampled publication IDs from checkpoint 2.
+#' @param w04_run Explicit finalised source W04 run for this expansion.
 #' @return Prepared W09 directory with an auditable selection CSV.
 #' @export
 prepare_w09_from_w08 <- function(w08,include_unvalidated=TRUE,map_path=NULL,include_unclear=FALSE,record_ids_csv=NULL,w04_run=NULL) {
@@ -37,7 +39,15 @@ prepare_w09_from_w08 <- function(w08,include_unvalidated=TRUE,map_path=NULL,incl
     for(id in bad)reasons[[id]]<-"unvalidated_W08_quotation"
     candidates<-c(candidates,bad)
   }
-  candidates<-sort(unique(candidates))\n  if(!is.null(record_ids_csv)) {\n    record_ids_csv<-normalizePath(record_ids_csv,winslash="/",mustWork=TRUE)\n    x<-utils::read.csv(record_ids_csv,stringsAsFactors=FALSE)\n    if(!identical(names(x),"record_id")||anyDuplicated(x$record_id)||anyNA(x$record_id))\n      stop("Invalid checkpoint 2 sampled IDs.")\n    if(any(!x$record_id%in%candidates))stop("Selected extraction IDs were not eligible in W08.")\n    candidates<-sort(as.character(x$record_id))\n  }
+  candidates<-sort(unique(candidates))
+  if(!is.null(record_ids_csv)) {
+    record_ids_csv<-normalizePath(record_ids_csv,winslash="/",mustWork=TRUE)
+    x<-utils::read.csv(record_ids_csv,stringsAsFactors=FALSE)
+    if(!identical(names(x),"record_id")||anyDuplicated(x$record_id)||anyNA(x$record_id))
+      stop("Invalid checkpoint 2 sampled IDs.")
+    if(any(!x$record_id%in%candidates))stop("Selected extraction IDs were not eligible in W08.")
+    candidates<-sort(as.character(x$record_id))
+  }
   if(!length(candidates))stop("No eligible W09 candidates.")
   w09<-prepare_w09_cases(map_path=map_path,record_ids=candidates,w04_run=w04_run)
   selection<-data.frame(record_id=candidates,
