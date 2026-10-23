@@ -93,12 +93,14 @@ validate_w09_fulltexts <- function(w09) {
    id<-q$record_id[[i]]
    # Prefer locally recovered XML over the historical retrieval-report choice.
    xml<-file.path(w09,"structured",paste0(id,".xml"))
+   converted<-file.path(w09,"grobid_tei",paste0(id,".xml"))
    json<-file.path(w09,"structured",paste0(id,".json"))
    doc<-file.path(w09,"pdfs",paste0(id,".pdf"))
-   options<-c(xml=xml,json=json,pdf=doc)
+   options<-c(xml=xml,converted_xml=converted,json=json,pdf=doc)
    available<-names(options)[file.exists(options)]
    format<-if(length(available))available[[1L]] else ""
-   file<-if(length(available))unname(options[[format]]) else ""
+   if(identical(format,"converted_xml"))format<-"xml"
+   file<-if(length(available))unname(options[[available[[1L]]]]) else ""
    assessment<-inspect(file,format,q$doi[i],q$title[i])
    reviewed<-FALSE
    if(!is.null(reviews)&&id%in%reviews$record_id) {
@@ -134,7 +136,7 @@ validate_w09_fulltexts <- function(w09) {
       identity=assessment$identity,
       status=status,notes=assessment$notes,
       openalex_xml_reconciliation=if(!xml_available)"not_hosted" else
-         if(format=="xml")"xml_present" else "xml_missing_or_not_preferred",
+         if(file.exists(xml))"xml_present" else "xml_missing_or_not_preferred",
       stringsAsFactors=FALSE)
    message("[W09 validation] ",i,"/",nrow(q)," ",id,": ",status)
  }
