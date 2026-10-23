@@ -39,6 +39,15 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
     stop("W09 prompt/ontology provenance mismatch.")
   if (any(is.na(inventory$sha256) | !nzchar(inventory$sha256)))
     stop("W09 inventory has missing source checksums.")
+  ontology <- utils::read.csv(ontology_path, stringsAsFactors=FALSE,
+                              check.names=FALSE, fileEncoding="UTF-8-BOM")
+  if(!all(c("mechanism_id","mechanism_source_label") %in% names(ontology)) ||
+     anyDuplicated(ontology$mechanism_id) ||
+     anyNA(ontology$mechanism_source_label) ||
+     any(!nzchar(trimws(ontology$mechanism_source_label))))
+    stop("W09 ontology requires unique codes and non-empty approved labels.")
+  mechanism_labels <- stats::setNames(as.character(ontology$mechanism_source_label),
+                                      as.character(ontology$mechanism_id))
   cases <- list()
   n <- 0L
   for (i in seq_along(records)) {
@@ -89,6 +98,7 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
           ontology_sha256=manifest$ontology_sha256,
           coding_sha256=manifest$coding_sha256,
           w07_run=manifest$w07_run),
+        mechanism_labels=as.list(mechanism_labels),
         case=ca,
         coordinates=list(latitude=NULL,longitude=NULL,
           coordinate_basis="not_georeferenced", coordinate_source=NULL)
