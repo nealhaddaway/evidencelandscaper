@@ -100,6 +100,27 @@ retrieve_w09_openalex_content <- function(w09) {
       entry$source<-origin
       entry
     }
+    # Always check hosted-content availability, including for reused files.
+    work<-NULL
+    if(nzchar(doi)) {
+      url<-paste0("https://api.openalex.org/works/https://doi.org/",
+                  utils::URLencode(doi,reserved=TRUE))
+      req<-httr2::request(url)|>httr2::req_timeout(40)
+      if(nzchar(key))req<-httr2::req_url_query(req,api_key=key)
+      candidate<-tryCatch(httr2::resp_body_json(httr2::req_perform(req),
+                      simplifyVector=FALSE),error=function(e)e)
+      if(!inherits(candidate,"error") &&
+         identical(tolower(clean(candidate$doi)),tolower(doi))) {
+        work<-candidate
+        entry$openalex_match<-"verified_doi"
+        entry$openalex_has_content_xml<-isTRUE(work$has_content$grobid_xml)
+        entry$openalex_has_content_pdf<-isTRUE(work$has_content$pdf)
+        entry$openalex_status<-"availability_checked"
+      } else {
+        entry$openalex_match<-"unverified_or_lookup_error"
+        entry$openalex_status<-"not_retrieved"
+      }
+    } else entry$openalex_status<-"no_doi"
     existing<-names(targets)[vapply(names(targets),
                                   function(ex)extok(targets[[ex]],ex),logical(1))]
     if(length(existing)) {
@@ -126,20 +147,9 @@ retrieve_w09_openalex_content <- function(w09) {
       }
     }
     if(is.null(entry$file)) {
-      # Exact DOI lookup; no blind title substitutions.
-      if(nzchar(doi)) {
-        url<-paste0("https://api.openalex.org/works/https://doi.org/",
-                    utils::URLencode(doi,reserved=TRUE))
-        req<-httr2::request(url)|>httr2::req_timeout(40)
-        if(nzchar(key))req<-httr2::req_url_query(req,api_key=key)
-        work<-tryCatch(httr2::resp_body_json(httr2::req_perform(req),
-                   simplifyVector=FALSE),error=function(e)e)
-        if(!inherits(work,"error") &&
-           identical(tolower(clean(work$doi)),tolower(doi))) {
-          entry$openalex_match<-"verified_doi"
-          has<-work$has_content
-          entry$openalex_has_content_xml<-isTRUE(has$grobid_xml)
-          entry$openalex_has_content_pdf<-isTRUE(has$pdf)
+      # Reuse verified Work metadata from the availability lookup above.
+      if(!is.null(work)) {
+        has<-work$has_content
           wid<-sub("^.*/","",work$id)
           # Official content API. No publisher/repository location URLs.
           base<-paste0("https://content.openalex.org/works/",wid)
