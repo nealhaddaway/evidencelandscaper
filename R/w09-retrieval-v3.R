@@ -1,6 +1,6 @@
 #' W09 retrieval with structured text first: OpenAlex, then ScienceDirect
 #'
-#' Reattempts missing full texts despite earlier v2 negative results.
+#' Reattempts missing full texts despite earlier v2 negative results.\n#' Prefers ScienceDirect XML, then JSON, then PDF for extraction,\n#' even when an OpenAlex PDF has already been saved.
 #' Preserves old logs and all existing files. OpenAlex only supplies PDF
 #' locations and verified DOIs; ScienceDirect preference is XML, JSON, PDF.
 #' @param w09 W09 prepared pilot folder.
@@ -130,7 +130,11 @@ retrieve_w09_structured <- function(w09,max_records=6L,retry_no_api_key=FALSE) {
      entry$openalex_status<-"lookup_error"
      entry$notes<-paste("OpenAlex:",conditionMessage(e))
    })
-   if(!file.exists(pdf)) {
+   # Prefer a structured full text even when OpenAlex already supplied a PDF.
+   # Never overwrite an existing file: the extraction reader prioritises
+   # XML > JSON > PDF independently of provider.
+   if(!file.exists(file.path(struct_dir,paste0(id,".xml"))) &&
+      !file.exists(file.path(struct_dir,paste0(id,".json")))) {
      key<-Sys.getenv("SCOPUS_API_TOKEN")
      inst<-Sys.getenv("SCOPUS_INSTTOKEN")
      if(!nzchar(entry$doi_used)) {
@@ -212,7 +216,7 @@ retrieve_w09_structured <- function(w09,max_records=6L,retry_no_api_key=FALSE) {
        if(identical(entry$sciencedirect_status,"not_attempted"))
          entry$sciencedirect_status<-"no_valid_fulltext_response"
      }
-   } else entry$sciencedirect_status<-"skipped_openalex_pdf"
+   } else entry$sciencedirect_status<-"skipped_existing_structured_fulltext"
    cat(jsonlite::toJSON(entry,auto_unbox=TRUE,null="null"),"\n",
        file=log,append=TRUE,sep="")
    message("[W09] Record ",i," of ",nrow(pending),": ",id,": ",entry$openalex_status,"; ",
