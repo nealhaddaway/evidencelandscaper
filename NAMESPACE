@@ -66,3 +66,5 @@ export(process_w09_remaining)
 export(record_w09_verified_identities)
 export(record_w09_barley_thesis_identity)
 export(finalise_w09_inventory)
+
+export(export_w09_evidence_atlas)
