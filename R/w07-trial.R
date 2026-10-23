@@ -106,6 +106,7 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
   organise_w07_trials(map_path)
   dest<-file.path(map_path,"runs","W07",paste0(if(n==0L)"full-" else "trial-",length(id),"-",
           substr(sha(ontology_file),1,10),"-",substr(sha(prompt_file),1,10)))
+  if(!identical(model,"gpt-5.6")) dest<-paste0(dest,"-model-",gsub("[^A-Za-z0-9._-]","_",model))
   dir.create(dest,recursive=TRUE,showWarnings=FALSE)
   mpath<-file.path(dest,"manifest.json")
   outpath<-file.path(dest,"coding.jsonl")
