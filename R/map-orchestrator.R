@@ -165,7 +165,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
        !identical(sha(selected),state$decision2$selected_ids_sha256))
       stop("Checkpoint 2 exact publication IDs changed.")
     w09<-prepare_w09_from_w08(state$w08$run,map_path=map,
-      include_unclear=FALSE,include_unvalidated=FALSE,record_ids_csv=selected)
+      include_unclear=FALSE,include_unvalidated=FALSE,record_ids_csv=selected,\n      w04_run=state$w04$run)
     state$w09<-list(run=w09,source_w08=state$w08$run,
                     selection_sha256=sha(selected))
     state$status<-"w09_prepared"
