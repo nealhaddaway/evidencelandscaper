@@ -43,8 +43,7 @@ import_w04_review <- function(w04, decisions_file=NULL, include_all=FALSE) {
                   scalar(lookup[[id]]$model$prompt_sha256)))
       stop("Invalid or mismatched W04 human decision: ",id)
     if(!scalar(e$decision)%in%c("retain","exclude","uncertain") ||
-       !nzchar(trimws(scalar(e$reviewer))) ||
-       (!identical(e$decision,"exclude")&&!nzchar(trimws(scalar(e$reason)))))
+       !nzchar(trimws(scalar(e$reviewer))))
       stop("Invalid review decision, reviewer or rationale: ",id)
     # Last event for a case is authoritative. Earlier edits remain in raw file.
     final[[id]]<-e
