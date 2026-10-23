@@ -77,6 +77,17 @@ validate_w09_fulltexts <- function(w09) {
       result$notes<-"substantive_text_identity_unverified"
    result
  }
+ # Explicit, source-file-hash-bound manual identity assessments.
+ review_file<-file.path(w09,"w09_identity_reviews.csv")
+ reviews<-if(file.exists(review_file))
+   utils::read.csv(review_file,stringsAsFactors=FALSE) else NULL
+ if(!is.null(reviews)) {
+   required<-c("record_id","sha256","decision","basis")
+   if(!all(required%in%names(reviews))||anyDuplicated(reviews$record_id))
+     stop("Invalid or duplicate W09 identity reviews.")
+   if(any(!reviews$decision%in%c("accept","reject")))
+     stop("Invalid W09 identity review decision.")
+ }
  out<-vector("list",nrow(q))
  for(i in seq_len(nrow(q))) {
    id<-q$record_id[[i]]
@@ -89,8 +100,29 @@ validate_w09_fulltexts <- function(w09) {
    format<-if(length(available))available[[1L]] else ""
    file<-if(length(available))unname(options[[format]]) else ""
    assessment<-inspect(file,format,q$doi[i],q$title[i])
+   reviewed<-FALSE
+   if(!is.null(reviews)&&id%in%reviews$record_id) {
+     rv<-reviews[match(id,reviews$record_id),,drop=FALSE]
+     actual_sha<-if(nzchar(file)&&file.exists(file))
+       digest::digest(file=file,algo="sha256",serialize=FALSE) else ""
+     if(!identical(actual_sha,rv$sha256[[1L]]))
+       stop("Identity review file hash mismatch: ",id)
+     if(identical(rv$decision[[1L]],"accept")&&
+        assessment$substantive&&assessment$valid_format) {
+       assessment$identity<-"human_verified"
+       assessment$extractable<-TRUE
+       assessment$notes<-paste0("human_identity_review: ",rv$basis[[1L]])
+       reviewed<-TRUE
+     } else if(identical(rv$decision[[1L]],"reject")) {
+       assessment$extractable<-FALSE
+       assessment$identity<-"human_rejected"
+       assessment$notes<-paste0("human_identity_rejected: ",rv$basis[[1L]])
+       reviewed<-TRUE
+     }
+   }
    xml_available<-isTRUE(r$openalex_xml_available[[i]])
-   status<-if(assessment$extractable)"extraction_ready" else
+   status<-if(assessment$identity=="human_rejected")"identity_rejected" else
+     if(assessment$extractable)"extraction_ready" else
      if(assessment$valid_format&&format=="pdf")"requires_grobid" else
      if(assessment$valid_format)"requires_review" else "unavailable_or_invalid"
    out[[i]]<-data.frame(record_id=id,doi=scalar(q$doi[i]),
