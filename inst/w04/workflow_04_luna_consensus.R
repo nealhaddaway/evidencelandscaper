@@ -15,6 +15,7 @@ output_dir <- arg("--output-dir","outputs/workflow04_consensus")
 model <- arg("--model",Sys.getenv("OPENAI_RELEVANCE_MODEL","gpt-5.6-luna"))
 checkpoint_every <- as.integer(arg("--checkpoint-every","25"))
 max_records <- as.integer(arg("--max-records","0"))
+include_ids_path <- arg("--include-record-ids",NULL)
 shard_index <- as.integer(arg("--shard-index","1"))
 shard_count <- as.integer(arg("--shard-count","1"))
 subshard_index <- as.integer(arg("--subshard-index","1"))
@@ -171,6 +172,22 @@ eligible_all_ids<-vapply(eligible_all,record_id,character(1))
 ord<-order(eligible_all_ids)
 eligible_all<-eligible_all[ord]
 eligible_all_ids<-eligible_all_ids[ord]
+if(!is.null(include_ids_path)){
+  if(max_records!=0L)stop("--include-record-ids requires --max-records 0",call.=FALSE)
+  selected<-read.csv(include_ids_path,stringsAsFactors=FALSE,check.names=FALSE)
+  if(!identical(names(selected),"record_id") || anyNA(selected$record_id) ||
+     anyDuplicated(selected$record_id) || any(!nzchar(selected$record_id)))
+    stop("Invalid exact-ID screening selection CSV.",call.=FALSE)
+  ids<-as.character(selected$record_id)
+  missing<-setdiff(ids,cids)
+  if(length(missing))stop("Selected IDs absent from W02 canonical data: ",paste(head(missing,5),collapse=", "),call.=FALSE)
+  keep<-eligible_all_ids%in%ids
+  eligible_all<-eligible_all[keep]
+  eligible_all_ids<-eligible_all_ids[keep]
+  message("[W04] Exact-ID selection: ",length(ids)," requested; ",
+          length(eligible_all_ids)," W03-eligible; ",
+          length(ids)-length(eligible_all_ids)," excluded by W03.")
+}
 shard_membership<-((seq_along(eligible_all)-1L) %% shard_count)+1L
 eligible<-eligible_all[shard_membership==shard_index]
 if(subshard_count>1L){
