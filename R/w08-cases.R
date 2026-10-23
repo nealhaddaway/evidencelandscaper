@@ -3,7 +3,7 @@
 #' W08 is independent of W07. One JSON response is stored per publication;
 #' separate CSVs make the candidate cases and all publication assessments
 #' reviewable. Existing W04/W07 files are read-only.
-#' @param n Randomly sampled retained publications (default 20).
+#' @param n Randomly sampled retained publications (default 20); 0 selects all.\n#' @param w04_run Optional explicit finalised W04 run, including sampled runs.
 #' @param seed Sampling seed, recorded in the manifest.
 #' @param model OpenAI Responses model.
 #' @param map_path Local map root folder (defaults to the Ostara map).
@@ -11,7 +11,7 @@
 #' @return W08 pilot run directory, invisibly.
 #' @export
 trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
-                            map_path=NULL,prompt_file=NULL) {
+                            map_path=NULL,prompt_file=NULL,w04_run=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   if(is.null(prompt_file)) {
@@ -27,8 +27,8 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
   if(!nzchar(form_file))stop("W08 extraction field schema not packaged.")
   if(!nzchar(Sys.getenv("OPENAI_API_KEY")))
     stop("OPENAI_API_KEY is required for the W08 case pilot.")
-  if(length(n)!=1L||is.na(n)||n!=as.integer(n)||n<1L)
-    stop("n must be a positive integer.")
+  if(length(n)!=1L||is.na(n)||n!=as.integer(n)||n<0L)
+    stop("n must be a nonnegative integer (0 means all retained publications).")
   if(length(seed)!=1L||is.na(seed)||seed!=as.integer(seed))
     stop("seed must be one integer.")
   n<-as.integer(n);seed<-as.integer(seed)
@@ -44,21 +44,20 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
     if(dir.exists(d))list.dirs(d,recursive=FALSE,full.names=TRUE)
     else character()
   }),use.names=FALSE)
-  runs<-runs[grepl("^full-",basename(runs)) &
-             file.exists(file.path(runs,"finalised","summary.json"))]
+  if(!is.null(w04_run)) {\n    w04_run<-normalizePath(w04_run,winslash="/",mustWork=TRUE)\n    runs<-runs[runs==w04_run]\n  } else runs<-runs[grepl("^full-",basename(runs))]\n  runs<-runs[file.exists(file.path(runs,"finalised","summary.json"))]
   if(length(runs)!=1L)
     stop("Expected exactly one finalised W04 full run; select a map with a unique run.")
   w04<-runs[[1L]]
   final_path<-file.path(w04,"finalised","workflow04_final_screening_layer.jsonl")
   sm<-jsonlite::fromJSON(file.path(w04,"finalised","summary.json"))
-  if(!identical(sm$status,"final")||!identical(sm$run_type,"full")||
+  if(!identical(sm$status,"final")||\n     (is.null(w04_run)&&!identical(sm$run_type,"full"))||
      !identical(sm$final_layer_sha256,sha(final_path)))
     stop("W04 finalised screening integrity check failed.")
   screened<-readjl(final_path)
   retained<-Filter(function(z)identical(z$screening$decision,"retain"),screened)
   if(length(screened)!=sm$records||length(retained)!=sm$retain)
     stop("Final W04 count mismatch.")
-  if(n>length(retained))stop("n exceeds the number of retained publications.")
+  if(n>length(retained))stop("n exceeds the number of retained publications.")\n  if(n==0L)n<-length(retained)
   id<-vapply(retained,function(z)as.character(z$record_id),character(1))
   if(anyDuplicated(id))stop("Duplicate retained publication IDs.")
   # Keep the original RNG state of the caller unchanged.
