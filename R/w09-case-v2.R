@@ -10,7 +10,7 @@
 #'   than one completed full W07 run exists; avoids silently selecting v2.
 #' @return W09 v2 directory.
 #' @export
-analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6",max_pages=0L,w07_run=NULL) {
+analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,w07_run=NULL) {
  if(!requireNamespace("countrycode",quietly=TRUE))
    stop("Install countrycode: install.packages('countrycode')")
  if(!nzchar(Sys.getenv("OPENAI_API_KEY")))stop("OPENAI_API_KEY is required.")
