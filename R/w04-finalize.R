@@ -118,6 +118,9 @@ finalize_w04 <- function(map_path=NULL,w04=NULL,uncertain=c("adjudicate","exclud
   summarypath<-file.path(resultdir,"summary.json")
   if(file.exists(summarypath)) {
     previous<-jsonlite::fromJSON(summarypath,simplifyVector=FALSE)
+    if(!is.null(previous$uncertain_policy) &&
+       !identical(scalar(previous$uncertain_policy),uncertain))
+      stop("W04 uncertainty policy differs from existing finalisation; refusing reuse.")
     if(!file.exists(outfile)||
        !identical(scalar(previous$final_layer_sha256),sha(outfile))||
        !identical(scalar(previous$source_layer_sha256),sha(layer_path))||
