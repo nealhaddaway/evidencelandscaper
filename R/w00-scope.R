@@ -44,11 +44,24 @@ scope_w00 <- function(plan) {
   }
   run_dir <- dirname(dirname(plan$search_plan))
   out_dir <- file.path(run_dir, "scoping")
-  if (file.exists(out_dir) || dir.exists(out_dir)) {
-    stop("Scoping output already exists; refusing overwrite: ", out_dir,
-         call. = FALSE)
+  if (file.exists(out_dir) && !dir.exists(out_dir))
+    stop("Scoping output is a file, not directory: ",out_dir,call.=FALSE)
+  if(!dir.exists(out_dir))
+    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  existing_counts<-file.path(out_dir,"counts.csv")
+  existing_manifest<-file.path(out_dir,"manifest.json")
+  if(file.exists(existing_counts) && file.exists(existing_manifest)) {
+    old<-utils::read.csv(existing_counts,stringsAsFactors=FALSE)
+    m<-jsonlite::fromJSON(existing_manifest,simplifyVector=FALSE)
+    if(!identical(m$schema,"evidencelandscaper-w00-scoping-v1")||
+       !setequal(old$source_slug,sources)||anyDuplicated(old$source_slug)||
+       !identical(m$run_id,basename(run_dir)))
+      stop("Previously completed W00 scoping files do not match this plan.")
+    message("[W00 scope] Reusing complete scoping counts for ",basename(run_dir))
+    return(invisible(existing_counts))
   }
-  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+  if(xor(file.exists(existing_counts),file.exists(existing_manifest)))
+    stop("Incomplete W00 scoping summary present; inspect before resume.")
   data <- list()
   cmd <- file.path(R.home("bin"), "Rscript")
   for (i in seq_along(sources)) {
@@ -56,16 +69,22 @@ scope_w00 <- function(plan) {
     message("[W00 scope] [", i, "/", length(sources), "] Counting ", src, "...")
     csv <- file.path(out_dir, paste0(src, ".csv"))
     json <- file.path(out_dir, paste0(src, ".json"))
-    args <- c(script, "--plan", plan$search_plan, "--lens-config",
-              lens_config, "--ebsco-config", ebsco_config,
-              "--source", src, "--output-csv", csv, "--output-json", json)
-    log <- suppressWarnings(system2(cmd,
-       args = vapply(args, shQuote, character(1)),
-       stdout = TRUE, stderr = TRUE))
-    exit <- attr(log, "status")
-    if (!is.null(exit) && exit != 0L) {
-      stop("W00 scoping script failed for ", src, ":\n",
-           paste(log, collapse = "\n"), call. = FALSE)
+    if(xor(file.exists(csv),file.exists(json)))
+      stop("Incomplete source scoping output for ",src,"; inspect rather than overwrite.")
+    if(file.exists(csv)&&file.exists(json)) {
+      message("[W00 scope] Reusing already counted source: ",src)
+    } else {
+      args <- c(script, "--plan", plan$search_plan, "--lens-config",
+                lens_config, "--ebsco-config", ebsco_config,
+                "--source", src, "--output-csv", csv, "--output-json", json)
+      log <- suppressWarnings(system2(cmd,
+         args = vapply(args, shQuote, character(1)),
+         stdout = TRUE, stderr = TRUE))
+      exit <- attr(log, "status")
+      if (!is.null(exit) && exit != 0L) {
+        stop("W00 scoping script failed for ", src, ":\n",
+             paste(log, collapse = "\n"), call. = FALSE)
+      }
     }
     if (!file.exists(csv)) {
       stop("No scoping CSV returned for ", src, call. = FALSE)
