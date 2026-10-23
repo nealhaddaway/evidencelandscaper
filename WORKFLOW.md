@@ -106,7 +106,26 @@ W07 presently codes retained abstracts directly from the **finalised W04 full la
 
 **Status:** W04 full corpus is confirmed complete; the 170-record W07 full coding remains to be confirmed locally. The archived W07 ontology/prompt fallback chooses the latest verified pair, not necessarily the approved v3.
 
-## 7. Files, reproducibility and restrictions
+## 7. W08: independent abstract case-identification pilot
+
+**Separate from W07.** This is stage **1 of 2** of the case registry project. Stage 2 (targeted full-text retrieval and detailed case-data extraction) will be designed only after the Stage 1 assessments have been examined and validated.
+
+Run a reproducible random sample of **20** publications retained in finalised W04, with **one model call per abstract**. This operation does not require W07 mechanism coding or a mechanism ontology.
+
+```r
+remotes::install_github("nealhaddaway/evidencelandscaper",
+                        dependencies=FALSE,force=TRUE)
+library(evidencelandscaper)
+w08 <- trial_w08_cases(n=20,seed=20261023,model="gpt-5.6")
+print(w08)
+jsonlite::fromJSON(file.path(w08,"summary.json"))
+```
+
+The dedicated prompt is packaged at `inst/w08/case_identification_prompt_v1.txt`; the field specification is `inst/w08/case_identification_fields_v1.csv`. No file selection is needed. The fixed seed, W04/W02 SHA-256 fingerprints, sample IDs, model and prompt are recorded. Outputs under `runs/W08/sample-20-...` include `case_assessments.jsonl`, `publication_assessments.csv`, `case_candidates.csv`, `manifest.json`, `summary.json`, `prompt.txt` and `fields.csv`. Reusing the same settings preserves completed JSONL responses and resumes missing records; do not delete or rewrite these files.
+
+The model assesses specific cases, multiple cases, no identifiable case, or unclear case evidence. Candidate case descriptions and short supporting excerpts are retained separately. **A case flag is a provisional abstract-level signal, not proof that a full-text case analysis is feasible.** Manually review the 20 assessments and identify false positives/negatives before extending sampling or designing Stage 2. Original W04 and W07 artefacts remain unchanged.
+
+## 8. Files, reproducibility and restrictions
 
 - **Never alter** upstream `thesalmonandthetomato/LivingEvidenceMap` or `thesalmonandthetomato/LivingEvidenceMapAdjudication`; this project reuses selected upstream scripts without modifying those repositories.
 - Map-level inputs, source records, API responses, human decision events, prompts, checksums and output manifests are saved under the user's **local map root**. GitHub code updates do not upload the local corpus.
