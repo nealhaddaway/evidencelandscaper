@@ -1,0 +1,62 @@
+W08 ABSTRACT-LEVEL CASE IDENTIFICATION — V2 (23 OCTOBER 2026)
+
+PURPOSE
+Identify distinct, potentially relevant REAL-WORLD CASES of collective action for environmental or social sustainability from a publication's title, abstract and keywords. This is candidate detection for targeted full-text verification, not mechanism coding, outcome evaluation, or proof that a case exists.
+
+DEFINITIONS
+A specific collective-action case is a distinguishable real-world arrangement in which two or more actors, actor groups or organisations deliberately coordinate activities, commitments, decisions, governance or resources towards an environmental or social sustainability objective. An initiative can be unnamed where its actors, activity and setting distinguish it. Implementation is not essential: clearly described proposed arrangements can be candidates, but must be explicitly labelled proposed.
+
+IMPORTANT BOUNDARIES
+- A named organisation, business, cooperative, project, programme, research study, country or campaign is NOT automatically a collective-action case.
+- Distinguish the arrangement being studied from researchers' data collection, research partnerships, knowledge-transfer activities or the organisation carrying out the study.
+- A business selling services to customers is not automatically a collaborative arrangement: identify actual coordination among participating actors.
+- Generic social mobilisation, an aspiration to collaborate, or an unexplained named initiative is not sufficient without evidence relevant to the review's sustainability and coordination scope.
+- A project or programme is eligible only if the supplied text describes coordinated real-world collective action, rather than merely study activities, a technology, or a proposed recommendation.
+- A single study can describe multiple genuinely distinct cases. Do not split components of one initiative into separate cases without evidence of distinct arrangements.
+- Do not infer achievements or effectiveness from objectives, programme membership, or intentions.
+- Do not guess named actors, implementation, country, initiative name or claimed outcomes. Never treat authors' affiliations as a case location.
+- Cite a brief EXACT quotation from the supplied title/abstract as supporting evidence. Do not invent verbatim text.
+- Keep two confidence judgments separate: (1) confidence that a distinguishable case exists, and (2) confidence that it describes relevant coordinated sustainability action.
+- Where the case is distinguishable but collective action is insufficiently evidenced, classify it as unclear rather than confirmed; preserve a candidate for full-text checking if warranted.
+- This is publication-level screening with a repeatable array of case candidates, NOT cross-publication deduplication.
+
+CLASSIFICATION
+specific_case: Exactly one distinguishable arrangement with sufficiently supported collective sustainability action.
+multiple_cases: At least two distinguishable arrangements each with sufficiently supported collective sustainability action.
+no_identifiable_case: No sufficiently identifiable case or plausible distinguishable case to verify in full text.
+unclear: A distinguishable initiative may be present but its actual collective coordination, sustainability purpose, or identity cannot be established confidently from this abstract.
+
+FULL TEXT PRIORITY
+High: Specific relevant case(s), or particularly informative ambiguous case(s), with source detail likely useful for verification.
+Medium: Plausible but less clearly supported candidates.
+Low: No identifiable case evidence or insufficiently informative material.
+Priority reflects verification usefulness, NOT success, desirability or effectiveness.
+
+RETURN ONLY VALID JSON
+{
+  "record_id": "exact supplied ID",
+  "case_evidence_status": "specific_case | multiple_cases | no_identifiable_case | unclear",
+  "cases": [
+    {
+      "case_name": null,
+      "case_description": "short distinguishing description",
+      "case_location": null,
+      "case_sector": null,
+      "implementation_status": "implemented | proposed | historical | unclear",
+      "supporting_evidence": "short exact text from supplied title or abstract",
+      "confidence": "high | medium | low",
+      "collective_action_confidence": "high | medium | low",
+      "collective_action_basis": "what evidence supports or leaves unclear actor coordination and sustainability purpose",
+      "case_kind": "collective_arrangement | research_activity | commercial_service | social_mobilisation | other_unclear"
+    }
+  ],
+  "fulltext_priority": "high | medium | low",
+  "assessment_reason": "short evidence-based reason"
+}
+
+CONSISTENCY RULES
+- specific_case: exactly one case; multiple_cases: at least two cases; no_identifiable_case: zero cases; unclear: zero or one candidate case.
+- Only use specific_case or multiple_cases if collective action is supported by the supplied text.
+- For unclear cases, use an explicit reason for uncertainty, particularly a potential research-project/business/initiative confusion.
+- case_name, case_location, case_sector may be null. All other specified case fields must be present.
+- Do not consult external information, assign ontology codes, or judge causal impacts.
