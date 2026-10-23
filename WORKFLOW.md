@@ -230,3 +230,9 @@ w09 <- prepare_w09_cases()
 w09_v2_1 <- analyse_w09_cases_v2(w09, record_ids="work-a98a0ec08d809374", model="gpt-5.6")
 print(w09_v2_1)
 ```
+
+### W09 prompt v2.2: final pilot refinements
+
+New W09 v2 case runs use `fulltext_case_prompt_v2_2.txt`. Its SUPPLY CHAIN section limits `cross_cutting` to cases spanning multiple stages where the individual stages cannot be distinguished. Explicit author conclusions are distinguished from aims, objectives, proposed benefits and future plans; no independent effectiveness assessment or detailed statistical extraction is made. These are prompt-only refinements; the existing nested extraction schema is unchanged.
+
+An additional **deterministic derived layer** removes `cross_cutting` when any individually coded stage occurs in the same case: `fulltext_case_registry_normalised.jsonl`. Every removal is logged in `supply_chain_normalisation.jsonl`. Raw `fulltext_case_registry.jsonl` is preserved unchanged. Derived outputs use append-only checks when further records are processed. The previous v2 and v2.1 run directories remain untouched. Additional W07 mechanism suggestions are left for manual Ostara review.
