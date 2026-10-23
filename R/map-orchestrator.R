@@ -8,11 +8,24 @@
 #' @param run_name Unique method-expansion label (e.g. collectiveaction_oilandgas).
 #' @param search_file W00-compatible JSON search strategy file.
 #' @param sources Optional W00 source identifiers (defaults to configured full set).
-#' @param execute_scoping If TRUE, advance W00 onwards automatically until a\n#'   checkpoint or a validation blocker. FALSE creates an inert named plan.\n#' @param screening_prompt Approved W04 screening prompt TXT.\n#' @param w07_prompt Approved W07 mechanism-coding prompt TXT.\n#' @param ontology_file Approved W07 ontology CSV.\n#' @param w08_prompt Optional W08 case-identification prompt TXT.\n#' @param model Model used for coding and extraction.\n#' @param w01_uncertain How unresolved duplicate pairs are handled: quarantine\n#'   all affected publication clusters or require adjudication.
+#' @param execute_scoping If TRUE, advance W00 onwards automatically until a
+#'   checkpoint or a validation blocker. FALSE creates an inert named plan.
+#' @param screening_prompt Approved W04 screening prompt TXT.
+#' @param w07_prompt Approved W07 mechanism-coding prompt TXT.
+#' @param ontology_file Approved W07 ontology CSV.
+#' @param w08_prompt Optional W08 case-identification prompt TXT.
+#' @param model Model used for coding and extraction.
+#' @param w01_uncertain How unresolved duplicate pairs are handled: quarantine
+#'   all affected publication clusters or require adjudication.
 #' @return State of the named run, invisibly.
 #' @export
 run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
-                             search_file,sources=NULL,execute_scoping=TRUE,\n                             screening_prompt=NULL,w07_prompt=NULL,\n                             ontology_file=NULL,w08_prompt=NULL,\n                             model="gpt-6-luna",\n                             w01_uncertain=c("quarantine","adjudicate")) {\n  w01_uncertain<-match.arg(w01_uncertain)
+                             search_file,sources=NULL,execute_scoping=TRUE,
+                             screening_prompt=NULL,w07_prompt=NULL,
+                             ontology_file=NULL,w08_prompt=NULL,
+                             model="gpt-6-luna",
+                             w01_uncertain=c("quarantine","adjudicate")) {
+  w01_uncertain<-match.arg(w01_uncertain)
   map <- open_map(map)
   if(length(run_name)!=1L || is.na(run_name) ||
      !grepl("^[A-Za-z][A-Za-z0-9_-]*$",run_name))
@@ -62,7 +75,9 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
       run_name=run_name,map_path=map,run_dir=home,
       search_sha256=sha(archived),status="planned",
       created_at_utc=format(Sys.time(),"%Y-%m-%dT%H:%M:%SZ",tz="UTC"),
-      decision1=NULL,decision2=NULL,scope=NULL,w00=NULL,\n      inputs=inputs,model=model,\n      w01_uncertain_policy=w01_uncertain,
+      decision1=NULL,decision2=NULL,scope=NULL,w00=NULL,
+      inputs=inputs,model=model,
+      w01_uncertain_policy=w01_uncertain,
       notes="One cumulative map; methods expansions are distinct runs, not separate reviews.")
   .orchestrator_save(state)
   message("[",run_name,"] Archived search strategy: ",archived)
