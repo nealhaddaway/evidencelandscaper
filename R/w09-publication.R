@@ -42,8 +42,8 @@ republish_w09_atlas <- function(w09,extraction_dir,coordinates_csv=NULL) {
     paste0('<line class="graticule" x1="',x,'" y1="0" x2="',x,'" y2="510"/>'),character(1)),
     vapply(seq(0,510,by=85),function(y)
     paste0('<line class="graticule" x1="0" y1="',y,'" x2="1000" y2="',y,'"/>'),character(1)))
-  html <- sub("__MAP_PATHS__",paste(c(grid,paths),collapse="\n"),html,fixed=TRUE)
-  html <- sub("__CASE_DATA__",raw_json,html,fixed=TRUE)
+  html <- paste(strsplit(html,"__MAP_PATHS__",fixed=TRUE)[[1]],collapse=paste(c(grid,paths),collapse="\n"))
+  html <- paste(strsplit(html,"__CASE_DATA__",fixed=TRUE)[[1]],collapse=raw_json)
   output <- file.path(root,"evidence_atlas.html")
   # Published files are reproducible and immutable, not silently overwritten.
   if(file.exists(output)) {
