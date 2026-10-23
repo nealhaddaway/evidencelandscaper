@@ -80,8 +80,14 @@ validate_w09_fulltexts <- function(w09) {
  out<-vector("list",nrow(q))
  for(i in seq_len(nrow(q))) {
    id<-q$record_id[[i]]
-   file<-scalar(r$file[i])
-   format<-tolower(scalar(r$format[i]))
+   # Prefer locally recovered XML over the historical retrieval-report choice.
+   xml<-file.path(w09,"structured",paste0(id,".xml"))
+   json<-file.path(w09,"structured",paste0(id,".json"))
+   doc<-file.path(w09,"pdfs",paste0(id,".pdf"))
+   options<-c(xml=xml,json=json,pdf=doc)
+   available<-names(options)[file.exists(options)]
+   format<-if(length(available))available[[1L]] else ""
+   file<-if(length(available))unname(options[[format]]) else ""
    assessment<-inspect(file,format,q$doi[i],q$title[i])
    xml_available<-isTRUE(r$openalex_xml_available[[i]])
    status<-if(assessment$extractable)"extraction_ready" else
