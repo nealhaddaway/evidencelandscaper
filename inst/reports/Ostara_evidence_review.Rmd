@@ -1,0 +1,222 @@
+---
+title: "Ostara: Collective action evidence review"
+subtitle: "Living review of search, screening, coding and documented cases"
+author: "Ostara collaboration"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    theme: cosmo
+    df_print: paged
+params:
+  map_path: null
+  w00_run: null
+  w07_run: null
+  w08_run: null
+  w09_run: null
+  w09_extract_run: null
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=11)
+required <- c("jsonlite", "knitr", "ggplot2")
+missing_pkgs <- required[!vapply(required, requireNamespace, logical(1), quietly=TRUE)]
+if (length(missing_pkgs)) stop("Install required packages: ", paste(missing_pkgs, collapse=", "))
+if (!requireNamespace("evidencelandscaper", quietly=TRUE)) stop("Install evidencelandscaper first")
+root <- if (!is.null(params$map_path)) normalizePath(params$map_path, winslash="/",mustWork=TRUE) else evidencelandscaper::open_map("Ostara_collective_action_map")
+run_dirs <- function(stage) {
+  r <- file.path(root,"runs",stage)
+  if (!dir.exists(r)) return(character())
+  list.dirs(r,full.names=TRUE,recursive=FALSE)
+}
+choose_run <- function(stage, requested=NULL, marker="manifest.json", prefix=NULL) {
+  if (!is.null(requested) && nzchar(requested)) return(normalizePath(requested,mustWork=TRUE))
+  d <- run_dirs(stage)
+  if (!is.null(prefix)) d <- d[startsWith(basename(d), prefix)]
+  d <- d[file.exists(file.path(d,marker))]
+  if (!length(d)) return(NULL)
+  d <- d[order(file.info(file.path(d,marker))$mtime,decreasing=TRUE)]
+  d[[1L]]
+}
+read_json <- function(path) if (file.exists(path)) jsonlite::fromJSON(path,simplifyVector=FALSE) else NULL
+read_jsonl <- function(path) {
+  if (!file.exists(path)) return(list())
+  ln<-readLines(path,warn=FALSE,encoding="UTF-8")
+  lapply(ln[nzchar(trimws(ln))],jsonlite::fromJSON,simplifyVector=FALSE)
+}
+read_csv <- function(path) if (file.exists(path)) utils::read.csv(path,stringsAsFactors=FALSE,check.names=FALSE) else NULL
+empty_message <- function(msg) cat("*",msg,"*\n\n",sep="")
+show_table <- function(df, digits=NULL) {
+  if (is.null(df)||!nrow(df)) { empty_message("No verified data available yet."); return(invisible(NULL)) }
+  print(knitr::kable(df,format="html",digits=digits,escape=TRUE,table.attr='class="table table-striped table-condensed"'))
+}
+str_or <- function(z, fallback="Not reported") {
+  x<-unlist(z,use.names=FALSE)
+  x<-unique(as.character(x[!is.na(x)]))
+  x<-trimws(x[nzchar(trimws(x))])
+  if(length(x)) paste(x,collapse="; ") else fallback
+}
+getfield <- function(x,names,default=NA) {
+  for(n in names) if(!is.null(x[[n]]) && length(x[[n]])==1L) return(x[[n]])
+  default
+}
+w00 <- choose_run("W00",params$w00_run,"w00_full_retrieval_manifest.json")
+w07 <- choose_run("W07",params$w07_run,"summary.json",prefix="full-")
+w08 <- choose_run("W08",params$w08_run,"case_assessments.jsonl")
+w09 <- choose_run("W09",params$w09_run,"retrieval_queue.csv")
+w09ex <- if(!is.null(params$w09_extract_run)) normalizePath(params$w09_extract_run,mustWork=TRUE) else {
+  candidates<-if(is.null(w09)) character() else list.dirs(w09,recursive=FALSE,full.names=TRUE)
+  candidates<-candidates[file.exists(file.path(candidates,"fulltext_case_registry_normalised.jsonl"))]
+  if(length(candidates)) candidates[order(file.info(file.path(candidates,"fulltext_case_registry_normalised.jsonl"))$mtime,decreasing=TRUE)][[1L]] else NULL
+}
+# Per-search data have deliberately explicit, user-controlled sources. No inference
+# of database-specific deduplication or screening attribution from global totals.
+inputs <- file.path(root,"report_inputs")
+search_metrics <- read_csv(file.path(inputs,"search_metrics.csv"))
+screen_metrics <- read_csv(file.path(inputs,"screening_by_search.csv"))
+full_metrics <- read_csv(file.path(inputs,"fulltext_by_search.csv"))
+# The retained search strings are collected from the selected W00 query archive.
+query_files <- if(is.null(w00)) character() else list.files(w00,pattern="[.]txt$",recursive=TRUE,full.names=TRUE)
+query_files <- query_files[grepl("query|archive|search",dirname(query_files),ignore.case=TRUE)]
+query_content <- function(db) {
+ if(!length(query_files)||is.na(db)) return(NA_character_)
+ hit <- query_files[tolower(tools::file_path_sans_ext(basename(query_files)))==tolower(db)]
+ if(length(hit)!=1L) return(NA_character_)
+ paste(readLines(hit,warn=FALSE,encoding="UTF-8"),collapse=" ")
+}
+```
+
+# Executive summary
+
+This review summarises the identified evidence on collective action initiatives. It draws from the existing Ostara search, deduplication, screening, abstract mechanism coding, case identification and full-text extraction outputs. Results are descriptive and do not establish the effectiveness of individual mechanisms.
+
+**Editorial summary:** Replace this paragraph with your synthesis of the main patterns, evidence gaps and implications for Ostara. It will remain editable in RStudio and will be retained when the report is re-rendered.
+
+```{r provenance}
+selected <- data.frame(
+  Stage=c("W00 searching", "W07 mechanism coding", "W08 case identification", "W09 retrieval", "W09 full-text extraction"),
+  Selected_source=vapply(list(w00,w07,w08,w09,w09ex),function(x) if(is.null(x)) "Not available" else basename(x),character(1)))
+show_table(selected)
+```
+
+# Searching and record preparation
+
+The following table distinguishes database/search hits from records retained after deduplication. Where the project has not yet published a defensible search-level allocation, the corresponding values are left blank rather than distributed proportionally across searches.
+
+```{r search-table}
+if(!is.null(search_metrics)) {
+  needed<-c("search_id","database","total_hits","deduplicated_hits","retractions","missing_abstracts")
+  if(!all(needed %in% names(search_metrics))) stop("report_inputs/search_metrics.csv requires: ",paste(needed,collapse=", "))
+  archived_strings<-vapply(search_metrics$database,query_content,character(1))
+  if("search_string" %in% names(search_metrics)) {
+    manual<-search_metrics$search_string
+    archived_strings[!is.na(manual)&nzchar(manual)]<-manual[!is.na(manual)&nzchar(manual)]
+  }
+  search_metrics$search_string<-archived_strings
+  show_table(search_metrics[,c("search_id","database","search_string","total_hits","deduplicated_hits","retractions","missing_abstracts")])
+  cat("\n**Searches represented:** ",length(unique(search_metrics$search_id)),". **Databases represented:** ",length(unique(search_metrics$database)),".\n\n",sep="")
+} else {
+  empty_message("Per-search and per-database metrics have not yet been supplied. Populate report_inputs/search_metrics.csv to report verified search strings, gross hits, deduplicated hits, retractions and missing abstracts.")
+}
+```
+
+## Search methods and caveats
+
+**Editable methods text:** Describe databases, platforms, search dates, search strategies and any complementary searching here. Distinguish database searches from successive searches using the same database. Retractions and missing abstracts should reflect their actual recorded stage and should not be subtracted twice.
+
+# Screening
+
+The table shows unique records screened and records retained by search. A record appearing in more than one search must not be counted as a new unique record in each search without an explicit allocation rule. Cross-search totals are not necessarily the sum of search rows.
+
+```{r screening-table}
+if(!is.null(screen_metrics)) {
+  needed<-c("search_id","unique_records_screened","records_retained")
+  if(!all(needed %in% names(screen_metrics))) stop("screening_by_search.csv requires: ",paste(needed,collapse=", "))
+  show_table(screen_metrics[,needed,drop=FALSE])
+} else empty_message("Verified search-level screening attribution is not yet available. Populate report_inputs/screening_by_search.csv with unique_records_screened and records_retained for each search_id.")
+```
+
+```{r screening-overall}
+# Independently report the final screening's retained count when available.
+sums<-list.files(file.path(root,"runs","W01"),pattern="summary.json",recursive=TRUE,full.names=TRUE)
+sums<-sums[grepl("W04_local/.*/finalised/summary[.]json$",sums)]
+finals<-lapply(sums,read_json)
+finals<-Filter(function(z)identical(z$status,"final")&&identical(z$run_type,"full"),finals)
+if(length(finals)) {
+ f<-finals[[length(finals)]]
+ cat("A finalised full-corpus W04 screening summary was located. Counts in its source JSON should be reconciled with the search-level table before publication.\n\n")
+} else empty_message("No finalised full-corpus W04 summary was located in the expected project path.")
+```
+
+**Editable screening interpretation:** Describe inclusion decisions, borderline records, missing abstracts and the relationship between searches.
+
+# Abstract coding: collective action mechanisms
+
+This figure displays **the number of distinct publications assigned each approved mechanism**. A publication can receive multiple codes. The values are not measures of mechanism prevalence or effectiveness.
+
+```{r mechanism-figure, fig.height=13, fig.width=12}
+if(!is.null(w07)) {
+ print(evidencelandscaper::plot_w07_mechanisms(w07,include_zero=TRUE))
+} else empty_message("No completed full-corpus W07 ontology and coding archive has been selected.")
+```
+
+**Editable mechanism interpretation:** Summarise the most frequently coded mechanisms, sparse categories and ontology gaps. Specify which W07 version is used. Earlier v2 coding should not be silently combined with the later v3 ontology.
+
+# Full-text retrieval and case coding
+
+Counts are differentiated at the **publication** and **case** levels: one publication can report more than one case. "Downloadable" and "parsable" are not synonymous. A case is only considered full-text coded when its publication has a completed W09 extraction.
+
+```{r fulltext-by-search}
+if(!is.null(full_metrics)) {
+ needed<-c("search_id","case_bearing_publications","cases_identified_at_abstract","full_texts_downloaded","full_texts_parsed","cases_confirmed_full_text")
+ if(!all(needed %in% names(full_metrics))) stop("fulltext_by_search.csv requires: ",paste(needed,collapse=", "))
+ show_table(full_metrics[,needed,drop=FALSE])
+} else empty_message("Full-text outcomes have not yet been defensibly attributed to individual searches. Populate report_inputs/fulltext_by_search.csv from the W08/W09 outputs once allocation and retrieval status are confirmed.")
+```
+
+```{r case-table}
+entries<-if(is.null(w09ex)) list() else read_jsonl(file.path(w09ex,"fulltext_case_registry_normalised.jsonl"))
+case_rows<-list()
+for(z in entries) {
+ if(!identical(z$verification_status,"cases_confirmed")) next
+ for(ca in z$cases) {
+  countries<-vapply(ca$countries,function(c) paste0(c$country_name," (",c$country_iso3,")"),character(1))
+  locations<-vapply(ca$locations,function(l) paste0(l$location_name," (",l$location_type,")"),character(1))
+  mechanisms<-vapply(ca$additional_mechanisms,function(m)m$mechanism_id,character(1))
+  conclusions<-vapply(ca$author_conclusions,function(x)x$conclusion,character(1))
+  case_rows[[length(case_rows)+1L]]<-data.frame(
+   Publication_ID=z$record_id,
+   Case=str_or(ca$case_name),
+   Countries=str_or(countries),
+   Locations=str_or(locations),
+   Commodities=str_or(ca$commodities),
+   Supply_chain_stages=str_or(ca$supply_chain_stages),
+   Main_actors=str_or(ca$actors),
+   Collaborative_activities=str_or(ca$collaboration_activities),
+   Governance=str_or(ca$governance),
+   Reported_barriers=str_or(ca$barriers),
+   Additional_mechanisms_for_review=str_or(mechanisms),
+   Explicit_author_conclusions=str_or(conclusions),
+   stringsAsFactors=FALSE)
+ }
+}
+if(length(case_rows)) show_table(do.call(rbind,case_rows)) else empty_message("No finalised and normalised W09 cases are available in the selected full-text extraction run.")
+```
+
+**Editorial case synthesis:** Describe common organisation types, collaborative mechanisms, supply-chain positions, locations, barriers, and patterns in *explicit* author conclusions. Do not convert conditional benefits, objectives or recommendations into demonstrated outcomes.
+
+# Limitations and next steps
+
+**Editable limitations text:** Distinguish abstract-level assignment from full-text validation, retrieval failures, publication/case multiplicity, search-level allocation rules, ongoing ontology review and any manually adjudicated mechanism suggestions. Note the date and status of each workflow when publishing a static snapshot.
+
+# Reproducibility
+
+This R Markdown document is editable. Use **Knit** in RStudio to refresh its tables and figures. It reads existing workflow outputs and never initiates searches, OpenAI calls, retrieval or recoding. The three CSVs under `report_inputs/` are explicit, editable sources for search-attributed metrics where that provenance is not yet available from a single canonical workflow table.
+
+```{r session, echo=FALSE}
+cat("Report generated: ", format(Sys.time(),tz="UTC",usetz=TRUE), "\n\n",sep="")
+cat("Selected W07: ", if(is.null(w07))"not available" else w07, "\n\n",sep="")
+cat("Selected W09: ", if(is.null(w09ex))"not available" else w09ex, "\n",sep="")
+```
