@@ -5,9 +5,10 @@
 #' locations and verified DOIs; ScienceDirect preference is XML, JSON, PDF.
 #' @param w09 W09 prepared pilot folder.
 #' @param max_records Maximum number of publications checked.
+#' @param retry_no_api_key Retry previously logged no_api_key records in a separate log.
 #' @return Path to append-only v3 retrieval log.
 #' @export
-retrieve_w09_structured <- function(w09,max_records=6L) {
+retrieve_w09_structured <- function(w09,max_records=6L,retry_no_api_key=FALSE) {
  w09<-normalizePath(w09,winslash="/",mustWork=TRUE)
  queue<-utils::read.csv(file.path(w09,"retrieval_queue.csv"),
                         stringsAsFactors=FALSE)
@@ -20,6 +21,13 @@ retrieve_w09_structured <- function(w09,max_records=6L) {
    lapply(z[nzchar(trimws(z))],jsonlite::fromJSON,simplifyVector=FALSE)
  }
  history<-readjl(log)
+ if(isTRUE(retry_no_api_key)) {
+   if(!nzchar(Sys.getenv("SCOPUS_API_TOKEN")))
+     stop("SCOPUS_API_TOKEN must be loaded before retrying no_api_key records.")
+   source_history<-history
+   log<-file.path(w09,"w09_retrieval_v3_key_retry.jsonl")
+   history<-readjl(log)
+ }
  done<-vapply(history,function(z)z$record_id,character(1))
  if(anyDuplicated(done))stop("Duplicate record IDs in W09 v3 log.")
  scalar<-function(x)if(is.null(x)||!length(x)||all(is.na(x)))"" else
@@ -57,7 +65,11 @@ retrieve_w09_structured <- function(w09,max_records=6L) {
  pdf_dir<-file.path(w09,"pdfs")
  struct_dir<-file.path(w09,"structured")
  dir.create(struct_dir,recursive=TRUE,showWarnings=FALSE)
- pending<-queue[!queue$record_id%in%done &
+ retry_ids<-if(isTRUE(retry_no_api_key))
+   unique(vapply(Filter(function(z)identical(z$sciencedirect_status,"no_api_key"),
+                        source_history),function(z)z$record_id,character(1)))
+   else queue$record_id
+ pending<-queue[queue$record_id%in%retry_ids & !queue$record_id%in%done &
    !file.exists(file.path(pdf_dir,paste0(queue$record_id,".pdf"))) &
    !file.exists(file.path(struct_dir,paste0(queue$record_id,".xml"))) &
    !file.exists(file.path(struct_dir,paste0(queue$record_id,".json"))),,drop=FALSE]
@@ -203,7 +215,7 @@ retrieve_w09_structured <- function(w09,max_records=6L) {
    } else entry$sciencedirect_status<-"skipped_openalex_pdf"
    cat(jsonlite::toJSON(entry,auto_unbox=TRUE,null="null"),"\n",
        file=log,append=TRUE,sep="")
-   message("[W09] ",id,": ",entry$openalex_status,"; ",
+   message("[W09] Record ",i," of ",nrow(pending),": ",id,": ",entry$openalex_status,"; ",
            entry$sciencedirect_status)
  }
  invisible(log)
