@@ -60,7 +60,7 @@ finalize_w04 <- function(map_path=NULL) {
   has_review<-file.exists(file.path(return_dir,"receipt.json"))
   receipt<-if(has_review)jsonlite::fromJSON(file.path(return_dir,"receipt.json"),simplifyVector=FALSE) else NULL
   source<-readjl(layer_path)
-  if(!identical(scalar(manifest$consensus_sha256),sha(layer_path))||
+  if(!identical(scalar(manifest$consensus_sha256),sha(original_layer))||
      (has_review && (!identical(scalar(receipt$status),"RETURNED")||
      !identical(scalar(receipt$latest_decisions_sha256),sha(decision_path))||
      !identical(scalar(receipt$queue_sha256),sha(file.path(w04,if(reconciled)"reconciled_human_review_queue.jsonl" else "human_review_queue.jsonl"))))))
