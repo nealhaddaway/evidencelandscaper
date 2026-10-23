@@ -1,0 +1,20 @@
+testthat::test_that("named expansion choices require a verified population", {
+  testthat::expect_error(evidencelandscaper:::`.orchestrator_choice`(list(mode="n",n=2),NULL),"exact unique")
+  selected <- evidencelandscaper:::`.orchestrator_choice`(list(mode="percent",percent=25),13)
+  testthat::expect_equal(selected$selected,4L)
+  testthat::expect_equal(selected$population,13L)
+  testthat::expect_error(evidencelandscaper:::`.orchestrator_choice`(list(mode="n",n=50),13),"Invalid n")
+  testthat::expect_error(evidencelandscaper:::`.orchestrator_choice`(list(mode="percent",percent=101),13),"Invalid sample")
+})
+testthat::test_that("orchestration state can be persisted under one named run", {
+  d <- tempfile("ostara-expansion-")
+  dir.create(d)
+  on.exit(unlink(d,recursive=TRUE),add=TRUE)
+  st <- list(run_name="collectiveaction_oilandgas",run_dir=d,status="planned",
+             search_sha256="example")
+  evidencelandscaper:::`.orchestrator_save`(st)
+  path <- file.path(d,"state.json")
+  testthat::expect_true(file.exists(path))
+  read <- jsonlite::fromJSON(path)
+  testthat::expect_identical(read$run_name,"collectiveaction_oilandgas")
+})
