@@ -210,8 +210,12 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6",max_pages=0L) {
    # Derived files can only be generated once; do not silently replace edits.
    if(file.exists(path)) {
      old_lines<-readLines(path,warn=FALSE,encoding="UTF-8")
-     if(!identical(old_lines,lines))
-       stop("W09 v2.2 derived file differs from raw ledger: ",path)
+     if(length(old_lines)>length(lines) ||
+        !identical(old_lines,head(lines,length(old_lines))))
+       stop("W09 v2.2 derived file conflicts with raw ledger: ",path)
+     if(length(lines)>length(old_lines))
+       cat(paste0(lines[(length(old_lines)+1L):length(lines)],"\n"),
+           file=path,append=TRUE,sep="")
    } else writeLines(lines,path,useBytes=TRUE)
  }
  save_lines(normalized,normalised_path)
