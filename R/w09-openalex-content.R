@@ -5,9 +5,10 @@
 #' is tried only when no full text was acquired from OpenAlex. Every record
 #' has append-only status logging and the final report is CSV.
 #' @param w09 Prepared W09 directory, normally the case-only 47-record queue.
+#' @param retry_failed Reattempt unsuccessful records on subsequent calls (default TRUE).
 #' @return Path to the final CSV report.
 #' @export
-retrieve_w09_openalex_content <- function(w09) {
+retrieve_w09_openalex_content <- function(w09,retry_failed=TRUE) {
   w09 <- normalizePath(w09, mustWork=TRUE)
   q <- utils::read.csv(file.path(w09,"retrieval_queue.csv"),
                        stringsAsFactors=FALSE)
@@ -24,9 +25,14 @@ retrieve_w09_openalex_content <- function(w09) {
     lapply(v[nzchar(trimws(v))],jsonlite::fromJSON,simplifyVector=FALSE)
   }
   prev <- readjl(log)
-  if(length(prev) && anyDuplicated(vapply(prev,function(z)z$record_id,character(1))))
-    stop("Duplicate retrieval log records; investigate before resuming.")
-  done <- vapply(prev,function(z)z$record_id,character(1))
+  # Entries are append-only attempts, rather than one record per publication.
+  # The most recent attempt is authoritative; earlier attempts remain intact.
+  previous_ids <- vapply(prev,function(z)z$record_id,character(1))
+  latest <- if(length(prev)) prev[!duplicated(previous_ids,fromLast=TRUE)] else list()
+  successful <- vapply(Filter(function(z)!is.null(z$file) &&
+    nzchar(as.character(z$file)) && file.exists(as.character(z$file)),
+    latest),function(z)z$record_id,character(1))
+  done <- if(isTRUE(retry_failed))successful else unique(previous_ids)
   key <- Sys.getenv("OPENALEX_API_KEY")
   if(!nzchar(key))stop("OPENALEX_API_KEY is required for hosted full-text retrieval.")
   elsevier <- Sys.getenv("SCOPUS_API_TOKEN")
@@ -235,6 +241,8 @@ retrieve_w09_openalex_content <- function(w09) {
                     entry$sciencedirect_status,entry$outcome))
   }
   all<-readjl(log)
+  all_ids<-vapply(all,function(z)z$record_id,character(1))
+  all<-all[!duplicated(all_ids,fromLast=TRUE)]
   rows<-lapply(all,function(z)data.frame(
     record_id=z$record_id,doi=if(is.null(z$doi))"" else z$doi,
     openalex_match=z$openalex_match,
@@ -249,6 +257,12 @@ retrieve_w09_openalex_content <- function(w09) {
     stringsAsFactors=FALSE))
   df<-do.call(rbind,rows)
   df<-df[match(q$record_id,df$record_id),,drop=FALSE]
+  if(file.exists(report)) {
+    archive<-file.path(w09,paste0("w09_fulltext_retrieval_report-",
+       substr(digest::digest(file=report,algo="sha256",serialize=FALSE),1,12),".csv"))
+    if(!file.exists(archive)&&!file.copy(report,archive,overwrite=FALSE))
+      stop("Unable to archive preceding retrieval report.")
+  }
   utils::write.csv(df,report,row.names=FALSE)
   message(sprintf("[W09 complete] OpenAlex hosted content availability: %d/%d (GROBID XML: %d, document: %d).",
     sum(df$openalex_xml_available|df$openalex_document_available),nrow(df),
