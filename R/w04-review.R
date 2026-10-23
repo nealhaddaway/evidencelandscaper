@@ -73,8 +73,19 @@ prepare_w04_review <- function(w04,include_all=FALSE,missing_abstracts=FALSE) {
   })
   if(file.exists(destination)){
     existing<-readjl(destination)
-    if(!identical(existing,cases))
-      stop("W04 review queue already exists with different content; refusing overwrite.")
+    if(!identical(existing,cases)) {
+      # The queue hash is part of saved decision provenance. Metadata fixes
+      # must never overwrite that file or invalidate previous decisions.
+      strip_bibliography<-function(z) {
+        z$bibliographic<-NULL
+        z
+      }
+      old_core<-lapply(existing,strip_bibliography)
+      new_core<-lapply(cases,strip_bibliography)
+      if(!identical(old_core,new_core))
+        stop("Existing W04 review queue differs in record IDs or model decisions; refusing overwrite.")
+      message("[W04] Reusing immutable review queue. Only bibliographic display fields differ; previously saved decisions remain valid.")
+    }
   } else {
     writeLines(vapply(cases,function(x)jsonlite::toJSON(x,
       auto_unbox=TRUE,null="null"),character(1)),destination,useBytes=TRUE)
