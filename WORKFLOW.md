@@ -187,3 +187,17 @@ log <- retrieve_w09_structured(w09,max_records=6)
 records <- jsonlite::stream_in(file(log),verbose=FALSE)
 print(records[, c("record_id","openalex_doi","doi_used","sciencedirect_status","retrieval_status")])
 ```
+
+### W09 full-text analysis: PDF, XML or JSON
+
+`analyse_w09_cases(w09, record_ids=...)` now reads `structured/<record_id>.xml`, then `structured/<record_id>.json`, then `pdfs/<record_id>.pdf` (in that preference order). XML parsing uses `xml2`; PDF uses `pdftools`. ScienceDirect structured files must contain substantive text, not just metadata or access-error bodies. Nothing is silently truncated; large text is reported for manual scoping. The existing `fulltext_extraction.jsonl` remains append-only, and already analysed record IDs are skipped.
+
+**Evidence anchors:** PDFs have page numbers. XML and JSON do not automatically provide reliable print pagination. For these files W09 uses ordered `[SECTION n]` or `[TEXT BLOCK n]` anchors, and instructs the model to use `source_anchor` with `page_number=null`. The source file format, SHA-256 and anchors are stored in result provenance. This output needs human verification of case identity, quoted text and source anchors before research use. Do not assume a downloaded structured file matches the selected publication.
+
+```r
+remotes::install_github("nealhaddaway/evidencelandscaper",dependencies=FALSE,force=TRUE)
+library(evidencelandscaper)
+w09 <- prepare_w09_cases()
+# Only supply IDs AFTER verifying that their full-text files match the publications:
+# analyse_w09_cases(w09,record_ids=c("work-e35e229f44c00c48"))
+```
