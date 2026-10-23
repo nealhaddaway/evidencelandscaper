@@ -174,3 +174,16 @@ Avoid running W08 v2 or W09 full-text model calls until their respective pilot i
 Use `retrieve_w09_fulltexts(w09, max_records=6)` to retry **only missing PDFs** in the existing W09 pilot. OpenAlex attempts DOI identification first and exact-normalised-title matching when DOI lookup fails. Candidates with conflicting DOIs or ambiguous identities are not downloaded. When OpenAlex provides no downloadable PDF, the function attempts Elsevier's authorised ScienceDirect Full Text Article Retrieval API by DOI, using `SCOPUS_API_TOKEN` and optional `SCOPUS_INSTTOKEN`. ScienceDirect PDF availability requires separate full-text/API entitlement; the API key alone is insufficient. A record without a usable DOI cannot be sent to the ScienceDirect DOI endpoint. No Europe PMC, Unpaywall or additional providers are queried.
 
 Existing PDFs are never replaced; the prior `oa_retrieval.jsonl` is immutable. New attempts are logged in `w09_retrieval_v2.jsonl`. A downloaded file remains `downloaded_unverified` until a human confirms publication identity and that its contents are readable. Repeat calls skip successfully downloaded files and records already assessed by v2. `inventory_w09_pdfs()` archives its earlier inventory when counts change. Neither function initiates model analysis.
+
+### W09 structured retrieval v3 (preferred)
+
+`retrieve_w09_structured(w09, max_records=6)` continues the **existing** six-publication pilot. It does not overwrite old PDF files or retrieval logs. Its append-only log is `w09_retrieval_v3.jsonl`. OpenAlex first tries DOI, then exact normalised-title matching when necessary. An OpenAlex DOI may be used for Elsevier only with **one unambiguous matched work** and no conflicting queue DOI. The chosen DOI and provenance appear in each log entry. OpenAlex is used only for identification and OA PDFs; **ScienceDirect requests XML first, JSON second, PDF last**, requiring FULL view and available institutional entitlements. Every format's HTTP response/status or failure is logged. Failed or ambiguous responses are not saved as completed full-text extractions. Structured results are saved in `<w09>/structured/<record_id>.xml` or `.json`; files remain unverified until the user confirms identity and that the body (not just metadata) is present. `analyse_w09_cases()` currently reads PDF only; it must be extended and validated before analysing structured XML/JSON. The v3 retrieval function does not make any model calls.
+
+```r
+remotes::install_github("nealhaddaway/evidencelandscaper",dependencies=FALSE,force=TRUE)
+library(evidencelandscaper)
+w09 <- prepare_w09_cases()
+log <- retrieve_w09_structured(w09,max_records=6)
+records <- jsonlite::stream_in(file(log),verbose=FALSE)
+print(records[, c("record_id","openalex_doi","doi_used","sciencedirect_status","retrieval_status")])
+```
