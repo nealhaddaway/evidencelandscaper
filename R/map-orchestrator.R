@@ -670,14 +670,61 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
   invisible(path)
 }
 
+#' Print counts directly from this run's saved, verified stage artefacts.
 .orchestrator_summary <- function(state) {
-  message("OSTARA | ",state$run_name,"\n",
-    "  Map: ",state$map_path,"\n",
-    "  State: ",state$status,"\n",
-    "  Strategy SHA-256: ",state$search_sha256)
-  if(!is.null(state$scope))
-    message("  Scoping hits: ",state$scope$gross_hits,
-            " across ",state$scope$sources," automated sources.")
+  message("Evidence map | ",state$run_name,
+          "\n  Map: ",state$map_path,
+          "\n  Status: ",state$status,
+          "\n  Search SHA-256: ",state$search_sha256)
+  scope<-state$scope
+  if(!is.null(scope)){
+    message("  W00 gross database hits: ",format(scope$gross_hits,big.mark=","),
+            " from ",scope$sources," sources",
+            if(scope$unknown_source_counts>0L)paste0(" (",scope$unknown_source_counts,
+              " sources without counts)") else "")
+    if(!is.null(scope$eligible_records))
+      message("  W01 eligible publication clusters: ",scope$eligible_records,
+              "; quarantined ambiguous clusters: ",
+              if(is.null(state$w01$quarantined_cluster_count)) 0L else
+                state$w01$quarantined_cluster_count)
+  }
+  if(!is.null(state$decision1))
+    message("  Checkpoint 1: ",state$decision1$selected," of ",
+            state$decision1$population," selected for screening; uncertain=",
+            state$decision1$uncertain_policy)
+  if(!is.null(state$w04$finalised)){
+    p<-file.path(state$w04$finalised,"summary.json")
+    if(file.exists(p)){
+      z<-jsonlite::fromJSON(p)
+      message("  W04: ",z$records," assessed; ",z$retain," retained; ",
+              z$exclude," excluded; uncertain excluded by policy: ",
+              if(is.null(z$policy_uncertain_excluded))"not available" else
+                z$policy_uncertain_excluded)
+    }
+  }
+  if(!is.null(state$w07$run)){
+    p<-file.path(state$w07$run,"summary.json")
+    if(file.exists(p)){
+      z<-jsonlite::fromJSON(p)
+      message("  W07: ",if(is.null(z$records))"not available" else z$records,
+              " publications mechanism-coded")
+    }
+  }
+  if(!is.null(state$w08$run))
+    message("  W08: ",state$case_bearing_publications,
+            " case-bearing publications from ",state$assessed_publications,
+            " assessments; ",state$uncertain_case_publications," uncertain.")
+  if(!is.null(state$decision2))
+    message("  Checkpoint 2: ",state$decision2$selected," of ",
+            state$decision2$population," publications selected for extraction; uncertain=",
+            state$decision2$uncertain_policy)
+  if(!is.null(state$w09$ready_count))
+    message("  W09: ",state$w09$ready_count,
+            " publications with validated extraction-ready documents.")
+  if(!is.null(state$published))
+    message("  Atlas: ",state$published$atlas,
+            "\n  Full review: ",state$published$full_report)
   if(!is.null(state$blocking_stage))
-    message("  Blocked handover: ",state$blocking_stage)
+    message("  Stopped at: ",state$blocking_stage)
+  invisible(state)
 }
