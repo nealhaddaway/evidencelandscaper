@@ -58,14 +58,19 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @param run_name Previously created run name.
 #' @param map Existing map name/path.
 #' @param step One of auto,scope,retrieve,status.
-#' @param screening Optional list(mode="all"|"n"|"percent", n=..., percent=...,\n#'   uncertain="exclude"|"adjudicate").
-#' @param extraction Optional analogous selection for case-bearing publications,\n#'   including uncertain="exclude"|"adjudicate".
+#' @param screening Optional list(mode="all"|"n"|"percent", n=..., percent=...,
+#'   uncertain="exclude"|"adjudicate").
+#' @param extraction Optional analogous selection for case-bearing publications,
+#'   including uncertain="exclude"|"adjudicate".
 #' @param sources Optional W00 database IDs for first scoping.
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
                                 step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","publish","status"),
-                                screening=NULL,extraction=NULL,sources=NULL,\n                                screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,\n                                w08_prompt=NULL,model="gpt-6-luna",\n                                extraction_dir=NULL,coordinates_csv=NULL) {
+                                screening=NULL,extraction=NULL,sources=NULL,
+                                screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
+                                w08_prompt=NULL,model="gpt-6-luna",
+                                extraction_dir=NULL,coordinates_csv=NULL) {
   step <- match.arg(step)
   map <- open_map(map)
   home <- file.path(map,"runs","orchestrated",run_name)
@@ -101,7 +106,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     state$status <- "screening_scope_saved"
     .orchestrator_save(state)
     message("[",run_name,"] Checkpoint 1 saved: ",state$decision1$selected,
-            " of ",state$decision1$population," records; uncertain decisions: ",\n            state$decision1$uncertain_policy,".")
+            " of ",state$decision1$population," records; uncertain decisions: ",
+            state$decision1$uncertain_policy,".")
     message("[",run_name,"] Sample record IDs archived; W04 explicit-ID handover pending.")
     state$blocking_stage <- "W02-W04 exact sample-ID handover"
     .orchestrator_save(state)
@@ -127,7 +133,10 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     state$decision2$selection_sha256<-chosen$selection_sha256
     state$status <- "extraction_scope_saved"
     .orchestrator_save(state)
-    message("[",run_name,"] Checkpoint 2 saved: ",state$decision2$selected,\n            " of ",state$decision2$population,\n            " case-bearing publications; uncertain cases: ",\n            state$decision2$uncertain_policy,".")
+    message("[",run_name,"] Checkpoint 2 saved: ",state$decision2$selected,
+            " of ",state$decision2$population,
+            " case-bearing publications; uncertain cases: ",
+            state$decision2$uncertain_policy,".")
     return(invisible(state))
   }
   if(step=="scope" || (step=="auto"&&identical(state$status,"planned"))) {
@@ -253,7 +262,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
        !identical(sha(selected),state$decision2$selected_ids_sha256))
       stop("Checkpoint 2 exact publication IDs changed.")
     w09<-prepare_w09_from_w08(state$w08$run,map_path=map,
-      include_unclear=FALSE,include_unvalidated=FALSE,record_ids_csv=selected,\n      w04_run=state$w04$run)
+      include_unclear=FALSE,include_unvalidated=FALSE,record_ids_csv=selected,
+      w04_run=state$w04$run)
     state$w09<-list(run=w09,source_w08=state$w08$run,
                     selection_sha256=sha(selected))
     state$status<-"w09_prepared"
@@ -453,11 +463,15 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
   invisible(state)
 }
 
-.orchestrator_choice <- function(x,population,stage=c("screening","extraction")) {\n  stage <- match.arg(stage)
+.orchestrator_choice <- function(x,population,stage=c("screening","extraction")) {
+  stage <- match.arg(stage)
   if(is.null(population)||length(population)!=1L||
      !is.finite(as.numeric(population)))
     stop("Cannot sample until exact unique eligible population is known.")
-  modes <- c("all","n","percent")\n  if(is.null(x$uncertain) || length(x$uncertain)!=1L ||\n     !x$uncertain %in% c("exclude","adjudicate"))\n    stop("Checkpoint decision must set uncertain = exclude or adjudicate.")
+  modes <- c("all","n","percent")
+  if(is.null(x$uncertain) || length(x$uncertain)!=1L ||
+     !x$uncertain %in% c("exclude","adjudicate"))
+    stop("Checkpoint decision must set uncertain = exclude or adjudicate.")
   if(!is.list(x)||!x$mode %in% modes)stop("Specify mode all, n or percent.")
   N <- as.integer(population)
   if(identical(x$mode,"all"))n<-N
@@ -470,7 +484,11 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     if(length(p)!=1L||is.na(p)||p<=0||p>100)stop("Invalid sample percentage.")
     n<-min(N,ceiling(N*p/100))
   }
-  list(stage=stage,mode=x$mode,uncertain_policy=x$uncertain,\n       uncertain_handling=if(identical(x$uncertain,"exclude"))\n         "Exclude unresolved uncertain records from downstream stages; retain audit status" else\n         "Hold unresolved uncertain records for adjudication before handover",\n       selected=as.integer(n),population=N,
+  list(stage=stage,mode=x$mode,uncertain_policy=x$uncertain,
+       uncertain_handling=if(identical(x$uncertain,"exclude"))
+         "Exclude unresolved uncertain records from downstream stages; retain audit status" else
+         "Hold unresolved uncertain records for adjudication before handover",
+       selected=as.integer(n),population=N,
        seed=20261023L,policy="sample without replacement; retain sampled record IDs")
 }
 
