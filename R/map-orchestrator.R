@@ -344,9 +344,12 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
   if(step=="prepare_extraction") {
     if(!identical(state$status,"extraction_scope_saved"))
       stop("Checkpoint 2 must be completed before W09 preparation.")
-    if(!identical(state$decision2$uncertain_policy,"exclude"))
-      stop("Uncertain W08 records require adjudication before extraction; ",
-           "no automatic positive assignment is permitted.")
+    if(identical(state$decision2$uncertain_policy,"adjudicate") &&
+       !is.null(state$uncertain_case_publications) &&
+       state$uncertain_case_publications>0L)
+      stop("W08 has ",state$uncertain_case_publications,
+           " unclear case assessments requiring adjudication. ",
+           "Do not promote uncertain records automatically.")
     selected<-state$decision2$selected_ids_path
     if(!file.exists(selected) ||
        !identical(sha(selected),state$decision2$selected_ids_sha256))
@@ -420,9 +423,14 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
                                warn=FALSE),jsonlite::fromJSON)
     state$case_bearing_publications<-sum(vapply(statuses,function(z)
       z$case_evidence_status %in% c("specific_case","multiple_cases"),logical(1)))
+    state$uncertain_case_publications<-sum(vapply(statuses,function(z)
+      identical(z$case_evidence_status,"unclear"),logical(1)))
+    state$assessed_publications<-length(statuses)
     .orchestrator_save(state)
     message("[",run_name,"] CHECKPOINT 2: ",state$case_bearing_publications,
-            " case-bearing publications. Choose extraction scope and uncertain policy.")
+            " case-bearing publications across ",state$assessed_publications,
+            " W08 assessments; ",state$uncertain_case_publications,
+            " unclear classifications. Choose extraction scope and uncertain policy.")
     return(invisible(state))
   }
   if(step=="enrich") {
