@@ -40,8 +40,8 @@ ui<-fluidPage(
       column(4,div(class="box",
         h4("Human screening decision"),
         radioButtons("decision",NULL,
-          choices=c("Retain"="retain","Exclude"="exclude","Uncertain"="uncertain"),
-          selected=character(0)),
+          choices=c("Select a decision"="", "Retain"="retain","Exclude"="exclude","Uncertain"="uncertain"),
+          selected=""),
         textAreaInput("reason","Reason (optional for exclusion)",rows=5,width="100%"),
         actionButton("save","Save decision",class="btn-primary"),
         tags$hr(),downloadButton("export","Export adjudication decisions"),
@@ -95,7 +95,7 @@ server<-function(input,output,session){
   observeEvent(input[['next']],position(min(length(cases),position()+1L)))
   observeEvent(list(position(),saved()),{
     x<-last_events(saved())[[current()$review_case_id]]
-    updateRadioButtons(session,"decision",selected=if(is.null(x))character(0) else x$decision)
+    updateRadioButtons(session,"decision",selected=if(is.null(x))"" else x$decision)
     updateTextAreaInput(session,"reason",value=if(is.null(x))"" else x$reason)
   })
   output$bibliography<-renderUI({
