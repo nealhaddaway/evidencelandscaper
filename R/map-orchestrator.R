@@ -8,11 +8,11 @@
 #' @param run_name Unique method-expansion label (e.g. collectiveaction_oilandgas).
 #' @param search_file W00-compatible JSON search strategy file.
 #' @param sources Optional W00 source identifiers (defaults to configured full set).
-#' @param execute_scoping If TRUE, advance W00 onwards automatically until a\n#'   checkpoint or a validation blocker. FALSE creates an inert named plan.\n#' @param screening_prompt Approved W04 screening prompt TXT.\n#' @param w07_prompt Approved W07 mechanism-coding prompt TXT.\n#' @param ontology_file Approved W07 ontology CSV.\n#' @param w08_prompt Optional W08 case-identification prompt TXT.\n#' @param model Model used for coding and extraction.
+#' @param execute_scoping If TRUE, advance W00 onwards automatically until a\n#'   checkpoint or a validation blocker. FALSE creates an inert named plan.\n#' @param screening_prompt Approved W04 screening prompt TXT.\n#' @param w07_prompt Approved W07 mechanism-coding prompt TXT.\n#' @param ontology_file Approved W07 ontology CSV.\n#' @param w08_prompt Optional W08 case-identification prompt TXT.\n#' @param model Model used for coding and extraction.\n#' @param w01_uncertain How unresolved duplicate pairs are handled: quarantine\n#'   all affected publication clusters or require adjudication.
 #' @return State of the named run, invisibly.
 #' @export
 run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
-                             search_file,sources=NULL,execute_scoping=TRUE,\n                             screening_prompt=NULL,w07_prompt=NULL,\n                             ontology_file=NULL,w08_prompt=NULL,\n                             model="gpt-6-luna") {
+                             search_file,sources=NULL,execute_scoping=TRUE,\n                             screening_prompt=NULL,w07_prompt=NULL,\n                             ontology_file=NULL,w08_prompt=NULL,\n                             model="gpt-6-luna",\n                             w01_uncertain=c("quarantine","adjudicate")) {\n  w01_uncertain<-match.arg(w01_uncertain)
   map <- open_map(map)
   if(length(run_name)!=1L || is.na(run_name) ||
      !grepl("^[A-Za-z][A-Za-z0-9_-]*$",run_name))
@@ -62,7 +62,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
       run_name=run_name,map_path=map,run_dir=home,
       search_sha256=sha(archived),status="planned",
       created_at_utc=format(Sys.time(),"%Y-%m-%dT%H:%M:%SZ",tz="UTC"),
-      decision1=NULL,decision2=NULL,scope=NULL,w00=NULL,\n      inputs=inputs,model=model,
+      decision1=NULL,decision2=NULL,scope=NULL,w00=NULL,\n      inputs=inputs,model=model,\n      w01_uncertain_policy=w01_uncertain,
       notes="One cumulative map; methods expansions are distinct runs, not separate reviews.")
   .orchestrator_save(state)
   message("[",run_name,"] Archived search strategy: ",archived)
@@ -461,18 +461,25 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
       pending<-readLines(queue,warn=FALSE,encoding="UTF-8")
       pending<-pending[nzchar(trimws(pending))]
       if(length(pending)>0L) {
-        # Never convert a duplicate uncertainty into a made-up affirmative
-        # duplicate or nonduplicate decision. A safe record-quarantine policy
-        # needs stable cluster membership before it can exclude records.
-        state$status<-"w01_review_pending"
-        state$blocking_stage<-"W01 unresolved duplicate pairs: safe case quarantine or review required"
         state$w01$human_cases<-length(pending)
-        .orchestrator_save(state)
-        message("[",run_name,"] W01 has ",length(pending),
-                " unresolved duplicate pairs. The two sampling checkpoints ",
-                "remain after final W01 and after case identification. ",
-                "Cannot finalise while record identities are ambiguous.")
-        return(invisible(state))
+        if(identical(state$w01_uncertain_policy,"quarantine")) {
+          policy_csv<-file.path(dirname(scored),"review_preparation",
+                     "llm_adjudication","w01_uncertain_quarantined_sources.csv")
+          if(!file.exists(policy_csv))
+            quarantine_w01_uncertain(scored)
+          state$w01$quarantine_csv<-policy_csv
+          state$w01$quarantine_sha256<-sha(policy_csv)
+          .orchestrator_save(state)
+          message("[",run_name,"] W01 policy: unresolved pairs quarantined ",
+                  "from screening; no human adjudication claimed.")
+        } else {
+          state$status<-"w01_review_pending"
+          state$blocking_stage<-"W01 unresolved duplicate pairs require adjudication"
+          .orchestrator_save(state)
+          message("[",run_name,"] W01 has ",length(pending),
+                  " unresolved duplicate pairs; adjudication selected.")
+          return(invisible(state))
+        }
       }
       finalized<-finalize_w01(scored)
     } else {
@@ -487,9 +494,39 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     if(!"cluster_id"%in% names(d))
       stop("W01 cluster map missing cluster_id; inspect before using as screening corpus.")
     ids<-unique(as.character(d$cluster_id))
+    if(!is.null(state$w01$quarantine_csv)) {
+      file<-state$w01$quarantine_csv
+      if(!file.exists(file)||!identical(sha(file),state$w01$quarantine_sha256))
+        stop("W01 quarantine source manifest changed.")
+      quarantined<-utils::read.csv(file,stringsAsFactors=FALSE)
+      needed<-c("source","source_record_id")
+      if(!all(needed%in%names(quarantined))||
+         !all(c(needed,"cluster_id")%in%names(d)))
+        stop("W01 cluster mapping cannot link quarantine identities.")
+      key<-function(s,i)paste0(nchar(s,type="bytes"),":",s,
+                                    nchar(i,type="bytes"),":",i)
+      mapkey<-key(as.character(d$source),as.character(d$source_record_id))
+      quarantinekey<-key(as.character(quarantined$source),
+                         as.character(quarantined$source_record_id))
+      matched<-match(quarantinekey,mapkey)
+      if(anyNA(matched))stop("Uncertain W01 manifestations were lost in cluster mapping.")
+      forbidden<-sort(unique(as.character(d$cluster_id[matched])),method="radix")
+      excluded_path<-file.path(home,"w01_quarantined_cluster_ids.csv")
+      if(file.exists(excluded_path))stop("Quarantined clusters already archived.")
+      utils::write.csv(data.frame(cluster_id=forbidden),excluded_path,row.names=FALSE)
+      state$w01$quarantined_cluster_ids_path<-excluded_path
+      state$w01$quarantined_cluster_ids_sha256<-sha(excluded_path)
+      state$w01$quarantined_cluster_count<-length(forbidden)
+      message("[",run_name,"] W01 policy: ",length(forbidden),
+              " ambiguous publication clusters excluded before screening.")
+    }
     if(length(ids)!=as.integer(summary$clusters))
       stop("W01 cluster count differs from finalisation summary.")
     if(anyNA(ids)||any(!nzchar(ids)))stop("Invalid W01 cluster identifiers.")
+    if(exists("forbidden",inherits=FALSE))
+      ids<-setdiff(ids,forbidden)
+    if(!length(ids))
+      stop("No unambiguous W01 clusters remain after policy quarantine.")
     ids<-sort(ids,method="radix")
     ids_file<-file.path(home,"w01_screening_population.csv")
     if(file.exists(ids_file))stop("W01 checkpoint population exists; refusing overwrite.")
