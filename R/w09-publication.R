@@ -1,83 +1,63 @@
-#' Republish the provenance-linked W09 atlas as HTML
-#' @param w09 Completed W09 run.
-#' @param extraction_dir Selected W09 V2 extraction directory.
-#' @param coordinates_csv Optional reviewed case coordinates.
-#' @return Path to the versioned HTML.
+#' Republish the Ostara atlas with a key-free, bundled world basemap
+#'
+#' Renders SVG world boundaries into a self-contained HTML file. No external
+#' tile service, CDN, network connection or API key is required to view it.
+#' Uses the provenance-linked W09 case export and embeds all case details.
+#' @param w09 Completed W09 run directory.
+#' @param extraction_dir Approved V2.5 extraction directory.
+#' @param coordinates_csv Optional audited case-coordinate table.
+#' @return Path to versioned standalone HTML atlas.
 #' @export
 republish_w09_atlas <- function(w09,extraction_dir,coordinates_csv=NULL) {
+  if(!requireNamespace("maps",quietly=TRUE))
+    stop("Install the R package 'maps' to embed world boundaries: install.packages('maps')")
   root <- export_w09_evidence_atlas(w09,extraction_dir,coordinates_csv)
-  data_path <- file.path(root,"case_evidence.json")
+  src <- file.path(root,"case_evidence.json")
   manifest <- jsonlite::fromJSON(file.path(root,"export_manifest.json"))
-  sha <- function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
-  if(!identical(sha(data_path),manifest$output_sha256$case_evidence))
-    stop("Atlas source checksum mismatch.")
-  cases <- jsonlite::fromJSON(data_path,simplifyVector=FALSE)$cases
-  esc <- function(x) {
-    if(is.null(x)||!length(x)||is.na(x[1]))return("")
-    x<-as.character(x[1]);x<-gsub("&","&amp;",x,fixed=TRUE)
-    x<-gsub("<","&lt;",x,fixed=TRUE);x<-gsub(">","&gt;",x,fixed=TRUE)
-    gsub('"',"&quot;",x,fixed=TRUE)
+  if(!identical(digest::digest(file=src,algo="sha256",serialize=FALSE),
+                manifest$output_sha256$case_evidence))
+    stop("Publication source checksum mismatch.")
+  template <- system.file("atlas","ostara_atlas_template.html",package="evidencelandscaper")
+  if(!nzchar(template))stop("Installed offline atlas template missing.")
+  html <- paste(readLines(template,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  raw_json <- paste(readLines(src,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  raw_json <- gsub("</script","<\\/script",raw_json,fixed=TRUE)
+  # Generate SVG directly from the maps package's local boundary dataset.
+  world <- maps::map("world",plot=FALSE,fill=FALSE)
+  starts <- c(1L,which(is.na(world$x))+1L)
+  ends <- c(which(is.na(world$x))-1L,length(world$x))
+  paths <- character()
+  for(j in seq_along(starts)) {
+    ix <- seq.int(starts[[j]],ends[[j]])
+    ix <- ix[is.finite(world$x[ix]) & is.finite(world$y[ix])]
+    if(length(ix)<2L)next
+    xx <- (world$x[ix]+180)*1000/360
+    yy <- (90-world$y[ix])*510/180
+    if(any(abs(diff(xx))>500))next # exclude anti-meridian wrap artifacts
+    points <- paste(sprintf("%.1f,%.1f",xx,yy),collapse=" ")
+    paths <- c(paths,paste0('<polyline class="land" fill="none" points="',points,'"/>'))
   }
-  fmt <- function(z) paste(unlist(z,use.names=FALSE),collapse="; ")
-  detail <- function(ca) {
-    z<-ca$case;p<-ca$publication;k<-ca$coordinates
-    s<-paste0("<h2>",esc(z$case_name),"</h2><p>",esc(z$case_description),"</p>",
-      "<p><b>Publication:</b> ",esc(p$title),"</p>",
-      if(!is.null(p$doi_url))paste0('<a target="_blank" href="',esc(p$doi_url),'">DOI: ',esc(p$doi),"</a> · ")else "",
-      '<a target="_blank" href="',esc(p$google_scholar_url),'">Google Scholar title search</a>',
-      "<p><b>Record:</b> ",esc(p$record_id),"<br><b>Observation:</b> ",esc(ca$observation_id),"</p>",
-      "<p><b>Objectives:</b> ",esc(fmt(z$objectives)),"</p>",
-      "<p><b>Actors:</b> ",esc(fmt(z$actors)),"</p>",
-      "<p><b>Activities:</b> ",esc(fmt(z$collaboration_activities)),"</p>",
-      "<p><b>Stages:</b> ",esc(fmt(z$supply_chain_stages)),"</p>",
-      "<p><b>Mechanisms:</b> ",esc(paste(vapply(z$additional_mechanisms,function(x)x$mechanism_id,character(1)),collapse=", ")),"</p>",
-      "<p><b>Coordinate basis:</b> ",esc(k$coordinate_basis),"</p>",
-      "<p><b>Coordinate source:</b> ",esc(k$coordinate_source),"</p>")
-    for(x in c(z$additional_mechanisms,z$author_conclusions)) {
-      s<-paste0(s,"<p>",esc(x$mechanism_id),": ",esc(x$conclusion),
-        "<br><i>",esc(x$source_quote),"</i> ",esc(x$source_anchor),"</p>")
-    }
-    paste0(s,"<p class='trace'>Source SHA-256: ",esc(p$source_sha256),
-           "<br>Prompt SHA-256: ",esc(ca$extraction$prompt_sha256),"</p>")
-  }
-  markers <- lapply(cases,function(ca){
-    list(lat=ca$coordinates$latitude,lon=ca$coordinates$longitude,
-      label=ca$case$case_name,html=detail(ca))
-  })
-  payload <- jsonlite::toJSON(markers,auto_unbox=TRUE,null="null")
-  payload <- gsub("</script","<\\/script",payload,fixed=TRUE)
-  html <- paste0('<!doctype html><html lang="en"><head><meta charset="UTF-8">',
-   '<meta name="viewport" content="width=device-width, initial-scale=1">',
-   '<title>Ostara | Evidence atlas</title>',
-   '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">',
-   '<style>body{margin:0;background:#f6f7f3;color:#243b37;font:15px system-ui,sans-serif}',
-   'header{padding:22px 32px;background:white;border-bottom:1px solid #dce3da}',
-   'h1{font:32px Georgia,serif;margin:0 0 7px}#map{height:72vh}',
-   '.wrap{padding:25px 35px}.list{columns:2}.list article{break-inside:avoid;padding:12px;border-bottom:1px solid #ddd}',
-   '.list h2{font:19px Georgia,serif}.trace{font-size:11px;color:#65736c;overflow-wrap:anywhere}',
-   '.leaflet-popup-content{max-height:58vh;overflow-y:auto;width:330px!important}',
-   'a{color:#a85332}small{color:#65736c}</style></head><body>',
-   '<header><small>OSTARA / EVIDENCE SYNTHESIS</small><h1>Collective action evidence atlas</h1>',
-   '<small>',length(cases),' publication-case observations. Points show indicative, source-qualified geography.</small></header>',
-   '<div id="map"></div><div class="wrap"><h2>All case observations</h2><div class="list">',
-   paste(vapply(cases,function(x)paste0("<article>",detail(x),"</article>"),character(1)),collapse=""),
-   '</div></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>',
-   '<script id="atlas-data" type="application/json">',payload,'</script>',
-   '<script>if(typeof L!=="undefined"){',
-   'let map=L.map("map").setView([20,0],2);',
-   'L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:"© OpenStreetMap contributors"}).addTo(map);',
-   'let points=JSON.parse(document.getElementById("atlas-data").textContent);',
-   'points.forEach(p=>{if(p.lat!=null&&p.lon!=null){',
-   'L.circleMarker([p.lat,p.lon],{radius:7,color:"#ffffff",weight:1.4,fillColor:"#c7643c",fillOpacity:0.95})',
-   '.addTo(map).bindPopup(p.html,{maxWidth:370});}});',
-   '}else{document.getElementById("map").innerHTML="<p>Map unavailable offline. Case evidence and links remain below.</p>";}',
-   '</script></body></html>')
+  # Add a few land-graticule references while retaining the local map.
+  grid <- c(vapply(seq(0,1000,by=125),function(x)
+    paste0('<line class="graticule" x1="',x,'" y1="0" x2="',x,'" y2="510"/>'),character(1)),
+    vapply(seq(0,510,by=85),function(y)
+    paste0('<line class="graticule" x1="0" y1="',y,'" x2="1000" y2="',y,'"/>'),character(1)))
+  html <- sub("__MAP_PATHS__",paste(c(grid,paths),collapse="\n"),html,fixed=TRUE)
+  html <- sub("__CASE_DATA__",raw_json,html,fixed=TRUE)
   output <- file.path(root,"evidence_atlas.html")
-  if(file.exists(output)){
-    if(!identical(paste(readLines(output,warn=FALSE,encoding="UTF-8"),collapse="\n"),html))
-      stop("Archived atlas HTML conflicts with current renderer: ",output)
-  } else writeLines(html,output,useBytes=TRUE)
-  message("[W09 atlas] ",length(cases),"/",length(cases)," published: ",output)
+  # Published files are reproducible and immutable, not silently overwritten.
+  if(file.exists(output)) {
+    current <- paste(readLines(output,warn=FALSE,encoding="UTF-8"),collapse="\n")
+    if(!identical(current,html)) {
+      output <- file.path(root,paste0("evidence_atlas-",
+        substr(digest::digest(html,algo="sha256"),1,10),".html"))
+      if(file.exists(output) &&
+         !identical(paste(readLines(output,warn=FALSE,encoding="UTF-8"),collapse="\n"),html))
+        stop("Existing versioned atlas differs: ",output)
+    }
+  }
+  if(!file.exists(output))writeLines(html,output,useBytes=TRUE)
+  message("[W09 atlas] Standalone basemap and evidence: ",output)
   invisible(output)
 }
 
