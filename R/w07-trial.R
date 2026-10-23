@@ -117,7 +117,7 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
   mpath<-file.path(dest,"manifest.json")
   outpath<-file.path(dest,"coding.jsonl")
   provenance<-list(schema="local-w07-abstract-trial-v1",
-    source_type=if(n==0L)"W04_FINALISED_FULL" else "W04_FINALISED_TRIAL_ONLY",source_w04=w04,
+    source_type=if(n==0L && !identical(summary$run_type,"full"))\n      "W04_FINALISED_SELECTED" else if(n==0L) "W04_FINALISED_FULL" else\n      "W04_FINALISED_TRIAL_ONLY",source_w04=w04,
     source_w04_sha256=sha(final_path),
     canonical_w02_sha256=sha(canonical_file),
     ontology_sha256=sha(ontology_file),prompt_sha256=sha(prompt_file),
