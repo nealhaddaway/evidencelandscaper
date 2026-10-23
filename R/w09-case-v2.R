@@ -54,7 +54,7 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6",max_pages=0L) {
  byid<-setNames(encoded,vapply(encoded,function(z)z$record_id,character(1)))
  if(any(!record_ids%in%names(byid)))
    stop("Selected record IDs absent from W07 full-corpus coding.")
- prompt_src<-system.file("w09","fulltext_case_prompt_v2_1.txt",
+ prompt_src<-system.file("w09","fulltext_case_prompt_v2_2.txt",
                          package="evidencelandscaper")
  if(!nzchar(prompt_src))stop("W09 v2 prompt missing from package.")
  target<-file.path(w09,"v2-",substr(sha(prompt_src),1L,12L),"-",
@@ -175,5 +175,46 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6",max_pages=0L) {
    message("[W09 v2] ",id,": ",z$verification_status,
            "; cases ",length(z$cases))
  }
+ # Deterministic derived layer; never modify or overwrite raw model responses.
+ # Cross-cutting cannot coexist with a specifically identified supply-chain
+ # stage. Keep the removal in a separate, auditable file.
+ normalised_path<-file.path(target,"fulltext_case_registry_normalised.jsonl")
+ audit_path<-file.path(target,"supply_chain_normalisation.jsonl")
+ raw<-if(file.exists(out))readjl(out) else list()
+ normalized<-lapply(raw,function(z) {
+   for(j in seq_along(z$cases)) {
+     ca<-z$cases[[j]]
+     stages<-unlist(ca$supply_chain_stages,use.names=FALSE)
+     specific<-setdiff(stages,c("cross_cutting","unclear"))
+     if("cross_cutting"%in%stages && length(specific))
+       z$cases[[j]]$supply_chain_stages<-as.list(
+         stages[stages!="cross_cutting"])
+   }
+   z
+ })
+ events<-unlist(lapply(seq_along(raw),function(i) {
+   lapply(seq_along(raw[[i]]$cases),function(j) {
+     before<-unlist(raw[[i]]$cases[[j]]$supply_chain_stages,
+                    use.names=FALSE)
+     after<-unlist(normalized[[i]]$cases[[j]]$supply_chain_stages,
+                   use.names=FALSE)
+     if(identical(before,after))return(NULL)
+     list(record_id=raw[[i]]$record_id,case_index=j,
+          removed_code="cross_cutting",rule="specific_stage_present",
+          raw_stages=as.list(before),normalised_stages=as.list(after))
+   })
+ }),recursive=FALSE)
+ save_lines<-function(items,path) {
+   lines<-vapply(items,function(z)as.character(jsonlite::toJSON(
+     z,auto_unbox=TRUE,null="null")),character(1))
+   # Derived files can only be generated once; do not silently replace edits.
+   if(file.exists(path)) {
+     old_lines<-readLines(path,warn=FALSE,encoding="UTF-8")
+     if(!identical(old_lines,lines))
+       stop("W09 v2.2 derived file differs from raw ledger: ",path)
+   } else writeLines(lines,path,useBytes=TRUE)
+ }
+ save_lines(normalized,normalised_path)
+ save_lines(Filter(Negate(is.null),events),audit_path)
  invisible(target)
 }
