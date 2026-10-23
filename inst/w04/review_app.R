@@ -58,7 +58,10 @@ ui<-fluidPage(
 )
 server<-function(input,output,session){
   reviewer<-reactiveVal(who)
-  position<-reactiveVal(1L)
+  # Resume at first case without a saved decision; never discard prior events.
+  answered<-names(last_events(events))
+  first_pending<-which(!ids %in% answered)
+  position<-reactiveVal(if(length(first_pending))first_pending[[1L]] else 1L)
   saved<-reactiveVal(events)
   reviewing<-reactiveVal(FALSE)
   complete<-reactive({all(ids %in% names(last_events(saved())))})
