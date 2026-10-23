@@ -67,6 +67,7 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6",max_pages=0L,w07
  if(!nzchar(prompt_src))stop("W09 v2 prompt missing from package.")
  target<-file.path(w09,"v2-",substr(sha(prompt_src),1L,12L),"-",
                     substr(sha(ontpath),1L,12L))
+ if(!identical(model,"gpt-5.6")) target<-paste0(target,"-model-",gsub("[^A-Za-z0-9._-]","_",model))
  mpath<-file.path(target,"manifest.json")
  out<-file.path(target,"fulltext_case_registry.jsonl")
  pm<-list(schema="w09-case-extraction-v2",model=model,
