@@ -3,11 +3,20 @@
 #' Locates the latest returned local W04 trial or full run. For a trial it
 #' produces a trial-only result, never an authoritative W05 handover.
 #' @param map_path Existing map folder; omitted uses open_map("Ostara_collective_action_map").
+#' @param w04 Explicit W04 run directory; required for reliable named-run orchestration.
+#' @param uncertain One of adjudicate or exclude. Exclusion retains the model
+#'   uncertainty and records a policy-based downstream exclusion.
 #' @return Path to finalised trial/full result, invisibly.
 #' @export
-finalize_w04 <- function(map_path=NULL) {
+finalize_w04 <- function(map_path=NULL,w04=NULL,uncertain=c("adjudicate","exclude")) {
+  uncertain<-match.arg(uncertain)
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
+  if(!is.null(w04)){
+    w04<-normalizePath(w04,winslash="/",mustWork=TRUE)
+    if(!startsWith(w04,paste0(normalizePath(file.path(map_path,"runs","W01"),winslash="/",mustWork=TRUE),"/")))
+      stop("Explicit W04 run is outside this evidence map.")
+  }
   roots<-list.dirs(file.path(map_path,"runs","W01"),recursive=FALSE,full.names=TRUE)
   runs<-unlist(lapply(roots,function(p) {
     d<-file.path(p,"W04_local")
@@ -16,12 +25,14 @@ finalize_w04 <- function(map_path=NULL) {
   }),use.names=FALSE)
   runs<-runs[file.exists(file.path(runs,"local_manifest.json"))]
   if(!length(runs))stop("No completed local W04 screening runs found.")
+  if(!is.null(w04))runs<-runs[runs==w04]
   received<-runs[vapply(runs,function(run) {
     if(file.exists(file.path(run,"human_review_returned","receipt.json")) ||
        file.exists(file.path(run,"reconciled_human_review_returned","receipt.json")))return(TRUE)
     if(dir.exists(file.path(run,"reconciled")))return(TRUE)
     manifest<-jsonlite::fromJSON(file.path(run,"local_manifest.json"))
-    identical(manifest$screening_summary_status,"PASS")
+    identical(manifest$screening_summary_status,"PASS") ||
+      (identical(uncertain,"exclude") && identical(manifest$screening_summary_status,"HUMAN_REVIEW_REQUIRED"))
   },logical(1))]
   if(!length(received))stop("No W04 run ready for finalisation: import the required human decisions first.")
   full<-received[grepl("^full-",basename(received))]
@@ -71,7 +82,18 @@ finalize_w04 <- function(map_path=NULL) {
   if(anyDuplicated(ids)||anyDuplicated(names(dmap)))stop("Duplicate W04 record IDs.")
   unresolved<-ids[vapply(source,function(z)
     identical(scalar(z$screening$decision),"uncertain"),logical(1))]
-  if(!has_review && length(unresolved))stop("W04 human adjudication is still required; run adjudicate_w04(w04), then import_w04_review(w04).")
+  if(!has_review && length(unresolved) && identical(uncertain,"adjudicate"))
+    stop("W04 human adjudication is still required; run adjudicate_w04(w04), then import_w04_review(w04).")
+  if(!has_review && identical(uncertain,"exclude")) {
+    for(i in which(ids %in% unresolved)) {
+      source[[i]]$screening$original_decision<-"uncertain"
+      source[[i]]$screening$decision<-"exclude"
+      source[[i]]$screening$decision_origin<-"policy_uncertain_exclusion"
+      source[[i]]$screening$requires_human_review<-FALSE
+      source[[i]]$screening$policy_reason<-"Uncertain relevance; excluded from downstream evidence under run policy"
+    }
+    unresolved<-character()
+  }
   if(!setequal(names(dmap),unresolved))
     stop("Returned human decisions do not exactly match unresolved records.")
   for(i in seq_along(source)) {
@@ -113,6 +135,9 @@ finalize_w04 <- function(map_path=NULL) {
   kind<-scalar(manifest$run_type)
   jsonlite::write_json(list(schema="local-w04-finalisation-v1",status="final",
      run_type=kind,authoritative_w05_handover=identical(kind,"full"),
+     uncertain_policy=uncertain,
+     policy_uncertain_excluded=sum(vapply(source,function(z)
+       identical(scalar(z$screening$decision_origin),"policy_uncertain_exclusion"),logical(1))),
      records=length(source),retain=sum(result_decisions=="retain"),
      exclude=sum(result_decisions=="exclude"),
      source_layer_sha256=sha(layer_path),
