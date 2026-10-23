@@ -1,15 +1,43 @@
 #' Code a small sample of W04-retained publications with an Ostara W07 ontology
 #' @param map_path Project directory; defaults to Ostara project.
-#' @param ontology_file Path to mechanism ontology CSV.
-#' @param prompt_file Path to W07 coding prompt TXT.
+#' @param ontology_file Path to mechanism ontology CSV; omitted reuses the latest archived W07 trial ontology.
+#' @param prompt_file Path to W07 coding prompt TXT; omitted reuses the corresponding archived W07 prompt.
 #' @param n Number of retained records to code; 0 codes all from finalised full W04.
 #' @param model OpenAI Responses model.
 #' @return Local W07 trial directory.
 #' @export
-trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
+trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6",
                       map_path=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
+  if(is.null(ontology_file) || is.null(prompt_file)) {
+    # Reuse a self-contained, provenance-preserving W07 trial. Never prompt
+    # for files or guess from unrelated W04 prompt archives.
+    archive_root<-file.path(map_path,"runs","W07")
+    archived<-if(dir.exists(archive_root))
+      list.dirs(archive_root,recursive=FALSE,full.names=TRUE) else character()
+    archived<-archived[file.exists(file.path(archived,"ontology.csv")) &
+                       file.exists(file.path(archived,"prompt.txt")) &
+                       file.exists(file.path(archived,"manifest.json"))]
+    if(length(archived)) {
+      archived<-archived[order(file.info(file.path(archived,"manifest.json"))$mtime,
+                               decreasing=TRUE)]
+      matching<-Filter(function(d) {
+        m<-jsonlite::fromJSON(file.path(d,"manifest.json"),simplifyVector=FALSE)
+        sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
+        identical(m$ontology_sha256,sha(file.path(d,"ontology.csv"))) &&
+          identical(m$prompt_sha256,sha(file.path(d,"prompt.txt")))
+      },archived)
+      if(length(matching)) {
+        base<-matching[[1L]]
+        if(is.null(ontology_file))ontology_file<-file.path(base,"ontology.csv")
+        if(is.null(prompt_file))prompt_file<-file.path(base,"prompt.txt")
+        message("[W07] Reusing archived ontology and prompt from: ",base)
+      }
+    }
+    if(is.null(ontology_file)||is.null(prompt_file))
+      stop("No verified archived W07 ontology/prompt pair found. Supply file paths once; they will be archived for reuse.")
+  }
   ontology_file<-normalizePath(ontology_file,winslash="/",mustWork=TRUE)
   prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
   archive_map_prompt(prompt_file,"W07",map_path)
