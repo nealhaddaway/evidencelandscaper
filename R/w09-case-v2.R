@@ -8,9 +8,10 @@
 #' @param max_pages PDF page limit, 0 for all; XML/JSON are not truncated.
 #' @param w07_run Optional explicit full W07 archive path. Required when more
 #'   than one completed full W07 run exists; avoids silently selecting v2.
+#' @param prompt_version Versioned W09 prompt; defaults to v2_4. Use v2_3 only to resume historical runs.
 #' @return W09 v2 directory.
 #' @export
-analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,w07_run=NULL) {
+analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,w07_run=NULL,prompt_version="v2_4") {
  if(!requireNamespace("countrycode",quietly=TRUE))
    stop("Install countrycode: install.packages('countrycode')")
  if(!nzchar(Sys.getenv("OPENAI_API_KEY")))stop("OPENAI_API_KEY is required.")
@@ -62,7 +63,9 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
  byid<-setNames(encoded,vapply(encoded,function(z)z$record_id,character(1)))
  if(any(!record_ids%in%names(byid)))
    stop("Selected record IDs absent from W07 full-corpus coding.")
- prompt_src<-system.file("w09","fulltext_case_prompt_v2_3.txt",
+ if(!prompt_version%in%c("v2_3","v2_4"))
+   stop("Unsupported W09 prompt version.")
+ prompt_src<-system.file("w09",paste0("fulltext_case_prompt_",prompt_version,".txt"),
                          package="evidencelandscaper")
  if(!nzchar(prompt_src))stop("W09 v2 prompt missing from package.")
  target<-file.path(w09,"v2-",substr(sha(prompt_src),1L,12L),"-",
