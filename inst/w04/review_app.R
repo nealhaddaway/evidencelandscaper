@@ -33,16 +33,16 @@ ui<-fluidPage(
   titlePanel("W04 · Collective action screening (review v2)"),
   textOutput("reviewer"),h4(textOutput("progress")),
   conditionalPanel("output.ready && !output.complete",
-    p(class="text-muted","Read the abstract and model assessment, choose a decision, and save. Use Previous/Next to review earlier decisions. Exclusions do not require a reason."),
+    p(class="text-muted","Read the abstract and model assessment, choose a decision, and save. Use Previous/Next to review earlier decisions. Reasons are optional for all decisions."),
     fluidRow(column(6,actionButton("prev","Previous")),column(6,actionButton("next","Next"))),
     fluidRow(
       column(8,uiOutput("bibliography"),uiOutput("model")),
       column(4,div(class="box",
         h4("Human screening decision"),
         radioButtons("decision",NULL,
-          choices=c("Select a decision"="", "Retain"="retain","Exclude"="exclude","Uncertain"="uncertain"),
-          selected=""),
-        textAreaInput("reason","Reason (optional for exclusion)",rows=5,width="100%"),
+          choices=c("Retain"="retain","Exclude"="exclude","Uncertain"="uncertain"),
+          selected="retain"),
+        textAreaInput("reason","Reason (optional)",rows=5,width="100%"),
         actionButton("save","Save decision",class="btn-primary"),
         tags$hr(),downloadButton("export","Export adjudication decisions"),
         tags$p(class="text-muted","Human decisions are saved separately from model results.")
@@ -95,7 +95,7 @@ server<-function(input,output,session){
   observeEvent(input[['next']],position(min(length(cases),position()+1L)))
   observeEvent(list(position(),saved()),{
     x<-last_events(saved())[[current()$review_case_id]]
-    updateRadioButtons(session,"decision",selected=if(is.null(x))"" else x$decision)
+    updateRadioButtons(session,"decision",selected=if(is.null(x))"retain" else x$decision)
     updateTextAreaInput(session,"reason",value=if(is.null(x))"" else x$reason)
   })
   output$bibliography<-renderUI({
@@ -149,11 +149,6 @@ server<-function(input,output,session){
     if(!input$decision %in% c("retain","exclude","uncertain"))
       return(showNotification("Select a decision",type="error"))
     reason<-trimws(val(input$reason))
-    # Reasons are optional for exclusions; required only for retain/uncertain.
-    if(identical(input$decision,"retain") || identical(input$decision,"uncertain")) {
-      if(!nzchar(reason))
-        return(showNotification("A reason is required only for Retain or Uncertain.",type="error"))
-    }
     e<-list(schema="local-w04-review-decision-v1",
       review_case_id=x$review_case_id,record_id=x$record_id,
       queue_sha256=queuehash,reviewer=reviewer(),decision=input$decision,
