@@ -85,6 +85,32 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     .orchestrator_summary(state)
     return(invisible(state))
   }
+  if(step=="auto" && is.null(screening) && is.null(extraction)) {
+    # Advance using explicit stage interfaces. Stop only at user decisions,
+    # unresolved human review, or unverifiable evidence. All stages save state.
+    for(i in seq_len(20L)){
+      phase<-state$status
+      next_step<-switch(phase,
+        planned="scope",scoped_counts_only="retrieve",
+        retrieved="deduplicate",w01_scored="finish_w01",
+        screening_scope_saved="enrich",w03_complete="screen",
+        w04_screened="finalize_screen",w04_final="code",
+        extraction_scope_saved="prepare_extraction",
+        w09_prepared="retrieve_fulltexts",fulltexts_ready="extract",
+        extracted="publish",NULL)
+      if(is.null(next_step))break
+      message("[",run_name,"] Orchestrator: ",phase," -> ",next_step)
+      state<-resume_evidence_map(run_name,map=map,step=next_step,
+        sources=sources,screening_prompt=screening_prompt,
+        w07_prompt=w07_prompt,ontology_file=ontology_file,
+        w08_prompt=w08_prompt,model=model,
+        extraction_dir=extraction_dir,coordinates_csv=coordinates_csv)
+      if(identical(state$status,phase))
+        stop("Orchestrator made no progress at ",phase)
+    }
+    .orchestrator_summary(state)
+    return(invisible(state))
+  }
   if(!is.null(screening)) {
     if(!identical(state$status,"awaiting_screening_scope"))
       stop("First decision not currently available. Current status: ",state$status)
@@ -109,8 +135,14 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
             " of ",state$decision1$population," records; uncertain decisions: ",
             state$decision1$uncertain_policy,".")
     message("[",run_name,"] Sample record IDs archived; W04 explicit-ID handover pending.")
-    state$blocking_stage <- "W02-W04 exact sample-ID handover"
+    state$blocking_stage <- NULL
     .orchestrator_save(state)
+    if(step=="auto")
+      return(resume_evidence_map(run_name,map=map,step="auto",
+        sources=sources,screening_prompt=screening_prompt,
+        w07_prompt=w07_prompt,ontology_file=ontology_file,
+        w08_prompt=w08_prompt,model=model,
+        extraction_dir=extraction_dir,coordinates_csv=coordinates_csv))
     return(invisible(state))
   }
   if(!is.null(extraction)) {
@@ -137,6 +169,12 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
             " of ",state$decision2$population,
             " case-bearing publications; uncertain cases: ",
             state$decision2$uncertain_policy,".")
+    if(step=="auto")
+      return(resume_evidence_map(run_name,map=map,step="auto",
+        sources=sources,screening_prompt=screening_prompt,
+        w07_prompt=w07_prompt,ontology_file=ontology_file,
+        w08_prompt=w08_prompt,model=model,
+        extraction_dir=extraction_dir,coordinates_csv=coordinates_csv))
     return(invisible(state))
   }
   if(step=="scope" || (step=="auto"&&identical(state$status,"planned"))) {
