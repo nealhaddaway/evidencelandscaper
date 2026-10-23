@@ -83,15 +83,27 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
   if(!is.null(screening)) {
     if(!identical(state$status,"awaiting_screening_scope"))
       stop("First decision not currently available. Current status: ",state$status)
-    state$decision1 <- .orchestrator_choice(screening, state$scope$eligible_records,stage="screening")
+    if(!file.exists(state$scope$population_path) ||
+       !identical(sha(state$scope$population_path),state$scope$population_sha256))
+      stop("Verified W01 screening population changed.")
+    population<-utils::read.csv(state$scope$population_path,stringsAsFactors=FALSE)
+    if(!identical(names(population),"cluster_id") ||
+       anyDuplicated(population$cluster_id))
+      stop("Invalid W01 screening population.")
+    selection_path<-file.path(home,"screening_sample.csv")
+    sampled<-sample_evidence_records(as.character(population$cluster_id),
+      screening,output_csv=selection_path)
+    state$decision1 <- .orchestrator_choice(screening, state$scope$eligible_records,
+                                           stage="screening")
+    state$decision1$selected_ids_path<-selection_path
+    state$decision1$selected_ids_sha256<-sha(selection_path)
+    state$decision1$selection_sha256<-sampled$selection_sha256
     state$status <- "screening_scope_saved"
     .orchestrator_save(state)
     message("[",run_name,"] Checkpoint 1 saved: ",state$decision1$selected,
             " of ",state$decision1$population," records; uncertain decisions: ",\n            state$decision1$uncertain_policy,".")
-    message("[",run_name,"] W01–W04 multi-run input adapter is not yet validated. ",
-      "STOPPING instead of mixing this expansion with a prior run.")
-    state$status <- "handoff_required"
-    state$blocking_stage <- "W01-W04 first-run handover and sampled screening"
+    message("[",run_name,"] Sample record IDs archived; W04 explicit-ID handover pending.")
+    state$blocking_stage <- "W02-W04 exact sample-ID handover"
     .orchestrator_save(state)
     return(invisible(state))
   }
@@ -154,6 +166,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     if(!"cluster_id"%in% names(d))
       stop("W01 cluster map missing cluster_id; inspect before using as screening corpus.")
     ids<-unique(as.character(d$cluster_id))
+    if(length(ids)!=as.integer(summary$clusters))
+      stop("W01 cluster count differs from finalisation summary.")
     if(anyNA(ids)||any(!nzchar(ids)))stop("Invalid W01 cluster identifiers.")
     ids<-sort(ids,method="radix")
     ids_file<-file.path(home,"w01_screening_population.csv")
