@@ -236,3 +236,28 @@ print(w09_v2_1)
 New W09 v2 case runs use `fulltext_case_prompt_v2_2.txt`. Its SUPPLY CHAIN section limits `cross_cutting` to cases spanning multiple stages where the individual stages cannot be distinguished. Explicit author conclusions are distinguished from aims, objectives, proposed benefits and future plans; no independent effectiveness assessment or detailed statistical extraction is made. These are prompt-only refinements; the existing nested extraction schema is unchanged.
 
 An additional **deterministic derived layer** removes `cross_cutting` when any individually coded stage occurs in the same case: `fulltext_case_registry_normalised.jsonl`. Every removal is logged in `supply_chain_normalisation.jsonl`. Raw `fulltext_case_registry.jsonl` is preserved unchanged. Derived outputs use append-only checks when further records are processed. The previous v2 and v2.1 run directories remain untouched. Additional W07 mechanism suggestions are left for manual Ostara review.
+
+### Ostara editable review and Luna/Sol pilot reports
+
+Reports are packaged at `inst/reports/Ostara_evidence_review.Rmd` and `inst/reports/Ostara_model_comparison.Rmd`. Following installation, copy them to the **top-level of the local Ostara map** so text edits persist:
+
+```r
+remotes::install_github("nealhaddaway/evidencelandscaper",dependencies=FALSE,force=TRUE)
+library(evidencelandscaper)
+map <- open_map("Ostara_collective_action_map")
+for (f in c("Ostara_evidence_review.Rmd","Ostara_model_comparison.Rmd")) {
+  dest <- file.path(map,f)
+  if (!file.exists(dest)) file.copy(system.file("reports",f,package="evidencelandscaper"),dest)
+}
+```
+
+The review report uses project data plus optional `report_inputs/search_metrics.csv`, `screening_by_search.csv`, `fulltext_by_search.csv` for per-search figures not independently recoverable from authoritative pipeline results. Leave these cells unreported rather than estimate. Knit from RStudio without further API requests.
+
+For a **model-matched** pilot, use the same completed ontology/prompt pair for W07 Sol and Luna, and the same n and seed for W08 Sol and Luna. Existing runners accept `model="gpt-6-luna"`; alternative-model runs have a model-specific suffix, preserving Sol outputs. To compare two previously retrieved full texts with W09, specify `w07_run` (absolute completed full-run path) to avoid ambiguity between ontology versions:
+
+```r
+sol <- analyse_w09_cases_v2(w09,record_ids=c("work-e35e229f44c00c48","work-a98a0ec08d809374"),model="gpt-5.6",w07_run=w07_run)
+luna <- analyse_w09_cases_v2(w09,record_ids=c("work-e35e229f44c00c48","work-a98a0ec08d809374"),model="gpt-6-luna",w07_run=w07_run)
+```
+
+The v2.3 prompt and selected ontology are archived separately in each run. Set all six `params` paths in `Ostara_model_comparison.Rmd` to matching Sol/Luna output directories before knitting; manually assess discordance, not just agreement rates. Never alter completed source runs or backfill findings into model outputs. Neither report itself calls an API.
