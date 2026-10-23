@@ -64,7 +64,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","screen","finalize_screen","code","status"),
+                                step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","status"),
                                 screening=NULL,extraction=NULL,sources=NULL,\n                                screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,\n                                w08_prompt=NULL,model="gpt-6-luna") {
   step <- match.arg(step)
   map <- open_map(map)
@@ -110,7 +110,21 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
   if(!is.null(extraction)) {
     if(!identical(state$status,"awaiting_extraction_scope"))
       stop("Second decision not available; downstream screening must complete first.")
+    assessments<-file.path(state$w08$run,"case_assessments.jsonl")
+    if(!file.exists(assessments))stop("W08 case assessment registry missing.")
+    rows<-lapply(readLines(assessments,warn=FALSE,encoding="UTF-8"),
+                 jsonlite::fromJSON,simplifyVector=FALSE)
+    eligible<-vapply(Filter(function(z)z$case_evidence_status %in%
+      c("specific_case","multiple_cases"),rows),
+      function(z)as.character(z$record_id),character(1))
+    if(length(eligible)!=state$case_bearing_publications || anyDuplicated(eligible))
+      stop("W08 candidate publications changed; cannot sample.")
+    selection<-file.path(home,"extraction_sample.csv")
+    chosen<-sample_evidence_records(eligible,extraction,output_csv=selection)
     state$decision2 <- .orchestrator_choice(extraction,state$case_bearing_publications,stage="extraction")
+    state$decision2$selected_ids_path<-selection
+    state$decision2$selected_ids_sha256<-sha(selection)
+    state$decision2$selection_sha256<-chosen$selection_sha256
     state$status <- "extraction_scope_saved"
     .orchestrator_save(state)
     message("[",run_name,"] Checkpoint 2 saved: ",state$decision2$selected,\n            " of ",state$decision2$population,\n            " case-bearing publications; uncertain cases: ",\n            state$decision2$uncertain_policy,".")
@@ -138,6 +152,27 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
             state$scope$unknown_source_counts," source counts unavailable.")
     message("[",run_name,"] These are GROSS database hits, not deduplicated records.")
     message("[",run_name,"] Retrieval/deduplication required before sampling checkpoint 1.")
+    return(invisible(state))
+  }
+  if(step=="prepare_extraction") {
+    if(!identical(state$status,"extraction_scope_saved"))
+      stop("Checkpoint 2 must be completed before W09 preparation.")
+    if(!identical(state$decision2$uncertain_policy,"exclude"))
+      stop("Uncertain W08 records require adjudication before extraction; ",
+           "no automatic positive assignment is permitted.")
+    selected<-state$decision2$selected_ids_path
+    if(!file.exists(selected) ||
+       !identical(sha(selected),state$decision2$selected_ids_sha256))
+      stop("Checkpoint 2 exact publication IDs changed.")
+    w09<-prepare_w09_from_w08(state$w08$run,map_path=map,
+      include_unclear=FALSE,include_unvalidated=FALSE,record_ids_csv=selected)
+    state$w09<-list(run=w09,source_w08=state$w08$run,
+                    selection_sha256=sha(selected))
+    state$status<-"w09_prepared"
+    state$blocking_stage<-"W09 document retrieval, full-text validation, extraction and publication"
+    .orchestrator_save(state)
+    message("[",run_name,"] W09 prepared ",state$decision2$selected,
+            " candidate publications; original W08 decision statuses preserved.")
     return(invisible(state))
   }
   if(step=="screen") {
