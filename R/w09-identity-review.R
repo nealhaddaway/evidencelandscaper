@@ -28,3 +28,54 @@ record_w09_verified_identities <- function(w09) {
  message("[W09] Recorded two hash-bound human-verified identities.")
  invisible(dest)
 }
+
+
+#' Append the verified Ethiopian barley thesis identity to W09
+#'
+#' The reviewed source is the locally converted GROBID TEI for the thesis
+#' Foreign Investment, Organizational Innovation and Transformation in Food
+#' Supply Chains: Evidence from the Ethiopian Barley Sector. The TEI header
+#' incorrectly identifies a chapter title as the thesis title.
+#' @param w09 Prepared W09 directory.
+#' @return Path to the append-only-by-record reviewed identity CSV.
+#' @export
+record_w09_barley_thesis_identity <- function(w09) {
+ w09<-normalizePath(w09,mustWork=TRUE)
+ id<-"work-17db08a0a06fcff7"
+ q<-utils::read.csv(file.path(w09,"retrieval_queue.csv"),
+                    stringsAsFactors=FALSE)
+ row<-q[q$record_id==id,,drop=FALSE]
+ if(nrow(row)!=1L)stop("Expected W09 record is missing.")
+ expected<-"Foreign Investment, Organizational Innovation and Transformation in Food Supply Chains: Evidence from the Ethiopian Barley Sector"
+ if(!identical(as.character(row$title[[1L]]),expected))
+   stop("W02 title differs from the manually checked thesis title.")
+ source<-file.path(w09,"grobid_tei",paste0(id,".xml"))
+ if(!file.exists(source))stop("Converted thesis XML not found.")
+ doc<-xml2::read_xml(source)
+ body<-xml2::xml_find_first(doc,"//*[local-name()='body']")
+ if(inherits(body,"xml_missing"))stop("Missing thesis body.")
+ txt<-tolower(xml2::xml_text(body))
+ needed<-c("ethiopia","barley","supply chain","cooperative")
+ if(!all(vapply(needed,grepl,logical(1),x=txt,fixed=TRUE)))
+   stop("Thesis does not contain the expected topical anchors.")
+ rownew<-data.frame(record_id=id,decision="accept",
+    sha256=digest::digest(file=source,algo="sha256",serialize=FALSE),
+    basis=paste("Manual review of substantive Ethiopian malt-barley PhD",
+      "thesis, chapter structure and study design compared against W02.",
+      "GROBID extracted chapter title rather than thesis title."),
+    stringsAsFactors=FALSE)
+ dest<-file.path(w09,"w09_identity_reviews.csv")
+ if(!file.exists(dest))stop("Existing two identity decisions missing.")
+ reviews<-utils::read.csv(dest,stringsAsFactors=FALSE)
+ if(id%in%reviews$record_id) {
+   old<-reviews[reviews$record_id==id,names(rownew),drop=FALSE]
+   if(!identical(old,rownew))stop("Existing identity decision differs.")
+   message("[W09] Thesis decision already present.")
+   return(invisible(dest))
+ }
+ if(anyDuplicated(reviews$record_id))stop("Duplicate identity reviews.")
+ reviews<-rbind(reviews,rownew)
+ utils::write.csv(reviews,dest,row.names=FALSE)
+ message("[W09] Added hash-bound thesis identity review: ",id)
+ invisible(dest)
+}
