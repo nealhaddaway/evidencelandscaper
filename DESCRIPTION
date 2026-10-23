@@ -19,5 +19,6 @@ Suggests:
     xml2,
     stringi,
     ggplot2,
-    pdftools
+    pdftools,
+    countrycode
 Config/testthat/edition: 3
