@@ -171,11 +171,7 @@ retrieve_w09_openalex_content <- function(w09) {
           }
           if(!identical(entry$openalex_status,"saved"))
             entry$openalex_status<-"no_usable_hosted_content"
-        } else {
-          entry$openalex_match<-"unverified_or_lookup_error"
-          entry$openalex_status<-"not_retrieved"
-        }
-      } else entry$openalex_status<-"no_doi"
+      }
     }
     if(is.null(entry$file)) {
       # Only unsuccessful OpenAlex candidates fall through to ScienceDirect.
@@ -236,6 +232,9 @@ retrieve_w09_openalex_content <- function(w09) {
   df<-do.call(rbind,rows)
   df<-df[match(q$record_id,df$record_id),,drop=FALSE]
   utils::write.csv(df,report,row.names=FALSE)
+  message(sprintf("[W09 complete] OpenAlex hosted content availability: %d/%d (GROBID XML: %d, document: %d).",
+    sum(df$openalex_xml_available|df$openalex_document_available),nrow(df),
+    sum(df$openalex_xml_available),sum(df$openalex_document_available)))
   message(sprintf("[W09 complete] %d/%d retrieved; OpenAlex-hosted XML: %d; OpenAlex-hosted document: %d; ScienceDirect: %d; unavailable: %d.",
     sum(df$outcome!="unavailable"),nrow(df),
     sum(df$source=="OpenAlex_hosted_content"&df$format=="xml"),
