@@ -201,3 +201,20 @@ w09 <- prepare_w09_cases()
 # Only supply IDs AFTER verifying that their full-text files match the publications:
 # analyse_w09_cases(w09,record_ids=c("work-e35e229f44c00c48"))
 ```
+
+### W09 v2: moderate case registry with geographic and mechanism validation
+
+The original W09 v1 full-text cases remain untouched. New `analyse_w09_cases_v2()` creates its own versioned directory under the W09 pilot. The archived, checksummed full-corpus W07 ontology and coding are the exclusive mechanism reference, with one full-text status per abstract-assigned mechanism and additional supported mechanisms recorded per case. Geography uses separate country name and validated ISO 3166-1 alpha-3 code fields, plus distinct subnational location entries linked to their operational country. Commodities and controlled supply-chain stages are repeatable lists. Case summaries cover objectives, actors, collaboration, governance, resources, enablers, barriers, and only explicit author conclusions, not effectiveness assessment, significance tests or quantitative effect estimates. Country-code mismatches stop the run before it is appended.
+
+Install `countrycode` before use. To protect the existing pilot, run only after verifying the source full-text identity, preferably on one record first:
+
+```r
+if (!requireNamespace("countrycode",quietly=TRUE)) install.packages("countrycode")
+remotes::install_github("nealhaddaway/evidencelandscaper",dependencies=FALSE,force=TRUE)
+library(evidencelandscaper)
+w09 <- prepare_w09_cases()
+# Will make ONE new model call, in a new W09 v2 directory; do not call until ready.
+# v2 <- analyse_w09_cases_v2(w09,record_ids="work-e35e229f44c00c48")
+```
+
+The model response is archived per publication in `fulltext_case_registry.jsonl`, never overwriting v1 `fulltext_extraction.jsonl`. The extraction uses a single JSON object per publication with separate nested country, location, commodity, supply-chain stage and mechanism arrays. These outputs remain provisional pending human checks against source texts. W04 and W07 are read-only.
