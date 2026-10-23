@@ -147,3 +147,24 @@ For an already finalised run, `finalize_w04()` verifies and reuses the existing 
 
 ---
 *Maintained alongside the R code. Amend this guide whenever stage behaviour, entry points or validated statuses change.*
+
+## W08 v2 and W09 full-text case pilot (23 October 2026)
+
+The first W08 20-record run used prompt v1; it is retained unchanged. New `trial_w08_cases()` calls default to packaged **v2**, which distinguishes identifiable collective action from research studies, commercial service provision and broad social mobilisation. It records separate confidence in case identification and evidence of actor coordination. Check the prompt fingerprint for any new pilot; do not assume earlier v1 responses were revised.
+
+W09 is independent of W07/W08 and runs in two explicit steps:
+
+1. **Retrieve and verify.** `prepare_w09_cases()` produces a local six-publication queue (four promising candidates and two challenging examples), without external requests. `retrieve_w09_oa(w09)` optionally attempts open-access PDF retrieval via DOI/OpenAlex. It reports missing or unsuccessful downloads without changing the source records. Alternatively, place legally obtained PDFs under `<w09>/pdfs/<record_id>.pdf`. **Manually confirm the PDF matches the publication**; a valid PDF header alone does not validate source identity. Use `inventory_w09_pdfs(w09)` to inventory available files.
+2. **Full-text verification and extraction.** Once a PDF's identity has been checked, explicitly pass its ID to `analyse_w09_cases(w09,record_ids=c("work-..."))`. This reads page-labelled PDF text with `pdftools`, uses the archived W09 prompt and makes one OpenAI call per unprocessed, confirmed PDF. Output is append-only `fulltext_extraction.jsonl`. Author/participant claims are extracted as attributed, quotation-supported observations, **not evidence-map judgements of effectiveness**. This is an experimental pilot; manually validate extracted quotations, page numbers, case boundaries and source claims. No automated publication-case deduplication or relational export is implemented yet.
+
+```r
+remotes::install_github("nealhaddaway/evidencelandscaper", dependencies=FALSE, force=TRUE)
+library(evidencelandscaper)
+w09 <- prepare_w09_cases()
+retrieve_w09_oa(w09, max_records=6)
+inventory_w09_pdfs(w09)
+# Only after checking a downloaded or supplied PDF matches its publication:
+# analyse_w09_cases(w09, record_ids=c("work-e35e229f44c00c48"))
+```
+
+Avoid running W08 v2 or W09 full-text model calls until their respective pilot inputs and cost are understood; neither is triggered by preparation. W09 does not overwrite or revise the completed W08 v1, W07, or W04 layers.
