@@ -261,3 +261,7 @@ luna <- analyse_w09_cases_v2(w09,record_ids=c("work-e35e229f44c00c48","work-a98a
 ```
 
 The v2.3 prompt and selected ontology are archived separately in each run. Set all six `params` paths in `Ostara_model_comparison.Rmd` to matching Sol/Luna output directories before knitting; manually assess discordance, not just agreement rates. Never alter completed source runs or backfill findings into model outputs. Neither report itself calls an API.
+
+### Ostara provisional model selection (23 October 2026)
+
+W07 abstract mechanism coding (`trial_w07`), W08 case identification (`trial_w08_cases`) and W09 v2 full-text case extraction (`analyse_w09_cases_v2`) now default to `model="gpt-6-luna"`. This is a provisional cost-conscious choice pending client approval; it is not a claim of equal accuracy. To use Sol for any run, specify `model="gpt-5.6"` explicitly. Existing results and model-specific archives remain untouched. The model is recorded in each run's manifest. When comparing outputs use the same sample IDs, archived ontology and prompt, and explicitly select the relevant full W07 run for W09.
