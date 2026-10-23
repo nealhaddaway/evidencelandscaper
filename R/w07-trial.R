@@ -55,6 +55,8 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
   screened<-readjl(final_path)
   retained<-Filter(function(x)identical(x$screening$decision,"retain"),screened)
   if(!length(retained))stop("No retained W04 trial records found.")
+  if(n==0L && (length(screened)!=summary$records || length(retained)!=summary$retain))
+    stop("W07 input counts do not match finalised W04 summary.")
   selected<-if(n==0L)retained else head(retained,n)
   root<-dirname(dirname(w04))
   canonical_file<-file.path(root,"W02_main","finalised","canonical.jsonl")
@@ -110,7 +112,7 @@ trial_w07 <- function(ontology_file, prompt_file, n=5L, model="gpt-5.6",
     z<-source[[record_id]]$canonical
     abstract<-if(!is.null(amended[[record_id]]))amended[[record_id]] else z$abstract
     record<-list(record_id=record_id,title=z$title,abstract=abstract,
-                 keywords=z$keywords)
+                 keywords=if(!is.null(z$author_keywords))z$author_keywords else z$keywords)
     body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
       input=list(list(role="system",content=list(list(type="input_text",text=instructions))),
                  list(role="user",content=list(list(type="input_text",
