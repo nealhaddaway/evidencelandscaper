@@ -55,7 +55,7 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
     if (is.na(title) || !nzchar(trimws(title))) stop("Missing verified article title: ", z$record_id)
     doi <- publication$doi[[1L]]
     doi <- if (is.na(doi)) "" else trimws(as.character(doi))
-    doi <- sub("^https?://(?:dx\\.)?doi\\.org/", "", doi, ignore.case = TRUE)
+    doi <- sub("^https?://(?:dx\\.)?doi\\.org/", "", doi, ignore.case = TRUE, perl = TRUE)
     doi <- sub("^doi:", "", doi, ignore.case = TRUE)
     doi_url <- if(nzchar(doi)) paste0("https://doi.org/",utils::URLencode(doi, reserved=FALSE)) else NULL
     scholar_url <- paste0("https://scholar.google.com/scholar?q=",
@@ -130,7 +130,7 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
   # Output files are immutable per input digest, including human geocoding edits.
   if(file.exists(out_manifest)) {
     old <- jsonlite::fromJSON(out_manifest)
-    if(!identical(old$input_sha256,unname(vapply(inputs,sha,character(1)))) ||
+    if(!identical(unname(unlist(old$input_sha256)),unname(vapply(inputs,sha,character(1)))) ||
        !identical(old$output_sha256$case_evidence,sha(output_json)) ||
        !identical(old$output_sha256$case_index,sha(output_csv)))
       stop("Archived atlas export differs from inputs; refusing overwrite.")
