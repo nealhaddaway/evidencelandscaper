@@ -151,7 +151,6 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
       httr2::req_body_json(body,auto_unbox=TRUE) |>
       httr2::req_timeout(180) |> httr2::req_perform() |>
       httr2::resp_body_json(simplifyVector=FALSE)
-   record_api_usage(map_path,"W07",record_id,resp,model=model)
     texts<-unlist(lapply(resp$output,function(item)
       unlist(lapply(item$content,function(part)
         if(identical(part$type,"output_text"))part$text else NULL),use.names=FALSE)),
