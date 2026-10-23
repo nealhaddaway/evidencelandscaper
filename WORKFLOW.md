@@ -218,3 +218,15 @@ w09 <- prepare_w09_cases()
 ```
 
 The model response is archived per publication in `fulltext_case_registry.jsonl`, never overwriting v1 `fulltext_extraction.jsonl`. The extraction uses a single JSON object per publication with separate nested country, location, commodity, supply-chain stage and mechanism arrays. These outputs remain provisional pending human checks against source texts. W04 and W07 are read-only.
+
+### W09 prompt v2.1 supply-chain clarification
+
+The packaged `fulltext_case_prompt_v2_1.txt` replaces only the SUPPLY CHAIN section of v2, restricting stage assignment to stages undertaken or directly coordinated by the initiative. The original v2 prompt is preserved. `analyse_w09_cases_v2()` defaults to v2.1 and creates a different prompt-checksummed directory, so old v2 records remain intact. To test the next case, after source identity verification:
+
+```r
+remotes::install_github("nealhaddaway/evidencelandscaper", dependencies=FALSE, force=TRUE)
+library(evidencelandscaper)
+w09 <- prepare_w09_cases()
+w09_v2_1 <- analyse_w09_cases_v2(w09, record_ids="work-a98a0ec08d809374", model="gpt-5.6")
+print(w09_v2_1)
+```
