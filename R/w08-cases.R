@@ -190,18 +190,35 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6",
         list(role="user",content=list(list(type="input_text",
           text=jsonlite::toJSON(input,auto_unbox=TRUE,null="null"))))),
       text=list(format=list(type="json_object")))
-    resp<-httr2::request("https://api.openai.com/v1/responses") |>
-      httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY")) |>
-      httr2::req_body_json(body,auto_unbox=TRUE) |>
-      httr2::req_timeout(180) |> httr2::req_perform() |>
-      httr2::resp_body_json(simplifyVector=FALSE)
-    pieces<-unlist(lapply(resp$output,function(item)
-      unlist(lapply(item$content,function(x)
-        if(identical(x$type,"output_text"))x$text else NULL),
-        use.names=FALSE)),use.names=FALSE)
-    if(!length(pieces))stop("No W08 text response for ",record_id)
-    z<-jsonlite::fromJSON(pieces[[1L]],simplifyVector=FALSE)
-    validate(z,record_id,txt)
+    # Retry once only for source-quotation mismatches; never relax evidence
+    # validation. Previously completed records remain append-only.
+    for(attempt in seq_len(2L)) {
+      resp<-httr2::request("https://api.openai.com/v1/responses") |>
+        httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY")) |>
+        httr2::req_body_json(body,auto_unbox=TRUE) |>
+        httr2::req_timeout(180) |> httr2::req_perform() |>
+        httr2::resp_body_json(simplifyVector=FALSE)
+      pieces<-unlist(lapply(resp$output,function(item)
+        unlist(lapply(item$content,function(x)
+          if(identical(x$type,"output_text"))x$text else NULL),
+          use.names=FALSE)),use.names=FALSE)
+      if(!length(pieces))stop("No W08 text response for ",record_id)
+      z<-jsonlite::fromJSON(pieces[[1L]],simplifyVector=FALSE)
+      issue<-tryCatch({validate(z,record_id,txt);NULL},
+                      error=function(e)conditionMessage(e))
+      if(is.null(issue))break
+      if(attempt==2L || !startsWith(issue,"W08 evidence excerpt not in input:"))
+        stop(issue)
+      message("[W08] Invalid model quotation for ",record_id,
+              "; retrying once with explicit source-verbatim instruction.")
+      body$input[[1L]]$content[[1L]]$text<-paste0(
+        prompt,"\n\nRETRY VALIDATION: The previous response gave a ",
+        "supporting_evidence quotation that was NOT a verbatim substring ",
+        "of the supplied title or abstract. Return only exact continuous ",
+        "source excerpts in supporting_evidence. Do not paraphrase, ",
+        "change punctuation, or quote text from elsewhere. If no exact ",
+        "evidence can be found, do not report a supported case.")
+    }
     cat(jsonlite::toJSON(z,auto_unbox=TRUE,null="null"),"\n",
         file=out,append=TRUE,sep="")
     message("[W08] ",record_id,": ",z$case_evidence_status,
