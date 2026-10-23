@@ -177,6 +177,8 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
     txt<-paste(unlist(c(can$title,abs),use.names=FALSE),collapse=" ")
     validate(z,rid,txt)
   }
+  message("[W08] Progress: ",length(done_ids)," of ",length(selected)," records completed; ",length(selected)-length(done_ids)," remaining.")
+  progress_index<-length(done_ids)
   for(record_id in selected[!selected %in% done_ids]) {
     can<-source[[record_id]]$canonical
     abs<-if(!is.null(corrected[[record_id]]))corrected[[record_id]] else can$abstract
@@ -221,7 +223,8 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
     }
     cat(jsonlite::toJSON(z,auto_unbox=TRUE,null="null"),"\n",
         file=out,append=TRUE,sep="")
-    message("[W08] ",record_id,": ",z$case_evidence_status,
+    progress_index<-progress_index+1L
+    message("[W08] Record ",progress_index," of ",length(selected),": ",record_id,"; ",z$case_evidence_status,
             " (",length(z$cases)," cases)")
   }
   all<-readjl(out)
