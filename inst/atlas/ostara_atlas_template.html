@@ -1,0 +1,64 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ostara | Evidence atlas</title>
+<style>
+:root{--ink:#233a35;--muted:#667b73;--accent:#cf7049;--pale:#f3f5f1}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui, sans-serif;background:#fafbf9;color:var(--ink)}
+header{padding:20px 28px;background:white;border-bottom:1px solid #dae3dc}h1{font:32px/1.2 Georgia,serif;margin:2px 0 7px}
+small{color:var(--muted)}main{display:grid;grid-template-columns:350px 1fr;height:calc(100vh - 119px);min-height:570px}
+aside{background:white;border-right:1px solid #dae3dc;overflow-y:auto;padding:18px}
+input,select{width:100%;border:1px solid #cedbd3;padding:10px;margin:4px 0 12px;border-radius:5px;background:white}
+#maparea{position:relative;overflow:hidden;background:#e9efe8}#world{width:100%;height:100%;display:block;touch-action:pan-y}
+.land{fill:#d4ded5;stroke:#b5c7b9;stroke-width:.55}.graticule{stroke:#d7e4dd;stroke-width:.55;fill:none}
+.marker{fill:var(--accent);stroke:white;stroke-width:1.25;cursor:pointer}.marker:hover,.marker.selected{fill:#a64728;stroke:var(--ink);stroke-width:1.7}
+.item{cursor:pointer;border-bottom:1px solid #e4eae5;padding:10px 3px}.item:hover{background:#f1f5ef}.item strong{display:block}
+#popup{position:absolute;right:15px;top:15px;width:min(390px,90%);max-height:85%;overflow:auto;padding:18px;background:white;box-shadow:0 7px 34px #324b4342;border-radius:6px;display:none}
+#popup h2{margin:0 0 10px;font:23px Georgia,serif}#popup a{color:#984d31}#popup p{margin:9px 0}#popup .close{float:right;border:0;background:#eee;padding:3px 8px;cursor:pointer}
+.notice{position:absolute;bottom:12px;left:14px;background:#ffffffd9;padding:7px 11px;font-size:12px;border-radius:4px}
+@media(max-width:780px){main{display:flex;flex-direction:column-reverse;height:auto}aside{max-height:45vh}#maparea{height:54vh;min-height:320px}}
+</style></head><body><header><small>OSTARA / EVIDENCE SYNTHESIS</small><h1>Collective action evidence atlas</h1><small id="summary">Verified publication–case observations · indicative geography</small></header><main>
+<aside><label for="find">Search cases or articles</label><input id="find" placeholder="Search evidence"><label for="country">Country</label><select id="country"><option value="">All countries</option></select><label for="mechanism">Mechanism</label><select id="mechanism"><option value="">All mechanisms</option></select><div id="count"></div><div id="listing"></div></aside>
+<section id="maparea"><svg id="world" viewBox="0 0 1000 510" role="img" aria-label="World map of indicative Ostara case coordinates"><rect width="1000" height="510" fill="#e9efe8"/><g id="geography">__MAP_PATHS__</g><g id="markers"></g></svg><div id="popup"><button class="close" id="close">Close</button><div id="info"></div></div><div class="notice">Built-in world boundaries · no map tiles, API key or internet required · positions indicative</div></section></main>
+<script id="case-data" type="application/json">__CASE_DATA__</script>
+<script>
+"use strict";
+const cases=JSON.parse(document.getElementById("case-data").textContent).cases||[];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const countries=c=>(c.case.countries||[]).map(x=>x.country_name).filter(Boolean);
+const codes=c=>(c.case.additional_mechanisms||[]).map(x=>x.mechanism_id).filter(Boolean);
+const values=x=>Array.isArray(x)?x.map(y=>typeof y==="string"?y:JSON.stringify(y)).join("; "):String(x??"");
+const link=(url,label)=>url?'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+"</a>":"";
+function view(c){
+const x=c.case,p=c.publication,k=c.coordinates;
+let v="<h2>"+esc(x.case_name||"Unnamed case")+"</h2><p>"+esc(x.case_description)+"</p>";
+v+="<p><b>Publication:</b> "+esc(p.title)+"<br>"+link(p.doi_url,"DOI: "+p.doi)+" · "+link(p.google_scholar_url,"Google Scholar title lookup")+"</p>";
+v+="<p><b>Record:</b> "+esc(p.record_id)+"<br><b>Observation:</b> "+esc(c.observation_id)+"</p>";
+v+="<p><b>Geography:</b> "+esc(countries(c).join(", "))+"<br><b>Coordinate basis:</b> "+esc(k.coordinate_basis)+"<br><b>Coordinate source:</b> "+esc(k.coordinate_source)+"</p>";
+v+="<p><b>Mechanisms:</b> "+esc(codes(c).join(", "))+"</p>";
+for(const f of ["objectives","actors","collaboration_activities","governance","resources_incentives","enablers","barriers","commodities","supply_chain_stages"])if(x[f]&&x[f].length)v+="<p><b>"+esc(f.replaceAll("_"," "))+":</b> "+esc(values(x[f]))+"</p>";
+for(const f of ["additional_mechanisms","author_conclusions"])for(const a of x[f]||[])v+="<p><b>"+esc(a.mechanism_id||a.conclusion||f)+":</b> "+esc(a.conclusion||"")+"<br><i>"+esc(a.source_quote||"")+"</i> "+esc(a.source_anchor||"")+"</p>";
+v+="<p><small>Source SHA-256: "+esc(p.source_sha256)+"<br>Prompt SHA-256: "+esc(c.extraction.prompt_sha256)+"</small></p>";
+$("info").innerHTML=v;$("popup").style.display="block";
+}
+$("close").onclick=()=>$("popup").style.display="none";
+function pos(c){const k=c.coordinates,lat=Number(k.latitude),lon=Number(k.longitude);if(k.latitude==null||k.longitude==null||!Number.isFinite(lat)||!Number.isFinite(lon))return null;return [500+lon*1000/360,255-lat*510/180]}
+const ns="http://www.w3.org/2000/svg";
+const unique=(arr)=>[...new Set(arr)].sort();
+for(const name of unique(cases.flatMap(countries)))$("country").add(new Option(name,name));
+for(const name of unique(cases.flatMap(codes)))$("mechanism").add(new Option(name,name));
+function render(){
+const q=$("find").value.toLowerCase().trim(),country=$("country").value,code=$("mechanism").value;
+const filtered=cases.filter(c=>(!country||countries(c).includes(country))&&(!code||codes(c).includes(code))&&(!q||[c.case.case_name,c.case.case_description,c.publication.title,...countries(c)].join(" ").toLowerCase().includes(q)));
+$("markers").replaceChildren();$("listing").replaceChildren();let mapped=0;
+for(const c of filtered){
+const p=pos(c);const item=document.createElement("div");item.className="item";
+item.innerHTML="<strong>"+esc(c.case.case_name||"Unnamed case")+"</strong><small>"+esc(c.publication.title)+"</small>";
+item.onclick=()=>view(c);$("listing").appendChild(item);
+if(p){mapped++;const m=document.createElementNS(ns,"circle");m.setAttribute("cx",p[0]);m.setAttribute("cy",p[1]);m.setAttribute("r","5");m.setAttribute("class","marker");m.setAttribute("tabindex","0");m.setAttribute("aria-label",c.case.case_name||"Case");
+m.onclick=()=>view(c);m.onkeydown=e=>{if(e.key==="Enter")view(c)};$("markers").appendChild(m)}
+}
+$("count").textContent=filtered.length+" cases · "+mapped+" indicative points";
+}
+for(const id of ["find","country","mechanism"])$(id).addEventListener(id==="find"?"input":"change",render);
+$("summary").textContent=cases.length+" publication–case observations · linked evidence · offline world basemap";
+render();
+</script></body></html>
