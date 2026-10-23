@@ -31,6 +31,18 @@ publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_d
     if(length(candidates)!=1L)stop("Cannot uniquely locate approved V2.5 Luna W09 extraction.")
     extraction_dir <- candidates[[1L]]
   }
+  if(is.null(coordinates_csv)) {
+    saved <- file.path(map_path,"report_inputs","ostara_case_coordinates.csv")
+    bundled <- system.file("extdata","ostara_w09_geocoding_draft.csv",
+                           package="evidencelandscaper")
+    if(file.exists(saved)) {
+      coordinates_csv <- saved
+      message("[Ostara publication] Reusing saved reviewed coordinate registry: ",saved)
+    } else if(nzchar(bundled) && file.exists(bundled)) {
+      coordinates_csv <- bundled
+      message("[Ostara publication] Using bundled 31-point UNVERIFIED draft; review coordinates before definitive publication.")
+    } else stop("No saved or bundled geocoding provenance available.")
+  }
   message("[Ostara publication] 0/3 resolving provenance-linked extraction")
   atlas <- republish_w09_atlas(w09,extraction_dir,coordinates_csv)
   message("[Ostara publication] 1/3 HTML atlas complete")
