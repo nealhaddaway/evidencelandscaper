@@ -3,11 +3,11 @@
 #' @param ontology_file Path to mechanism ontology CSV; omitted reuses the latest archived W07 trial ontology.
 #' @param prompt_file Path to W07 coding prompt TXT; omitted reuses the corresponding archived W07 prompt.
 #' @param n Number of retained records to code; 0 codes all from finalised full W04.
-#' @param model OpenAI Responses model.
+#' @param w04_run Optional explicit finalised W04 run, including a selected-record run.\n#' @param model OpenAI Responses model.
 #' @return Local W07 trial directory.
 #' @export
 trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-luna",
-                      map_path=NULL) {
+                      map_path=NULL,w04_run=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   if(is.null(ontology_file) || is.null(prompt_file)) {
@@ -62,7 +62,7 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
     list.dirs(path,recursive=FALSE,full.names=TRUE)
   }),use.names=FALSE)
   options<-options[file.exists(file.path(options,"finalised","summary.json"))]
-  options<-options[if(n==0L)grepl("^full-",basename(options)) else grepl("^trial-",basename(options))]
+  if(!is.null(w04_run)) {\n    w04_run<-normalizePath(w04_run,winslash="/",mustWork=TRUE)\n    options<-options[options==w04_run]\n  } else {\n    options<-options[if(n==0L)grepl("^full-",basename(options)) else grepl("^trial-",basename(options))]\n  }
   if(!length(options))stop("No appropriate finalised W04 screening run: full W04 required when n=0.")
   options<-options[order(file.info(file.path(options,"finalised","summary.json"))$mtime,
                          decreasing=TRUE)]
@@ -71,7 +71,7 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
   final_path<-file.path(w04,"finalised","workflow04_final_screening_layer.jsonl")
   summary<-jsonlite::fromJSON(summary_path)
   if(!identical(summary$status,"final")||
-     (n==0L && !identical(summary$run_type,"full"))||
+     (n==0L && is.null(w04_run) && !identical(summary$run_type,"full"))||
      !identical(summary$final_layer_sha256,sha(final_path))||
      !identical(summary$original_consensus_sha256 %||% summary$source_layer_sha256,
                 sha(file.path(w04,"consensus","workflow04_consensus_layer.jsonl"))))
