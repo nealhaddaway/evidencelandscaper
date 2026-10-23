@@ -17,5 +17,6 @@ Suggests:
     testthat (>= 3.0.0),
     shiny,
     xml2,
-    stringi
+    stringi,
+    ggplot2
 Config/testthat/edition: 3
