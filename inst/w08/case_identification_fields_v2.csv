@@ -1,0 +1,16 @@
+field,level,type,allowed_values,description
+record_id,publication,string,,Stable canonical publication identifier
+case_evidence_status,publication,enum,specific_case|multiple_cases|no_identifiable_case|unclear,Abstract identification result
+cases,publication,array,,Candidate cases nested under publication
+case_name,case,string_or_null,,Source-stated name only
+case_description,case,string,,Distinguishing description
+case_location,case,string_or_null,,Source-stated location
+case_sector,case,string_or_null,,Source-stated sector
+implementation_status,case,enum,implemented|proposed|historical|unclear,Source-supported status
+supporting_evidence,case,string,,Verbatim text from title or abstract
+confidence,case,enum,high|medium|low,Confidence in distinct case identity
+collective_action_confidence,case,enum,high|medium|low,Confidence in relevant coordination
+collective_action_basis,case,string,,Evidence for or uncertainty about joint sustainability action
+case_kind,case,enum,collective_arrangement|research_activity|commercial_service|social_mobilisation|other_unclear,Preliminary case category
+fulltext_priority,publication,enum,high|medium|low,Priority for full-text verification
+assessment_reason,publication,string,,Reason for classification
