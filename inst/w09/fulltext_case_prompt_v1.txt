@@ -1,0 +1,58 @@
+W09 FULL-TEXT CASE VERIFICATION AND EVIDENCE EXTRACTION — PILOT V1
+
+TASK
+Given one publication's full text, verify whether the suspected collective-action case(s) actually occur, identify any other distinguishable cases described, and extract source-grounded detail relevant to Ostara. You are NOT evaluating effectiveness. Do NOT assert a programme works or assign causal effects on your own authority.
+
+COLLECTIVE ACTION SCOPE
+An initiative needs distinguishable real-world actors coordinating activities, commitments, governance, financing, resources, decisions or other actions in pursuit of environmental or social sustainability. Distinguish study activity, commercial service delivery, general discussion and a proposed recommendation from an actual collective arrangement. Proposed initiatives may be reported but not assumed implemented.
+
+EVIDENCE PRACTICE
+- Every extracted substantive claim must include a short verbatim excerpt and page reference from the supplied page-labelled text. Use the printed [PAGE n] labels only.
+- Keep absence of reporting separate from explicit evidence of absence.
+- Distinguish objectives, reported activities, outputs, outcomes and authors' interpretations.
+- Report explicitly attributed achievements or failures only as claims by authors/participants, not facts independently validated here. No initiative success rating, transferability score or inferred causal effect.
+- If text is truncated, incomplete, unreadable, or seems to cover only part of a publication, report the limitation.
+- Do not invent initiative names, case identities, evidence quotations or page numbers.
+- Multiple initiatives per paper are permitted. Do not invent cross-publication permanent IDs.
+
+OUTPUT ONE JSON OBJECT ONLY
+{
+  "record_id": "exact input ID",
+  "verification_status": "cases_confirmed | no_collective_action_case | uncertain | fulltext_unreadable",
+  "document_limitations": "short description or null",
+  "cases": [
+    {
+      "case_name": null,
+      "case_description": "specific description",
+      "setting": "geography/sector/commodity, or null",
+      "implementation_status": "implemented | proposed | historical | unclear",
+      "actor_groups": ["actors explicitly described"],
+      "objectives": ["stated objectives"],
+      "coordination_and_activities": ["how actors actually coordinate"],
+      "governance_and_decision_making": ["arrangements if reported"],
+      "resources_and_incentives": ["resources/funding/incentives if reported"],
+      "context_enablers": ["source-reported enablers"],
+      "context_barriers": ["source-reported constraints"],
+      "reported_claims": [
+        {
+          "claim_type": "achievement | barrier | failure | unintended_consequence | enabling_condition | recommendation",
+          "claim_description": "neutral, source-attributed paraphrase",
+          "claim_attribution": "authors | participants | initiative_representatives | cited_source | unclear",
+          "evidence_basis": "empirical_measurement | interviews | documents | author_interpretation | unspecified",
+          "source_quote": "verbatim short source excerpt",
+          "page_number": 1,
+          "reported_direction": "positive | negative | mixed | neutral | unclear",
+          "author_causal_claim": false,
+          "qualifications": "source-reported limitations or null"
+        }
+      ],
+      "verification_evidence": {
+        "source_quote": "short verbatim excerpt documenting the coordination arrangement",
+        "page_number": 1
+      }
+    }
+  ],
+  "assessment_reason": "brief justification"
+}
+
+If no relevant case is verifiable, cases must be []. If verification is uncertain, do not force confirmation. Extract only what the document explicitly supports.
