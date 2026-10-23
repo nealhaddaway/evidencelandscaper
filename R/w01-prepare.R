@@ -4,24 +4,35 @@
 #' with explicit count and identity validation. Never modifies W00 outputs,
 #' submits API requests, or starts deduplication.
 #' @param map Evidence map name/path.
+#' @param w00_run Optional explicit completed W00 run directory. Prevents
+#'   selecting a different run when several expansions share one map.
 #' @return W01 source-input manifest path, invisibly.
 #' @export
-prepare_w01 <- function(map) {
+prepare_w01 <- function(map,w00_run=NULL) {
   map <- open_map(map)
   root <- file.path(map, "runs", "W00")
   runs <- if (dir.exists(root)) list.dirs(root, recursive = FALSE,
                                          full.names = TRUE) else character()
-  candidates <- character()
-  for (run in runs) {
-    parent <- file.path(run, "w00_full_retrieval_manifest.json")
-    if (!file.exists(parent)) next
-    obj <- tryCatch(jsonlite::fromJSON(parent, simplifyVector = FALSE),
-                    error = function(e) NULL)
-    if (!is.null(obj) && identical(obj$status, "success"))
-      candidates <- c(candidates, run)
+  if(!is.null(w00_run)) {
+    run <- normalizePath(w00_run,winslash="/",mustWork=TRUE)
+    if(!identical(dirname(run),normalizePath(root,winslash="/",mustWork=TRUE)))
+      stop("Selected W00 run is not inside this map.")
+    parent <- file.path(run,"w00_full_retrieval_manifest.json")
+    if(!file.exists(parent) ||
+       !identical(jsonlite::fromJSON(parent)$status,"success"))
+      stop("Explicit W00 retrieval is not complete.")
+  } else {
+    candidates <- character()
+    for (candidate in runs) {
+      parent <- file.path(candidate,"w00_full_retrieval_manifest.json")
+      if(!file.exists(parent))next
+      obj <- tryCatch(jsonlite::fromJSON(parent,simplifyVector=FALSE),error=function(e)NULL)
+      if(!is.null(obj)&&identical(obj$status,"success"))candidates<-c(candidates,candidate)
+    }
+    if(length(candidates)!=1L)
+      stop("Multiple or no W00 full runs; pass w00_run explicitly.")
+    run <- candidates[[1L]]
   }
-  if (!length(candidates)) stop("No successful full W00 retrieval.", call. = FALSE)
-  run <- sort(candidates, decreasing = TRUE)[[1L]]
   consolidated <- file.path(run, "consolidated")
   revision <- file.path(run, "accepted_manual_imports.json")
   if (file.exists(revision)) {
