@@ -8,11 +8,11 @@
 #' @param run_name Unique method-expansion label (e.g. collectiveaction_oilandgas).
 #' @param search_file W00-compatible JSON search strategy file.
 #' @param sources Optional W00 source identifiers (defaults to configured full set).
-#' @param execute_scoping Actually run API count queries; FALSE only creates plan.
+#' @param execute_scoping If TRUE, advance W00 onwards automatically until a\n#'   checkpoint or a validation blocker. FALSE creates an inert named plan.\n#' @param screening_prompt Approved W04 screening prompt TXT.\n#' @param w07_prompt Approved W07 mechanism-coding prompt TXT.\n#' @param ontology_file Approved W07 ontology CSV.\n#' @param w08_prompt Optional W08 case-identification prompt TXT.\n#' @param model Model used for coding and extraction.
 #' @return State of the named run, invisibly.
 #' @export
 run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
-                             search_file,sources=NULL,execute_scoping=FALSE) {
+                             search_file,sources=NULL,execute_scoping=TRUE,\n                             screening_prompt=NULL,w07_prompt=NULL,\n                             ontology_file=NULL,w08_prompt=NULL,\n                             model="gpt-6-luna") {
   map <- open_map(map)
   if(length(run_name)!=1L || is.na(run_name) ||
      !grepl("^[A-Za-z][A-Za-z0-9_-]*$",run_name))
@@ -27,6 +27,16 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
   if(!is.list(strategy)||!length(strategy))
     stop("Empty search strategy.")
   sha <- function(p) digest::digest(file=p,algo="sha256",serialize=FALSE)
+  supplied<-list(screening_prompt=screening_prompt,w07_prompt=w07_prompt,
+                 ontology_file=ontology_file,w08_prompt=w08_prompt)
+  for(nm in names(supplied))if(!is.null(supplied[[nm]])) {
+    p<-normalizePath(path.expand(supplied[[nm]]),winslash="/",mustWork=TRUE)
+    if(!nzchar(p)||file.info(p)$size==0)
+      stop("Empty or missing approved run input: ",nm)
+    supplied[[nm]]<-p
+  }
+  if(length(model)!=1L||is.na(model)||!nzchar(model))
+    stop("Model identifier required.")
   home <- file.path(map,"runs","orchestrated",run_name)
   if(dir.exists(home))
     stop("Named run already exists. Use resume_evidence_map(), not a new run.")
@@ -35,11 +45,24 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
   archived <- file.path(home,"search_strategy.json")
   if(!file.copy(search_file,archived,overwrite=FALSE))
     stop("Could not archive search strategy.")
+  inputs<-list()
+  if(any(!vapply(supplied,is.null,logical(1)))) {
+    config_dir<-file.path(home,"configuration")
+    dir.create(config_dir)
+    for(nm in names(supplied)) {
+      p<-supplied[[nm]]
+      if(is.null(p))next
+      archived_input<-file.path(config_dir,paste0(nm,if(nm=="ontology_file")".csv" else ".txt"))
+      if(!file.copy(p,archived_input,overwrite=FALSE))
+        stop("Failed to archive approved input ",nm)
+      inputs[[nm]]<-list(path=archived_input,sha256=sha(archived_input))
+    }
+  }
   state <- list(schema="evidencelandscaper-orchestration-v1",
       run_name=run_name,map_path=map,run_dir=home,
       search_sha256=sha(archived),status="planned",
       created_at_utc=format(Sys.time(),"%Y-%m-%dT%H:%M:%SZ",tz="UTC"),
-      decision1=NULL,decision2=NULL,scope=NULL,w00=NULL,
+      decision1=NULL,decision2=NULL,scope=NULL,w00=NULL,\n      inputs=inputs,model=model,
       notes="One cumulative map; methods expansions are distinct runs, not separate reviews.")
   .orchestrator_save(state)
   message("[",run_name,"] Archived search strategy: ",archived)
@@ -50,7 +73,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
             "', step='scope') to scope and reach checkpoint 1.")
     return(invisible(state))
   }
-  resume_evidence_map(run_name,map=map,step="scope",sources=sources)
+  resume_evidence_map(run_name,map=map,step="auto",sources=sources,model=model)
 }
 
 #' Resume a named search expansion safely
@@ -81,6 +104,17 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
   strategy <- file.path(home,"search_strategy.json")
   if(!file.exists(strategy)||!identical(state$search_sha256,sha(strategy)))
     stop("Archived search input was changed; refusing resume.")
+  inputs<-state$inputs
+  for(nm in names(inputs)) {
+    obj<-inputs[[nm]]
+    if(!file.exists(obj$path)||!identical(sha(obj$path),obj$sha256))
+      stop("Archived run configuration changed: ",nm)
+    if(nm=="screening_prompt"&&is.null(screening_prompt))screening_prompt<-obj$path
+    if(nm=="w07_prompt"&&is.null(w07_prompt))w07_prompt<-obj$path
+    if(nm=="ontology_file"&&is.null(ontology_file))ontology_file<-obj$path
+    if(nm=="w08_prompt"&&is.null(w08_prompt))w08_prompt<-obj$path
+  }
+  if(identical(model,"gpt-6-luna")&&!is.null(state$model))model<-state$model
   if(step=="status") {
     .orchestrator_summary(state)
     return(invisible(state))
