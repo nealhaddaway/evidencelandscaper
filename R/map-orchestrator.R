@@ -147,12 +147,12 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     for(i in seq_len(20L)){
       phase<-state$status
       next_step<-switch(phase,
-        planned="scope",scoped_counts_only="retrieve",
-        retrieved="deduplicate",w01_scored="finish_w01",
-        screening_scope_saved="enrich",w03_complete="screen",
+        planned="scope",scoping="scope",scoped_counts_only="retrieve",
+        retrieved="deduplicate",w01_scored="finish_w01",\n        w01_classifying="finish_w01",w01_review_pending="finish_w01",
+        screening_scope_saved="enrich",enriching="enrich",w03_complete="screen",
         w04_screened="finalize_screen",w04_final="code",
         extraction_scope_saved="prepare_extraction",
-        w09_prepared="retrieve_fulltexts",fulltexts_ready="extract",
+        w09_prepared="retrieve_fulltexts",retrieving_fulltexts="retrieve_fulltexts",\n        fulltexts_ready="extract",extracting="extract",
         extracted="publish",NULL)
       if(is.null(next_step))break
       message("[",run_name,"] Orchestrator: ",phase," -> ",next_step)
@@ -471,7 +471,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     return(invisible(state))
   }
   if(step=="finish_w01") {
-    if(!state$status %in% c("w01_scored","w01_review_pending"))
+    if(!state$status %in% c("w01_scored","w01_classifying","w01_review_pending"))
       stop("W01 scoring must complete before finalisation.")
     scored<-state$w01$scored
     if(!dir.exists(scored))stop("Original W01 scoring directory missing.")
