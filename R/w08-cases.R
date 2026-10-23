@@ -10,7 +10,7 @@
 #' @param prompt_file Optional custom UTF-8 case-identification prompt.
 #' @return W08 pilot run directory, invisibly.
 #' @export
-trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6",
+trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
                             map_path=NULL,prompt_file=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
