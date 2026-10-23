@@ -1,0 +1,51 @@
+W09 CASE REGISTRY FULL-TEXT EXTRACTION — V2
+
+PURPOSE
+Describe distinct cases of collective action for environmental or social sustainability, confirm or correct the abstract-level W07 mechanism assignments, and capture broad supply-chain and geographical context. Do not evaluate effectiveness or analyse statistical results.
+
+DECISION RULES
+A case is a distinguishable real-world coordination arrangement among actors. Do not mistake a research project, a single commercial service, generic recommendation, or a named location for collective action. Retain multiple distinct cases per publication.
+
+MECHANISM VALIDATION
+You will receive an archived W07 ontology CSV and the original publication-level W07 mechanism assignments. Use exactly those mechanism codes and definitions, not an invented or newer ontology. For every abstract-assigned code report confirmed, not_supported or unclear, a short rationale, and a verbatim excerpt plus source anchor if confirmed. not_supported means no substantiation in supplied full text, not proof of absence. Identify additional supported ontology codes per CASE separately. Flag plausible uncategorised mechanisms in ontology_gaps, describing the arrangement in ordinary language. Do not force unsupported codes. W07 original records remain unchanged.
+
+SUPPLY CHAIN
+Return arrays of source-stated commodities, and stage codes from this controlled list:
+input_provision, production, processing, aggregation_storage, transport_logistics, trading_distribution, retail, consumption, cross_cutting, unclear.
+Assign multiple stages if explicitly supported. Do not infer stages solely from sector.
+
+GEOGRAPHY
+For each case, list countries of operation separately from subnational operating locations. Return country_name as the English country name and country_iso3 as its three-letter ISO 3166-1 alpha-3 code. Avoid guessing; if the country is unclear, return empty arrays. Subnational operating locations are separate objects with location_name, location_type (region | province | district | municipality | community | other | unclear) and country_iso3. Do not treat author affiliations or funder offices as operational geography. The R pipeline will verify/normalise ISO3 against the country-name lookup. For transnational initiatives return multiple country objects.
+
+SIMPLE CASE PROFILE
+Describe case name and summary, objectives, actors, collaboration activities, governance (if reported), resources/incentives (if reported), enablers and barriers. Record only clearly EXPLICIT author conclusions from discussion or conclusions on achievements, difficulties, impacts, or failure, as source-attributed prose with a short verbatim excerpt and source anchor. Do not grade effectiveness or extract statistical estimates, null-hypothesis findings or sample-size comparisons. Nonsignificant results are NOT evidence of failure. Distinguish a programme goal from an author conclusion about an achieved outcome. Don't force an author conclusion where absent.
+
+CITATION ANCHORS
+Inputs use [PAGE n], [SECTION n], or [TEXT BLOCK n]. For every mechanism-supported statement and author conclusion, give an exact short quote and one exact anchor. Do not invent page numbers for XML/JSON. Never invent quotations or fill unreported fields.
+
+RETURN ONLY JSON
+{
+ "record_id":"exact input ID",
+ "verification_status":"cases_confirmed | no_collective_action_case | uncertain | fulltext_unreadable",
+ "cases":[{
+  "case_name":null,
+  "case_description":"...",
+  "objectives":["..."],
+  "actors":["..."],
+  "collaboration_activities":["..."],
+  "governance":["..."],
+  "resources_incentives":["..."],
+  "enablers":["..."],
+  "barriers":["..."],
+  "commodities":["coffee"],
+  "supply_chain_stages":["production","trading_distribution"],
+  "countries":[{"country_name":"Colombia","country_iso3":"COL"}],
+  "locations":[{"location_name":"...","location_type":"region","country_iso3":"COL"}],
+  "additional_mechanisms":[{"mechanism_id":"existing ontology code","source_quote":"...","source_anchor":"[PAGE 2]"}],
+  "author_conclusions":[{"conclusion":"The authors explicitly report ...","source_quote":"...","source_anchor":"[PAGE 7]"}]
+ }],
+ "abstract_mechanism_validation":[{"mechanism_id":"existing W07 abstract code","status":"confirmed | not_supported | unclear","reason":"...","source_quote":null,"source_anchor":null}],
+ "ontology_gaps":[{"description":"...","source_quote":"...","source_anchor":"..."}],
+ "assessment_reason":"..."
+}
+Use empty arrays for unreported information. Include every W07 abstract mechanism in abstract_mechanism_validation, even if no case confirmed. Additional mechanisms must be listed per case, never as unsupported speculation.
