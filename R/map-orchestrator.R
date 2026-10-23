@@ -170,7 +170,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
   path<-file.path(state$run_dir,"state.json")
   tmp<-paste0(path,".pending")
   jsonlite::write_json(state,tmp,pretty=TRUE,auto_unbox=TRUE,null="null")
-  if(.Platform$file.exists(path)&&!file.remove(path))
+  if(file.exists(path)&&!file.remove(path))
     stop("Cannot replace state file.")
   if(!file.rename(tmp,path))stop("Failed to commit new orchestration state.")
   invisible(path)
