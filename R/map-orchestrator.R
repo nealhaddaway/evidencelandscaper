@@ -50,6 +50,13 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
   }
   if(length(model)!=1L||is.na(model)||!nzchar(model))
     stop("Model identifier required.")
+  if(isTRUE(execute_scoping)) {
+    required<-c("screening_prompt","w07_prompt","ontology_file")
+    absent<-required[vapply(supplied[required],is.null,logical(1))]
+    if(length(absent))stop("Before starting a fully automatic run, provide approved inputs: ",
+                           paste(absent,collapse=", "),
+                           ". Use execute_scoping=FALSE to archive a plan only.")
+  }
   home <- file.path(map,"runs","orchestrated",run_name)
   if(dir.exists(home))
     stop("Named run already exists. Use resume_evidence_map(), not a new run.")
