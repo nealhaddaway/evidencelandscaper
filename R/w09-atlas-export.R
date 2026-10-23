@@ -44,8 +44,16 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
   for (i in seq_along(records)) {
     z <- records[[i]]
     publication <- inventory[match(z$record_id, inventory$record_id), , drop = FALSE]
-    if (!identical(z$provenance$source_sha256, publication$sha256[[1L]]))
-      stop("Source hash mismatch for ", z$record_id)
+    # The inventory and extraction can refer to different validated formats
+    # (e.g. TEI XML inventory versus original PDF used by the model).
+    # Verify each source against its own recorded hash, never equate them.
+    if (!file.exists(publication$file[[1L]]) ||
+        !identical(sha(publication$file[[1L]]), publication$sha256[[1L]]))
+      stop("Inventory source file/hash mismatch: ", z$record_id)
+    if (is.null(z$provenance$source_path) ||
+        !file.exists(z$provenance$source_path) ||
+        !identical(sha(z$provenance$source_path),z$provenance$source_sha256))
+      stop("Model extraction source file/hash mismatch: ", z$record_id)
     if (!identical(z$provenance$prompt_sha256, manifest$prompt_sha256) ||
         !identical(z$provenance$ontology_sha256, manifest$ontology_sha256) ||
         !identical(z$provenance$w07_coding_sha256, manifest$coding_sha256) ||
@@ -72,7 +80,10 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
           doi=if(nzchar(doi)) doi else NULL,doi_url=doi_url,
           google_scholar_url=scholar_url,
           source_format=z$provenance$source_format,
-          source_sha256=z$provenance$source_sha256),
+          source_sha256=z$provenance$source_sha256,
+          source_path=z$provenance$source_path,
+          inventory_file=publication$file[[1L]],
+          inventory_file_sha256=publication$sha256[[1L]]),
         extraction=list(model=manifest$model,
           prompt_sha256=manifest$prompt_sha256,
           ontology_sha256=manifest$ontology_sha256,
