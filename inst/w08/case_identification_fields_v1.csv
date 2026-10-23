@@ -1,0 +1,13 @@
+field,level,type,allowed_values,description
+record_id,publication,string,,Stable W04 canonical publication identifier
+case_evidence_status,publication,enum,specific_case|multiple_cases|no_identifiable_case|unclear,Abstract evidence for distinguishable cases
+cases,publication,array,,Zero or more case candidates
+case_name,case,string_or_null,,Name explicitly stated
+case_description,case,string,,Brief description distinguishing the case
+case_location,case,string_or_null,,Place named in title or abstract
+case_sector,case,string_or_null,,Sector or commodity explicitly named
+implementation_status,case,enum,implemented|proposed|historical|unclear,Stage supported by abstract
+supporting_evidence,case,string,,Short verbatim excerpt from source text
+confidence,case,enum,high|medium|low,Confidence that it is a distinct case
+fulltext_priority,publication,enum,high|medium|low,Priority for later full-text verification
+assessment_reason,publication,string,,Short evidence-grounded justification
