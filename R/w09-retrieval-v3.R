@@ -161,15 +161,18 @@ retrieve_w09_structured <- function(w09,max_records=6L) {
                raw<-paste(readLines(tmp,warn=FALSE,encoding="UTF-8"),
                           collapse="\n")
                if(ext=="xml") {
-                 valid<-grepl("<",raw,fixed=TRUE)&&
-                   !grepl("error-response|service-error",substr(raw,1,1000),
-                          ignore.case=TRUE)
+                 valid<-grepl("<(?:\\?xml|full-text-retrieval-response|xocs:doc|article)",raw,
+                             perl=TRUE)&&
+                   !grepl("error-response|service-error",substr(raw,1,2000),
+                          ignore.case=TRUE) &&
+                   nchar(raw)>1000
                } else {
                  parsed<-tryCatch(jsonlite::fromJSON(raw,simplifyVector=FALSE),
                                   error=function(e)NULL)
                  valid<-is.list(parsed)&&
                    !is.null(parsed$"full-text-retrieval-response") &&
-                   is.null(parsed$"service-error")
+                   is.null(parsed$"service-error") &&
+                   nchar(raw)>1000
                }
              }
            }
