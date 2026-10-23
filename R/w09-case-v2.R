@@ -54,7 +54,7 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6",max_pages=0L) {
  byid<-setNames(encoded,vapply(encoded,function(z)z$record_id,character(1)))
  if(any(!record_ids%in%names(byid)))
    stop("Selected record IDs absent from W07 full-corpus coding.")
- prompt_src<-system.file("w09","fulltext_case_prompt_v2.txt",
+ prompt_src<-system.file("w09","fulltext_case_prompt_v2_1.txt",
                          package="evidencelandscaper")
  if(!nzchar(prompt_src))stop("W09 v2 prompt missing from package.")
  target<-file.path(w09,"v2-",substr(sha(prompt_src),1L,12L),"-",
