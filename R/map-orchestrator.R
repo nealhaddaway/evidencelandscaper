@@ -64,8 +64,8 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","status"),
-                                screening=NULL,extraction=NULL,sources=NULL,\n                                screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,\n                                w08_prompt=NULL,model="gpt-6-luna") {
+                                step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","publish","status"),
+                                screening=NULL,extraction=NULL,sources=NULL,\n                                screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,\n                                w08_prompt=NULL,model="gpt-6-luna",\n                                extraction_dir=NULL,coordinates_csv=NULL) {
   step <- match.arg(step)
   map <- open_map(map)
   home <- file.path(map,"runs","orchestrated",run_name)
@@ -152,6 +152,42 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
             state$scope$unknown_source_counts," source counts unavailable.")
     message("[",run_name,"] These are GROSS database hits, not deduplicated records.")
     message("[",run_name,"] Retrieval/deduplication required before sampling checkpoint 1.")
+    return(invisible(state))
+  }
+  if(step=="publish") {
+    if(!state$status %in% c("w09_prepared","published"))
+      stop("Checkpoint 2 and W09 preparation must complete before publication.")
+    if(is.null(extraction_dir))
+      stop("Supply the explicit approved completed W09 extraction directory.")
+    if(is.null(state$w09$run)||!dir.exists(state$w09$run))
+      stop("Named W09 run missing.")
+    selected<-state$decision2$selected_ids_path
+    if(!file.exists(selected) ||
+       !identical(sha(selected),state$decision2$selected_ids_sha256))
+      stop("Archived extraction selection changed.")
+    queue<-utils::read.csv(file.path(state$w09$run,"retrieval_queue.csv"),
+                           stringsAsFactors=FALSE)
+    sample<-utils::read.csv(selected,stringsAsFactors=FALSE)
+    if(anyDuplicated(queue$record_id)||!setequal(queue$record_id,sample$record_id))
+      stop("W09 retrieval queue does not reconcile with checkpoint 2 sample.")
+    inventory<-file.path(state$w09$run,"w09_extraction_ready_inventory.csv")
+    if(!file.exists(inventory))stop("W09 extraction-ready inventory not finalised.")
+    inv<-utils::read.csv(inventory,stringsAsFactors=FALSE)
+    if(anyDuplicated(inv$record_id)||any(!inv$record_id%in%sample$record_id))
+      stop("W09 extraction-ready inventory includes records outside this sample.")
+    output<-publish_w09_evidence(map_path=map,w09_run=state$w09$run,
+               extraction_dir=extraction_dir,coordinates_csv=coordinates_csv)
+    state$published<-list(atlas=output$atlas,report=output$report,
+          full_report=output$full_report,inventory_sha256=sha(inventory),
+          extraction_manifest_sha256=sha(file.path(extraction_dir,"manifest.json")))
+    state$status<-"published"
+    state$blocking_stage<-NULL
+    .orchestrator_save(state)
+    message("[",run_name,"] Published ",nrow(inv)," verified full-text publications",
+            " from ",nrow(sample)," selected case-bearing publications; ",
+            nrow(sample)-nrow(inv)," without extraction-ready full text.")
+    message("[",run_name,"] Atlas: ",state$published$atlas)
+    message("[",run_name,"] Full report: ",state$published$full_report)
     return(invisible(state))
   }
   if(step=="prepare_extraction") {
