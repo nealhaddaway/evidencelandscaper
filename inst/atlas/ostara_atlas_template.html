@@ -9,13 +9,13 @@ input,select{width:100%;border:1px solid #cedbd3;padding:10px;margin:4px 0 12px;
 #maparea{position:relative;overflow:hidden;background:#e9efe8}#positron{position:absolute;inset:0;display:none;z-index:2}#popup{z-index:5}.notice{z-index:4}#world{width:100%;height:100%;display:block;touch-action:pan-y}
 .land{fill:none;stroke:#a8baaf;stroke-width:.65;stroke-linecap:round;stroke-linejoin:round}.graticule{stroke:#d7e4dd;stroke-width:.55;fill:none}
 .marker{fill:var(--accent);stroke:white;stroke-width:1.25;cursor:pointer}.marker:hover,.marker.selected{fill:#a64728;stroke:var(--ink);stroke-width:1.7}
-.item{cursor:pointer;border-bottom:1px solid #e4eae5;padding:10px 3px}.item:hover{background:#f1f5ef}.item strong{display:block}
+.mechanism-pill{display:inline-block;background:#e8eee9;border:1px solid #c5d9ce;color:#29443b;border-radius:999px;padding:3px 9px;font-size:12px;margin:3px 3px 3px 0}.item{cursor:pointer;border-bottom:1px solid #e4eae5;padding:10px 3px}.item:hover{background:#f1f5ef}.item strong{display:block}
 #popup{position:absolute;right:15px;top:15px;width:min(390px,90%);max-height:85%;overflow:auto;padding:18px;background:white;box-shadow:0 7px 34px #324b4342;border-radius:6px;display:none}
 #popup h2{margin:0 0 10px;font:23px Georgia,serif}#popup a{color:#984d31}#popup p{margin:9px 0}#popup .close{float:right;border:0;background:#eee;padding:3px 8px;cursor:pointer}
 .notice{position:absolute;bottom:12px;left:14px;background:#ffffffd9;padding:7px 11px;font-size:12px;border-radius:4px}
 @media(max-width:780px){main{display:flex;flex-direction:column-reverse;height:auto}aside{max-height:45vh}#maparea{height:54vh;min-height:320px}}
 </style></head><body><header><small>OSTARA / EVIDENCE SYNTHESIS</small><h1>Collective action evidence atlas</h1><small id="summary">Verified publication–case observations · indicative geography</small></header><main>
-<aside><label for="find">Search cases or articles</label><input id="find" placeholder="Search evidence"><label for="country">Country</label><select id="country"><option value="">All countries</option></select><label for="mechanism">Mechanism</label><select id="mechanism"><option value="">All mechanisms</option></select><div id="count"></div><div id="listing"></div></aside>
+<aside><label for="find">Search cases or articles</label><input id="find" placeholder="Search evidence"><label for="mechanism">Mechanism</label><select id="mechanism"><option value="">All mechanisms</option></select><div id="count"></div><div id="listing"></div></aside>
 <section id="maparea"><div id="positron"></div><svg id="world" viewBox="0 0 1000 510" role="img" aria-label="World map of indicative Ostara case coordinates"><rect width="1000" height="510" fill="#e9efe8"/><g id="geography">__MAP_PATHS__</g><g id="markers"></g></svg><div id="popup"><button class="close" id="close">Close</button><div id="info"></div></div><div class="notice">Built-in world boundaries · no map tiles, API key or internet required · positions indicative</div></section></main>
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script><script id="case-data" type="application/json">__CASE_DATA__</script>
 <script>
@@ -25,23 +25,26 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const countries=c=>(c.case.countries||[]).map(x=>x.country_name).filter(Boolean);
 const codes=c=>(c.case.additional_mechanisms||[]).map(x=>x.mechanism_id).filter(Boolean);
+const mechanismLabel=(c,id)=>(c.mechanism_labels&&c.mechanism_labels[id])||id;
+const mechanismName=(id)=>{for(const c of cases)if(c.mechanism_labels&&c.mechanism_labels[id])return c.mechanism_labels[id];return id};
+const titleCase=s=>s.replace(/_/g," ").replace(/\b[a-z]/g,ch=>ch.toUpperCase());
 const values=x=>Array.isArray(x)?x.map(y=>typeof y==="string"?y:JSON.stringify(y)).join("; "):String(x??"");
 const link=(url,label)=>url?'<a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+"</a>":"";
 function view(c){
 const x=c.case,p=c.publication,k=c.coordinates;
 let v="<h2>"+esc(x.case_name||"Unnamed case")+"</h2><p>"+esc(x.case_description)+"</p>";
 v+="<p><b>Publication:</b> "+esc(p.title)+"<br>"+link(p.doi_url,"DOI: "+p.doi)+" · "+link(p.google_scholar_url,"Google Scholar title lookup")+"</p>";
-v+="<p><b>Record:</b> "+esc(p.record_id)+"<br><b>Observation:</b> "+esc(c.observation_id)+"</p>";
-v+="<p><b>Geography:</b> "+esc(countries(c).join(", "))+"<br><b>Coordinate basis:</b> "+esc(k.coordinate_basis)+"<br><b>Coordinate source:</b> "+esc(k.coordinate_source)+"</p>";
-v+="<p><b>Mechanisms:</b> "+esc(codes(c).join(", "))+"</p>";
-for(const f of ["objectives","actors","collaboration_activities","governance","resources_incentives","enablers","barriers","commodities","supply_chain_stages"])if(x[f]&&x[f].length)v+="<p><b>"+esc(f.replaceAll("_"," "))+":</b> "+esc(values(x[f]))+"</p>";
+
+v+="<p><b>Geography:</b> "+esc(countries(c).join(", "))+"<br><b>Coordinate basis:</b> "+esc(k.coordinate_basis)+"</p>";
+v+="<p><b>Mechanisms:</b> "+(codes(c).length?codes(c).map(id=>"<span class=\"mechanism-pill\" title=\""+esc(id)+"\">"+esc(mechanismLabel(c,id))+"</span>").join(" "):"None recorded")+"</p>";
+for(const f of ["objectives","actors","collaboration_activities","governance","resources_incentives","enablers","barriers","commodities","supply_chain_stages"])if(x[f]&&x[f].length)v+="<p><b>"+esc(titleCase(f))+":</b> "+esc(values(x[f]))+"</p>";
 for(const f of ["additional_mechanisms","author_conclusions"])for(const a of x[f]||[]){
 if(a.mechanism_id)v+="<p>Mechanism: "+esc(a.mechanism_id)+"</p>";
 if(a.conclusion)v+="<p>[Model 1 justification] "+esc(a.conclusion)+"</p>";
 if(a.source_quote)v+="<p>[Model 2 justification] "+esc(a.source_quote)+"</p>";
 if(a.source_anchor)v+="<p><small>Source anchor: "+esc(a.source_anchor)+"</small></p>";
 }
-v+="<p><small>Source SHA-256: "+esc(p.source_sha256)+"<br>Prompt SHA-256: "+esc(c.extraction.prompt_sha256)+"</small></p>";
+v+="<p><small>Record: "+esc(p.record_id)+"<br>Observation: "+esc(c.observation_id)+"<br>Source SHA-256: "+esc(p.source_sha256)+"<br>Prompt SHA-256: "+esc(c.extraction.prompt_sha256)+"</small></p>";
 $("info").innerHTML=v;$("popup").style.display="block";
 }
 $("close").onclick=()=>$("popup").style.display="none";
@@ -68,11 +71,10 @@ function initPositron(){
 }
 
 const unique=(arr)=>[...new Set(arr)].sort();
-for(const name of unique(cases.flatMap(countries)))$("country").add(new Option(name,name));
-for(const name of unique(cases.flatMap(codes)))$("mechanism").add(new Option(name,name));
+for(const id of unique(cases.flatMap(codes)))$("mechanism").add(new Option(id+" · "+mechanismName(id),id));
 function render(){
-const q=$("find").value.toLowerCase().trim(),country=$("country").value,code=$("mechanism").value;
-const filtered=cases.filter(c=>(!country||countries(c).includes(country))&&(!code||codes(c).includes(code))&&(!q||[c.case.case_name,c.case.case_description,c.publication.title,...countries(c)].join(" ").toLowerCase().includes(q)));
+const q=$("find").value.toLowerCase().trim(),code=$("mechanism").value;
+const filtered=cases.filter(c=>(!code||codes(c).includes(code))&&(!q||[c.case.case_name,c.case.case_description,c.publication.title,...countries(c)].join(" ").toLowerCase().includes(q)));
 $("markers").replaceChildren();$("listing").replaceChildren();for(const m of positronMarkers)m.remove();positronMarkers=[];let mapped=0;
 for(const c of filtered){
 const p=pos(c);const item=document.createElement("div");item.className="item";
@@ -83,7 +85,7 @@ m.onclick=()=>view(c);m.onkeydown=e=>{if(e.key==="Enter")view(c)};$("markers").a
 }
 $("count").textContent=filtered.length+" cases · "+mapped+" indicative points";
 }
-for(const id of ["find","country","mechanism"])$(id).addEventListener(id==="find"?"input":"change",render);
+for(const id of ["find","mechanism"])$(id).addEventListener(id==="find"?"input":"change",render);
 $("summary").textContent=cases.length+" publication–case observations · linked evidence · offline world basemap";
 render();
 initPositron();
