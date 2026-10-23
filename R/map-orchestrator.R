@@ -64,7 +64,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","deduplicate","finish_w01","status"),
+                                step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","status"),
                                 screening=NULL,extraction=NULL,sources=NULL) {
   step <- match.arg(step)
   map <- open_map(map)
@@ -138,6 +138,36 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
             state$scope$unknown_source_counts," source counts unavailable.")
     message("[",run_name,"] These are GROSS database hits, not deduplicated records.")
     message("[",run_name,"] Retrieval/deduplication required before sampling checkpoint 1.")
+    return(invisible(state))
+  }
+  if(step=="enrich") {
+    if(!identical(state$status,"screening_scope_saved"))
+      stop("Checkpoint 1 must be saved after final W01 before W02/W03.")
+    selected<-state$decision1$selected_ids_path
+    if(!file.exists(selected) ||
+       !identical(sha(selected),state$decision1$selected_ids_sha256))
+      stop("Screening selection changed since checkpoint 1.")
+    scored<-state$w01$scored
+    if(!file.exists(file.path(dirname(scored),"finalised","summary.json")))
+      stop("Final W01 data missing.")
+    message("[",run_name,"] W02: enriching complete verified W01 corpus ",
+      "(not just the sample; selected IDs stay archived for W04).")
+    state$status<-"enriching"
+    .orchestrator_save(state)
+    enriched<-run_w02_main(scored)
+    state$w02<-list(enriched=enriched)
+    .orchestrator_save(state)
+    final<-finalize_w02(scored)
+    state$w02$finalised<-final
+    .orchestrator_save(state)
+    message("[",run_name,"] W03: checking publication status.")
+    w03<-run_w03(scored,limit=0L)
+    state$w03<-list(output=w03)
+    state$status<-"w03_complete"
+    state$blocking_stage<-"W04 exact random-ID filtering and uncertain handling"
+    .orchestrator_save(state)
+    message("[",run_name,"] W03 complete. W04 exact-ID adapter still required;",
+      " screening model has NOT been called.")
     return(invisible(state))
   }
   if(step=="finish_w01") {
