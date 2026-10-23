@@ -5,19 +5,29 @@
 #' @param map_path Optional Ostara map directory; defaults to open_map().
 #' @param coordinates_csv Optional reviewed geocoding CSV. For exact continuity
 #'   specify the same audited file used at the previous publication.
-#' @param extraction_dir Optional explicitly selected completed W09 extraction.
+#' @param extraction_dir Optional explicitly selected completed W09 extraction.\n#' @param w09_run Explicit W09 run for named expansions; prevents historical pilot selection.
 #' @return Named paths to the HTML atlas, W09 report, full-review HTML and
 #'   validated export.
 #' @export
-publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_dir=NULL) {
+publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_dir=NULL,w09_run=NULL) {
   if(is.null(map_path)) map_path <- open_map("Ostara_collective_action_map")
   map_path <- normalizePath(map_path,winslash="/",mustWork=TRUE)
   root <- file.path(map_path,"runs","W09")
-  pilots <- if(dir.exists(root))list.dirs(root,recursive=FALSE,full.names=TRUE) else character()
-  pilots <- pilots[file.exists(file.path(pilots,"w09_extraction_ready_inventory.csv"))]
-  if(length(pilots)!=1L)
-    stop("Expected one verified W09 inventory; specify/resolve W09 pilot uniquely.")
-  w09 <- pilots[[1L]]
+  if(!is.null(w09_run)) {
+    w09<-normalizePath(w09_run,winslash="/",mustWork=TRUE)
+    if(!identical(dirname(w09),normalizePath(root,winslash="/",mustWork=TRUE)))
+      stop("Selected W09 run is not inside this map.")
+    if(!file.exists(file.path(w09,"w09_extraction_ready_inventory.csv")))
+      stop("Explicit W09 run lacks a completed extraction-ready inventory.")
+    if(is.null(extraction_dir))
+      stop("Named W09 publication requires explicit extraction_dir; do not select historical model output.")
+  } else {
+    pilots <- if(dir.exists(root))list.dirs(root,recursive=FALSE,full.names=TRUE) else character()
+    pilots <- pilots[file.exists(file.path(pilots,"w09_extraction_ready_inventory.csv"))]
+    if(length(pilots)!=1L)
+      stop("Expected one verified W09 inventory; supply w09_run explicitly when multiple exist.")
+    w09 <- pilots[[1L]]
+  }
   if(is.null(extraction_dir)) {
     candidates <- list.dirs(w09,recursive=TRUE,full.names=TRUE)
     candidates <- candidates[file.exists(file.path(candidates,"manifest.json")) &
@@ -31,7 +41,10 @@ publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_d
     if(length(candidates)!=1L)stop("Cannot uniquely locate approved V2.5 Luna W09 extraction.")
     extraction_dir <- candidates[[1L]]
   }
-  if(is.null(coordinates_csv)) {
+  extraction_dir<-normalizePath(extraction_dir,winslash="/",mustWork=TRUE)
+  if(!startsWith(extraction_dir,paste0(w09,"/")))
+    stop("W09 extraction directory does not belong to the selected W09 run.")
+  if(is.null(coordinates_csv) && is.null(w09_run)) {
     saved <- file.path(map_path,"report_inputs","ostara_case_coordinates.csv")
     bundled <- system.file("extdata","ostara_w09_geocoding_draft.csv",
                            package="evidencelandscaper")
@@ -43,6 +56,8 @@ publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_d
       message("[Ostara publication] Using bundled 31-point UNVERIFIED draft; review coordinates before definitive publication.")
     } else stop("No saved or bundled geocoding provenance available.")
   }
+  if(is.null(coordinates_csv) && !is.null(w09_run))
+    message("[Ostara publication] No approved coordinates for this expansion; case locations remain unplaced.")
   message("[Ostara publication] 0/3 resolving provenance-linked extraction")
   atlas <- republish_w09_atlas(w09,extraction_dir,coordinates_csv)
   message("[Ostara publication] 1/3 HTML atlas complete")
@@ -53,7 +68,11 @@ publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_d
   if(!nzchar(template))stop("Installed full-review report template missing.")
   if(!requireNamespace("rmarkdown",quietly=TRUE))
     stop("Install rmarkdown to render the full-review report.")
-  output <- file.path(dirname(atlas),"Ostara_full_review.html")
+  template_sha<-substr(digest::digest(file=template,algo="sha256",serialize=FALSE),1,12)
+  extract_sha<-substr(digest::digest(file=file.path(extraction_dir,"manifest.json"),
+                       algo="sha256",serialize=FALSE),1,12)
+  output <- file.path(dirname(atlas),paste0("Ostara_full_review_",
+               extract_sha,"_",template_sha,".html"))
   if(!file.exists(output)) {
     rmarkdown::render(template,output_file=basename(output),
       output_dir=dirname(output),
