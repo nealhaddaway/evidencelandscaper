@@ -98,8 +98,18 @@ inventory_w09_pdfs <- function(w09) {
  df<-do.call(rbind,v)
  if(file.exists(out)) {
    prev<-utils::read.csv(out,stringsAsFactors=FALSE)
-   if(!identical(prev,df))
-     stop("PDF inventory exists with different contents; preserve previous inventory.")
+   if(!identical(prev,df)) {
+     # Preserve the original inventory as an immutable historical snapshot.
+     archive<-file.path(w09,paste0("pdf_inventory-",
+       substr(digest::digest(file=out,algo="sha256",serialize=FALSE),1,12),
+       ".csv"))
+     if(!file.exists(archive)&&!file.copy(out,archive,overwrite=FALSE))
+       stop("Cannot preserve previous PDF inventory.")
+     if(!identical(digest::digest(file=archive,algo="sha256",serialize=FALSE),
+                   digest::digest(file=out,algo="sha256",serialize=FALSE)))
+       stop("Historical inventory archive checksum mismatch.")
+     utils::write.csv(df,out,row.names=FALSE,na="")
+   }
  } else utils::write.csv(df,out,row.names=FALSE,na="")
  message("[W09] ",sum(df$pdf_present),"/",nrow(df)," PDFs supplied.")
  invisible(out)
