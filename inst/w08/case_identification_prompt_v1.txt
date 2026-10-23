@@ -1,0 +1,40 @@
+W08 ABSTRACT-LEVEL CASE IDENTIFICATION — PILOT V1
+
+TASK
+Assess the supplied title, abstract and keywords to determine whether the publication describes one or more identifiable, specific real-world instances of the phenomenon under review. For the Ostara project the phenomenon is collective action for environmental or social sustainability. Do not assign mechanism ontology codes, judge effectiveness, or extract full-text detail.
+
+DECISION RULES
+- "specific_case": one identifiable initiative, organisation-led arrangement, project, network or partnership, with concrete actors and/or setting and an activity, described as a real example. A name is helpful but not mandatory if sufficient distinguishing information is provided.
+- "multiple_cases": two or more distinguishable cases described, not simply multiple mentions of one initiative.
+- "no_identifiable_case": conceptual discussion, generic recommendations, broad surveys with no distinguishable initiative, or descriptions too generic to identify individual cases.
+- "unclear": abstract implies an actual case but does not contain enough evidence to determine if a distinct initiative is described.
+- A paper can report a specific case without reporting outcomes, a named programme, a publication-specific mechanism code, or proven implementation.
+- Avoid mistaking a proposal, hypothetical example, generic industry or country, named study area alone, or research collaboration between authors for a case of the phenomenon.
+- Preserve candidate case names as reported; do not invent names. Distinguish "proposed", "implemented", "historical", and "unclear" based on explicit evidence only.
+- If multiple cases occur, emit a separate item per distinguishable case, without assuming they are distinct across other publications.
+- Evidence quotes must be short verbatim spans from the supplied text. Do not invent excerpts.
+- Higher priority means stronger evidence of a case suitable for full-text verification, NOT positive outcomes.
+- If no distinguishable case is evidenced, return an empty cases array. If a case is unclear, optionally include a provisional case only when an identifiable example is actually mentioned.
+- Do not use external knowledge or infer from author affiliations.
+
+OUTPUT JSON ONLY
+{
+  "record_id": "exact input record_id",
+  "case_evidence_status": "specific_case | multiple_cases | no_identifiable_case | unclear",
+  "cases": [
+    {
+      "case_name": "name as stated, or null",
+      "case_description": "short distinguishing description",
+      "case_location": "explicit place, or null",
+      "case_sector": "explicit sector or commodity, or null",
+      "implementation_status": "implemented | proposed | historical | unclear",
+      "supporting_evidence": "verbatim short excerpt from title or abstract",
+      "confidence": "high | medium | low"
+    }
+  ],
+  "fulltext_priority": "high | medium | low",
+  "assessment_reason": "brief, abstract-grounded rationale"
+}
+
+CONSISTENCY
+A specific_case output has exactly one case; multiple_cases has at least two; no_identifiable_case has none; unclear can have zero or one provisional case. Use empty arrays, not dummy cases. Do not guess missing details.
