@@ -14,6 +14,8 @@ params:
   map_path: null
   w00_run: null
   w07_run: null
+  w04_run: null
+  named_run: null
   w08_run: null
   w09_run: null
   w09_extract_run: null
@@ -62,7 +64,11 @@ getfield <- function(x,names,default=NA) {
   for(n in names) if(!is.null(x[[n]]) && length(x[[n]])==1L) return(x[[n]])
   default
 }
+named<-!is.null(params$named_run) && nzchar(params$named_run)
+if(named && any(vapply(list(params$w00_run,params$w04_run,params$w07_run,params$w08_run,params$w09_run,params$w09_extract_run),is.null,logical(1))))
+  stop("Named review publication must explicitly specify all stage inputs, not latest results.")
 w00 <- choose_run("W00",params$w00_run,"w00_full_retrieval_manifest.json")
+w04 <- if(!is.null(params$w04_run))normalizePath(params$w04_run,mustWork=TRUE) else NULL
 w07 <- choose_run("W07",params$w07_run,"summary.json",prefix="full-")
 w08 <- choose_run("W08",params$w08_run,"case_assessments.jsonl")
 w09 <- choose_run("W09",params$w09_run,"retrieval_queue.csv")
@@ -77,6 +83,33 @@ inputs <- file.path(root,"report_inputs")
 search_metrics <- read_csv(file.path(inputs,"search_metrics.csv"))
 screen_metrics <- read_csv(file.path(inputs,"screening_by_search.csv"))
 full_metrics <- read_csv(file.path(inputs,"fulltext_by_search.csv"))
+if(named) {
+  # Do not borrow the original map-wide manually supplied metrics for this run.
+  search_metrics<-NULL;screen_metrics<-NULL;full_metrics<-NULL
+  scoped<-read_csv(file.path(w00,"scoping","counts.csv"))
+  if(!is.null(scoped) && all(c("source_slug","hits") %in% names(scoped)))
+    search_metrics<-data.frame(search_id=params$named_run,
+       database=scoped$source_slug,total_hits=scoped$hits,
+       deduplicated_hits=NA_integer_,retractions=NA_integer_,
+       missing_abstracts=NA_integer_,stringsAsFactors=FALSE)
+  screened<-read_json(file.path(w04,"finalised","summary.json"))
+  if(!is.null(screened) && identical(screened$status,"final"))
+    screen_metrics<-data.frame(search_id=params$named_run,
+      unique_records_screened=screened$records,
+      records_retained=screened$retain)
+  assessed<-read_jsonl(file.path(w08,"case_assessments.jsonl"))
+  statuses<-vapply(assessed,function(z)str_or(z$case_evidence_status,""),character(1))
+  inv<-read_csv(file.path(w09,"w09_extraction_ready_inventory.csv"))
+  case_registry<-read_jsonl(file.path(w09ex,"fulltext_case_registry_normalised.jsonl"))
+  confirmed<-sum(vapply(case_registry,function(z)
+     if(identical(z$verification_status,"cases_confirmed"))length(z$cases) else 0L,integer(1)))
+  full_metrics<-data.frame(search_id=params$named_run,
+     case_bearing_publications=sum(statuses %in% c("specific_case","multiple_cases")),
+     cases_identified_at_abstract=NA_integer_,
+     full_texts_downloaded=if(is.null(inv))0L else nrow(inv),
+     full_texts_parsed=if(is.null(inv))0L else nrow(inv),
+     cases_confirmed_full_text=confirmed)
+}
 # The retained search strings are collected from the selected W00 query archive.
 query_files <- if(is.null(w00)) character() else list.files(w00,pattern="[.]txt$",recursive=TRUE,full.names=TRUE)
 query_files <- query_files[grepl("query|archive|search",dirname(query_files),ignore.case=TRUE)]
@@ -90,9 +123,11 @@ query_content <- function(db) {
 
 # Executive summary
 
+**Named method run:** `r if(named)params$named_run else "Legacy Ostara report"`
+
 This review summarises the identified evidence on collective action initiatives. It draws from the existing Ostara search, deduplication, screening, abstract mechanism coding, case identification and full-text extraction outputs. Results are descriptive and do not establish the effectiveness of individual mechanisms.
 
-**Editorial summary:** Replace this paragraph with your synthesis of the main patterns, evidence gaps and implications for Ostara. It will remain editable in RStudio and will be retained when the report is re-rendered.
+The figures below report what can be verified from the selected run artefacts. The number of case observations must not be interpreted as the number of independent initiatives, and mechanism assignments are not causal effect estimates.
 
 ```{r provenance}
 selected <- data.frame(
@@ -124,7 +159,7 @@ if(!is.null(search_metrics)) {
 
 ## Search methods and caveats
 
-**Editable methods text:** Describe databases, platforms, search dates, search strategies and any complementary searching here. Distinguish database searches from successive searches using the same database. Retractions and missing abstracts should reflect their actual recorded stage and should not be subtracted twice.
+Search strings are archived by database in the selected W00 run. Counts are gross database hits; missing deduplicated-by-database allocations and other unavailable metrics are explicitly left blank. Any additional purposive search expansion is reported as a distinct search run within the same review.
 
 # Screening
 
@@ -140,17 +175,19 @@ if(!is.null(screen_metrics)) {
 
 ```{r screening-overall}
 # Independently report the final screening's retained count when available.
-sums<-list.files(file.path(root,"runs","W01"),pattern="summary.json",recursive=TRUE,full.names=TRUE)
-sums<-sums[grepl("W04_local/.*/finalised/summary[.]json$",sums)]
+sums<-if(named) file.path(w04,"finalised","summary.json") else
+  list.files(file.path(root,"runs","W01"),pattern="summary.json",recursive=TRUE,full.names=TRUE)
+if(!named)sums<-sums[grepl("W04_local/.*/finalised/summary[.]json$",sums)]
 finals<-lapply(sums,read_json)
-finals<-Filter(function(z)identical(z$status,"final")&&identical(z$run_type,"full"),finals)
+finals<-Filter(function(z)!is.null(z) && identical(z$status,"final") &&
+             (named || identical(z$run_type,"full")),finals)
 if(length(finals)) {
  f<-finals[[length(finals)]]
- cat("A finalised full-corpus W04 screening summary was located. Counts in its source JSON should be reconciled with the search-level table before publication.\n\n")
+ cat("Selected W04 screening includes ",f$records," records: ",f$retain," retained, ",f$exclude," excluded.\n\n",sep="")
 } else empty_message("No finalised full-corpus W04 summary was located in the expected project path.")
 ```
 
-**Editable screening interpretation:** Describe inclusion decisions, borderline records, missing abstracts and the relationship between searches.
+Screening totals refer only to the records actually screened in this run. Where a random subset was selected, these figures are sample results, not full-search estimates. Policy-excluded uncertainties remain identifiable in the underlying W04 screening ledger.
 
 # Abstract coding: collective action mechanisms
 
@@ -162,7 +199,7 @@ if(!is.null(w07)) {
 } else empty_message("No completed full-corpus W07 ontology and coding archive has been selected.")
 ```
 
-**Editable mechanism interpretation:** Summarise the most frequently coded mechanisms, sparse categories and ontology gaps. Specify which W07 version is used. Earlier v2 coding should not be silently combined with the later v3 ontology.
+The coding uses the W07 ontology archived with this run. Mechanism frequency is descriptive; absence of a code is not evidence that a mechanism is ineffective or absent outside the assessed records.
 
 # Full-text retrieval and case coding
 
@@ -205,11 +242,11 @@ for(z in entries) {
 if(length(case_rows)) show_table(do.call(rbind,case_rows)) else empty_message("No finalised and normalised W09 cases are available in the selected full-text extraction run.")
 ```
 
-**Editorial case synthesis:** Describe common organisation types, collaborative mechanisms, supply-chain positions, locations, barriers, and patterns in *explicit* author conclusions. Do not convert conditional benefits, objectives or recommendations into demonstrated outcomes.
+Case-level observations are linked to their parent publications. Author interpretations, model extraction and verified source evidence should remain distinct; reported objectives are not automatically achieved outcomes.
 
 # Limitations and next steps
 
-**Editable limitations text:** Distinguish abstract-level assignment from full-text validation, retrieval failures, publication/case multiplicity, search-level allocation rules, ongoing ontology review and any manually adjudicated mechanism suggestions. Note the date and status of each workflow when publishing a static snapshot.
+Limitations include abstract-level coding uncertainty, unavailable or unverified full texts, multiple case observations per publication, and incomplete geographic precision. Sampling reduces coverage but not the number of original search hits; any records excluded by uncertainty policies should remain separately auditable.
 
 # Reproducibility
 
