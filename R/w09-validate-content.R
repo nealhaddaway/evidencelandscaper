@@ -34,7 +34,7 @@ validate_w09_fulltexts <- function(w09) {
      }
      result$valid_format<-TRUE
      nodes<-xml2::xml_find_all(doc,
-       "//*[local-name()='body']//*[local-name()='p'] | //*[local-name()='ce:para']")
+       "//*[local-name()='body']//*[local-name()='p'] | //*[local-name()='para']")
      txt<-paste(xml2::xml_text(nodes),collapse=" ")
      if(!nzchar(txt))txt<-xml2::xml_text(doc)
      result$substantive<-nchar(txt)>1200 && length(nodes)>=3
@@ -53,7 +53,7 @@ validate_w09_fulltexts <- function(w09) {
      searchtxt<-txt
      if(!result$substantive)result$notes<-"json_fulltext_not_verified"
    } else if(format=="pdf") {
-     con<-file(file,"rb");magic<-readBin(con,"raw",n=5);close(con)
+     con<-base::file(file,"rb");magic<-readBin(con,"raw",n=5);close(con)
      result$valid_format<-identical(magic,charToRaw("%PDF-"))
      if(!result$valid_format) {
        result$notes<-"invalid_document";return(result)
