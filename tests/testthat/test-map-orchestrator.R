@@ -1,10 +1,13 @@
 testthat::test_that("named expansion choices require a verified population", {
-  testthat::expect_error(evidencelandscaper:::`.orchestrator_choice`(list(mode="n",n=2),NULL),"exact unique")
-  selected <- evidencelandscaper:::`.orchestrator_choice`(list(mode="percent",percent=25),13)
+  testthat::expect_error(evidencelandscaper:::`.orchestrator_choice`(list(mode="n",n=2,uncertain="exclude"),NULL),"exact unique")
+  selected <- evidencelandscaper:::`.orchestrator_choice`(list(mode="percent",percent=25,uncertain="exclude"),13)
   testthat::expect_equal(selected$selected,4L)
   testthat::expect_equal(selected$population,13L)
-  testthat::expect_error(evidencelandscaper:::`.orchestrator_choice`(list(mode="n",n=50),13),"Invalid n")
-  testthat::expect_error(evidencelandscaper:::`.orchestrator_choice`(list(mode="percent",percent=101),13),"Invalid sample")
+  testthat::expect_identical(selected$uncertain_policy,"exclude")
+  testthat::expect_identical(evidencelandscaper:::.orchestrator_choice(list(mode="all",uncertain="adjudicate"),13)$uncertain_policy,"adjudicate")
+  testthat::expect_error(evidencelandscaper:::.orchestrator_choice(list(mode="all"),13),"uncertain")
+  testthat::expect_error(evidencelandscaper:::`.orchestrator_choice`(list(mode="n",n=50,uncertain="exclude"),13),"Invalid n")
+  testthat::expect_error(evidencelandscaper:::`.orchestrator_choice`(list(mode="percent",percent=101,uncertain="exclude"),13),"Invalid sample")
 })
 testthat::test_that("orchestration state can be persisted under one named run", {
   d <- tempfile("ostara-expansion-")
