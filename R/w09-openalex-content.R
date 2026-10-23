@@ -28,6 +28,7 @@ retrieve_w09_openalex_content <- function(w09) {
     stop("Duplicate retrieval log records; investigate before resuming.")
   done <- vapply(prev,function(z)z$record_id,character(1))
   key <- Sys.getenv("OPENALEX_API_KEY")
+  if(!nzchar(key))stop("OPENALEX_API_KEY is required for hosted full-text retrieval.")
   elsevier <- Sys.getenv("SCOPUS_API_TOKEN")
   inst <- Sys.getenv("SCOPUS_INSTTOKEN")
   clean <- function(z) {
@@ -144,6 +145,23 @@ retrieve_w09_openalex_content <- function(w09) {
           }
         }
         if(!is.null(entry$file))break
+      }
+    }
+    # Hosted GROBID XML takes precedence over an existing document.
+    # This also repairs earlier runs where a document was saved first.
+    if(!is.null(work) && isTRUE(work$has_content$grobid_xml) &&
+       !file.exists(targets[["xml"]])) {
+      wid<-sub("^.*/","",as.character(work$id))
+      uri<-paste0("https://content.openalex.org/works/",wid,
+                  ".grobid-xml?api_key=",
+                  utils::URLencode(key,reserved=TRUE))
+      attempt<-download(uri,targets[["xml"]],"xml")
+      entry$attempts[[length(entry$attempts)+1L]]<-list(
+        provider="OpenAlex",format="xml",
+        status=if(attempt$ok)"saved" else attempt$reason)
+      if(attempt$ok) {
+        entry<-setfile(attempt$path,"OpenAlex_hosted_content")
+        entry$openalex_status<-"saved_xml"
       }
     }
     if(is.null(entry$file)) {
