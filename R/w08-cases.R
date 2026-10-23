@@ -15,14 +15,14 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6",
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   if(is.null(prompt_file)) {
-    prompt_file<-system.file("w08","case_identification_prompt_v1.txt",
+    prompt_file<-system.file("w08","case_identification_prompt_v2.txt",
                              package="evidencelandscaper")
   } else {
     prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
   }
   if(!nzchar(prompt_file)||!file.exists(prompt_file))
     stop("W08 case-identification prompt not found.")
-  form_file<-system.file("w08","case_identification_fields_v1.csv",
+  form_file<-system.file("w08","case_identification_fields_v2.csv",
                          package="evidencelandscaper")
   if(!nzchar(form_file))stop("W08 extraction field schema not packaged.")
   if(!nzchar(Sys.getenv("OPENAI_API_KEY")))
@@ -151,6 +151,13 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6",
                  "implementation_status"))
         if(!one(ca[[f]])||!nzchar(trimws(ca[[f]])))
           stop("W08 incomplete case data: ",record_id," field ",f)
+      for(f in c("collective_action_confidence","collective_action_basis","case_kind"))
+        if(!one(ca[[f]])||!nzchar(trimws(ca[[f]])))
+          stop("W08 v2 missing case field: ",record_id," ",f)
+      if(!ca$collective_action_confidence%in%c("high","medium","low") ||
+         !ca$case_kind%in%c("collective_arrangement","research_activity",
+                            "commercial_service","social_mobilisation","other_unclear"))
+        stop("W08 v2 invalid case classification: ",record_id)
       if(!ca$confidence%in%c("high","medium","low")||
          !ca$implementation_status%in%c("implemented","proposed",
                                          "historical","unclear"))
@@ -215,6 +222,9 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6",
         case_location=v(ca$case_location),case_sector=v(ca$case_sector),
         implementation_status=v(ca$implementation_status),
         evidence=v(ca$supporting_evidence),confidence=v(ca$confidence),
+        collective_action_confidence=v(ca$collective_action_confidence),
+        collective_action_basis=v(ca$collective_action_basis),
+        case_kind=v(ca$case_kind),
         fulltext_priority=z$fulltext_priority,
         stringsAsFactors=FALSE)
     }))
@@ -223,7 +233,8 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6",
     local_case_number=integer(),case_name=character(),case_description=character(),
     case_location=character(),case_sector=character(),
     implementation_status=character(),evidence=character(),confidence=character(),
-    fulltext_priority=character())
+    fulltext_priority=character(),collective_action_confidence=character(),
+    collective_action_basis=character(),case_kind=character())
   overview<-data.frame(
     record_id=vapply(all,function(z)z$record_id,character(1)),
     case_evidence_status=vapply(all,function(z)z$case_evidence_status,character(1)),
