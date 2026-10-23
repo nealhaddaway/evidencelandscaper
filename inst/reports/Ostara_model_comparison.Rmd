@@ -1,0 +1,105 @@
+---
+title: "Ostara: Luna versus Sol pilot comparison"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    theme: cosmo
+params:
+  w07_sol: null
+  w07_luna: null
+  w08_sol: null
+  w08_luna: null
+  w09_sol: null
+  w09_luna: null
+---
+
+This report compares outputs for **matching publication IDs** and identical prompts/ontologies wherever available. Agreement does not establish correctness; manually adjudicate discrepancies against the abstracts and full texts. Missing comparison runs are reported, not imputed.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE,warning=FALSE,message=FALSE)
+stopifnot(requireNamespace("jsonlite",quietly=TRUE),requireNamespace("knitr",quietly=TRUE))
+readjl <- function(path) {
+ if(is.null(path)||!file.exists(path))return(list())
+ lines<-readLines(path,warn=FALSE)
+ lapply(lines[nzchar(trimws(lines))],jsonlite::fromJSON,simplifyVector=FALSE)
+}
+getrun <- function(p,file) if(is.null(p)) list() else readjl(file.path(p,file))
+byid <- function(x)if(!length(x))list() else
+  setNames(x,vapply(x,function(z)z$record_id,character(1)))
+codes <- function(z)if(is.null(z$mechanisms)||!length(z$mechanisms))character() else
+  sort(unique(vapply(z$mechanisms,function(x)x$mechanism_id,character(1))))
+catable <- function(z)if(is.null(z$cases))list() else z$cases
+show <- function(z)if(is.null(z)||!nrow(z))cat("No matched results yet.\n") else
+  print(knitr::kable(z,format="html"))
+getmanifest<-function(path)if(!is.null(path)&&file.exists(file.path(path,"manifest.json")))
+  jsonlite::fromJSON(file.path(path,"manifest.json"),simplifyVector=FALSE) else list()
+```
+
+# W07: abstract mechanism coding
+
+```{r w07}
+a<-byid(getrun(params$w07_sol,"coding.jsonl"))
+b<-byid(getrun(params$w07_luna,"coding.jsonl"))
+ids<-intersect(names(a),names(b))
+v<-if(length(ids))do.call(rbind,lapply(ids,function(id){
+  x<-codes(a[[id]]);y<-codes(b[[id]])
+  data.frame(record_id=id,sol=paste(x,collapse="; "),luna=paste(y,collapse="; "),
+             exact_match=identical(x,y),stringsAsFactors=FALSE)
+})) else NULL
+show(v)
+if(!is.null(v))cat(sprintf("\n**Exact mechanism-set agreement:** %.0f/%d (%.1f%%).\n",
+  sum(v$exact_match),nrow(v),100*mean(v$exact_match)))
+```
+
+# W08: case identification
+
+```{r w08}
+a<-byid(getrun(params$w08_sol,"case_assessments.jsonl"))
+b<-byid(getrun(params$w08_luna,"case_assessments.jsonl"))
+ids<-intersect(names(a),names(b))
+v<-if(length(ids))do.call(rbind,lapply(ids,function(id) {
+  x<-a[[id]]$case_evidence_status;y<-b[[id]]$case_evidence_status
+  data.frame(record_id=id,sol=x,luna=y,same_status=identical(x,y))
+})) else NULL
+show(v)
+if(!is.null(v))cat(sprintf("\n**Exact case-status agreement:** %.0f/%d (%.1f%%).\n",
+ sum(v$same_status),nrow(v),100*mean(v$same_status)))
+```
+
+# W09: full-text case extraction
+
+```{r w09}
+get09<-function(p) {
+  if(is.null(p))return(list())
+  f<-file.path(p,"fulltext_case_registry_normalised.jsonl")
+  if(!file.exists(f))f<-file.path(p,"fulltext_case_registry.jsonl")
+  byid(readjl(f))
+}
+a<-get09(params$w09_sol);b<-get09(params$w09_luna)
+ids<-intersect(names(a),names(b))
+v<-if(length(ids))do.call(rbind,lapply(ids,function(id){
+ x<-catable(a[[id]]);y<-catable(b[[id]])
+ data.frame(record_id=id,sol_status=a[[id]]$verification_status,
+ luna_status=b[[id]]$verification_status,sol_cases=length(x),
+ luna_cases=length(y),matching_case_count=length(x)==length(y),
+ matching_status=identical(a[[id]]$verification_status,b[[id]]$verification_status))
+})) else NULL
+show(v)
+```
+
+# Manual quality assessment
+
+Edit the following commentary after examining disputed records against their source material.
+
+**W07:** Assess whether disagreements reflect missed mechanisms, unsupported assignments, or different interpretations of the ontology.
+
+**W08:** For mismatches, adjudicate whether each candidate is a real-world collective initiative rather than a research programme or individual company.
+
+**W09:** Compare number of cases, location and ISO3 codes, supply-chain stages, source-grounded mechanism classifications, and whether conclusions are actual observations rather than hypothetical effects. The table above is a structural comparison, not a substitute for source verification.
+
+**Decision:** Record here whether Luna is adequate for each stage, or whether Sol should be retained for difficult records.
+
+# Limitations
+
+Agreement is not accuracy. The comparison needs exact matched records, matched schemas and archived prompts. Pilot results are not representative unless the sampling frame and sampling method support that claim. This report does not calculate billed API costs, which are available from the Ostara OpenAI project.
