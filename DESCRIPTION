@@ -20,5 +20,7 @@ Suggests:
     stringi,
     ggplot2,
     pdftools,
-    countrycode
+    countrycode,
+    maps,
+    rmarkdown
 Config/testthat/edition: 3
