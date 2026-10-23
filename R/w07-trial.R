@@ -3,7 +3,8 @@
 #' @param ontology_file Path to mechanism ontology CSV; omitted reuses the latest archived W07 trial ontology.
 #' @param prompt_file Path to W07 coding prompt TXT; omitted reuses the corresponding archived W07 prompt.
 #' @param n Number of retained records to code; 0 codes all from finalised full W04.
-#' @param w04_run Optional explicit finalised W04 run, including a selected-record run.\n#' @param model OpenAI Responses model.
+#' @param w04_run Optional explicit finalised W04 run, including a selected-record run.
+#' @param model OpenAI Responses model.
 #' @return Local W07 trial directory.
 #' @export
 trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-luna",
@@ -62,7 +63,12 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
     list.dirs(path,recursive=FALSE,full.names=TRUE)
   }),use.names=FALSE)
   options<-options[file.exists(file.path(options,"finalised","summary.json"))]
-  if(!is.null(w04_run)) {\n    w04_run<-normalizePath(w04_run,winslash="/",mustWork=TRUE)\n    options<-options[options==w04_run]\n  } else {\n    options<-options[if(n==0L)grepl("^full-",basename(options)) else grepl("^trial-",basename(options))]\n  }
+  if(!is.null(w04_run)) {
+    w04_run<-normalizePath(w04_run,winslash="/",mustWork=TRUE)
+    options<-options[options==w04_run]
+  } else {
+    options<-options[if(n==0L)grepl("^full-",basename(options)) else grepl("^trial-",basename(options))]
+  }
   if(!length(options))stop("No appropriate finalised W04 screening run: full W04 required when n=0.")
   options<-options[order(file.info(file.path(options,"finalised","summary.json"))$mtime,
                          decreasing=TRUE)]
