@@ -149,7 +149,14 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
    }
    invisible(TRUE)
  }
+ total_records<-length(record_ids)
+ completed_records<-sum(record_ids%in%ids)
+ message("[W09 extraction] ",completed_records,"/",total_records,
+         " publications completed; ",total_records-completed_records,
+         " remaining (existing V2.5 outputs reused).")
  for(id in record_ids[!record_ids%in%ids]) {
+   message("[W09 extraction] ",completed_records+1L,"/",total_records,
+           " processing ",id)
    payload<-w09_text_payload(w09,id,as.integer(max_pages))
    original<-byid[[id]]
    assigned<-if(is.null(original$mechanisms))character() else
@@ -184,9 +191,13 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
      prompt_sha256=pm$prompt_sha256)
    cat(jsonlite::toJSON(z,auto_unbox=TRUE,null="null"),"\n",
        file=out,append=TRUE,sep="")
-   message("[W09 v2] ",id,": ",z$verification_status,
+   completed_records<-completed_records+1L
+   message("[W09 extraction] ",completed_records,"/",total_records,
+           " completed ",id,": ",z$verification_status,
            "; cases ",length(z$cases))
  }
+ message("[W09 extraction] ",completed_records,"/",total_records,
+         " model assessments complete; finalising derived outputs.")
  # Deterministic derived layer; never modify or overwrite raw model responses.
  # Cross-cutting cannot coexist with a specifically identified supply-chain
  # stage. Keep the removal in a separate, auditable file.
@@ -232,5 +243,7 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
  }
  save_lines(normalized,normalised_path)
  save_lines(Filter(Negate(is.null),events),audit_path)
+ message("[W09 extraction] ",completed_records,"/",total_records,
+         " complete; outputs: ",target)
  invisible(target)
 }
