@@ -1,5 +1,27 @@
 # evidencelandscaper
 
+**[START HERE: Ostara W00–W07 step-by-step workflow](WORKFLOW.md)**
+
+An R package for locally executed, reproducible evidence mapping. Project data,
+API outputs, adjudications and coding results are stored separately from the
+package source. The workflow guide records the actual October 2026 Ostara run,
+copy-ready R commands, result counts, provenance safeguards and the difference
+between completed stages and experimental functionality.
+
+**Verified Ostara progress (23 October 2026):** W00 512 source records from
+27 source sets; W01 196 canonical publications; W04 full screening finalised,
+170 retained / 26 excluded. W07 full 170-record coding is next, **not yet
+confirmed complete**. The approved W07 v3 ontology must be checked explicitly
+before starting any model calls.
+
+> **Documentation status:** The detailed sections below contain implementation
+> notes written as individual stages were developed. Some statements such as
+> “not yet implemented”, “not yet runtime-tested” and “trial only” describe
+> historical development phases and are superseded by the status and usage
+> instructions in [WORKFLOW.md](WORKFLOW.md). Consult the workflow guide first
+> for current usage; these notes will need periodic consolidation.
+
+
 An R package for reproducible evidence maps, with review data stored locally
 and separately from package source code. Under active development.
 
