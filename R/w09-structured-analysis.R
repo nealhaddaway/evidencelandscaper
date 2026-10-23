@@ -94,7 +94,13 @@ analyse_w09_cases <- function(w09,record_ids,model="gpt-5.6",max_pages=0L) {
  ids<-vapply(done,function(x)x$record_id,character(1))
  if(anyDuplicated(ids)||any(!ids%in%q$record_id))
    stop("Existing W09 extraction ledger contains invalid IDs.")
+ total_records<-length(record_ids)
+ progress<-sum(record_ids%in%ids)
+ message("[W09 structured] ",progress,"/",total_records,
+         " completed; ",total_records-progress," remaining.")
  for(id in record_ids[!record_ids%in%ids]) {
+   message("[W09 structured] ",progress+1L,"/",total_records,
+           " processing ",id)
    payload<-w09_text_payload(w09,id,as.integer(max_pages))
    # The v1 prompt requests page_number. Override it explicitly where source
    # content has no pagination, rather than hallucinating article page numbers.
@@ -137,8 +143,10 @@ analyse_w09_cases <- function(w09,record_ids,model="gpt-5.6",max_pages=0L) {
         algo="sha256",serialize=FALSE))
    cat(jsonlite::toJSON(result,auto_unbox=TRUE,null="null"),"\n",
        file=out,append=TRUE,sep="")
-   message("[W09] Analysed ",id," (",payload$format,"): ",
-           result$verification_status)
+   progress<-progress+1L
+   message("[W09 structured] ",progress,"/",total_records,
+           " completed ",id," (",payload$format,"): ",result$verification_status)
  }
+ message("[W09 structured] ",progress,"/",total_records," complete.")
  invisible(out)
 }
