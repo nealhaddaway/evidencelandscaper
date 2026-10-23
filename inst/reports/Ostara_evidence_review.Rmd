@@ -106,7 +106,7 @@ if(named) {
   full_metrics<-data.frame(search_id=params$named_run,
      case_bearing_publications=sum(statuses %in% c("specific_case","multiple_cases")),
      cases_identified_at_abstract=NA_integer_,
-     full_texts_downloaded=if(is.null(inv))0L else nrow(inv),
+     full_texts_downloaded=NA_integer_,
      full_texts_parsed=if(is.null(inv))0L else nrow(inv),
      cases_confirmed_full_text=confirmed)
 }
