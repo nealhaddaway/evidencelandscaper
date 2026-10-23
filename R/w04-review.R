@@ -46,10 +46,18 @@ prepare_w04_review <- function(w04,include_all=FALSE,missing_abstracts=FALSE) {
     c<-x$canonical
     scalar<-function(y)if(is.null(y)||!length(y))"" else
       paste(as.character(unlist(y,use.names=FALSE)),collapse="; ")
-    list(title=scalar(c$title),authors=scalar(c$authors),
-         year=scalar(c$year),journal=scalar(c$source_title),
-         doi=scalar(c$doi),abstract=scalar(c$abstract),
-         keywords=scalar(c$keywords))
+    choose<-function(...) {
+      for(z in list(...)) {
+        v<-scalar(z)
+        if(nzchar(trimws(v)))return(v)
+      }
+      ""
+    }
+    list(title=choose(c$title),authors=choose(c$authors,c$author,c$author_names),
+         year=choose(c$year,c$publication_year,c$published_year),
+         journal=choose(c$source_title,c$journal,c$publication_venue),
+         doi=choose(c$doi),abstract=choose(c$abstract),
+         keywords=choose(c$author_keywords,c$keywords))
   }
   all_votes<-unlist(lapply(votes,readjl),recursive=FALSE)
   rationale<-split(all_votes,vapply(all_votes,function(x)
