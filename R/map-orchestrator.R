@@ -58,8 +58,8 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @param run_name Previously created run name.
 #' @param map Existing map name/path.
 #' @param step One of auto,scope,retrieve,status.
-#' @param screening Optional list(mode="all"|"n"|"percent", n=..., percent=...).
-#' @param extraction Optional analogous selection for case-bearing publications.
+#' @param screening Optional list(mode="all"|"n"|"percent", n=..., percent=...,\n#'   uncertain="exclude"|"adjudicate").
+#' @param extraction Optional analogous selection for case-bearing publications,\n#'   including uncertain="exclude"|"adjudicate".
 #' @param sources Optional W00 database IDs for first scoping.
 #' @return Updated run state, invisibly.
 #' @export
@@ -83,11 +83,11 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
   if(!is.null(screening)) {
     if(!identical(state$status,"awaiting_screening_scope"))
       stop("First decision not currently available. Current status: ",state$status)
-    state$decision1 <- .orchestrator_choice(screening, state$scope$eligible_records)
+    state$decision1 <- .orchestrator_choice(screening, state$scope$eligible_records,stage="screening")
     state$status <- "screening_scope_saved"
     .orchestrator_save(state)
     message("[",run_name,"] Checkpoint 1 saved: ",state$decision1$selected,
-            " of ",state$decision1$population," records.")
+            " of ",state$decision1$population," records; uncertain decisions: ",\n            state$decision1$uncertain_policy,".")
     message("[",run_name,"] W01–W04 multi-run input adapter is not yet validated. ",
       "STOPPING instead of mixing this expansion with a prior run.")
     state$status <- "handoff_required"
@@ -98,10 +98,10 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
   if(!is.null(extraction)) {
     if(!identical(state$status,"awaiting_extraction_scope"))
       stop("Second decision not available; downstream screening must complete first.")
-    state$decision2 <- .orchestrator_choice(extraction,state$case_bearing_publications)
+    state$decision2 <- .orchestrator_choice(extraction,state$case_bearing_publications,stage="extraction")
     state$status <- "extraction_scope_saved"
     .orchestrator_save(state)
-    message("[",run_name,"] Checkpoint 2 saved.")
+    message("[",run_name,"] Checkpoint 2 saved: ",state$decision2$selected,\n            " of ",state$decision2$population,\n            " case-bearing publications; uncertain cases: ",\n            state$decision2$uncertain_policy,".")
     return(invisible(state))
   }
   if(step=="scope" || (step=="auto"&&identical(state$status,"planned"))) {
@@ -182,11 +182,11 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
   invisible(state)
 }
 
-.orchestrator_choice <- function(x,population) {
+.orchestrator_choice <- function(x,population,stage=c("screening","extraction")) {\n  stage <- match.arg(stage)
   if(is.null(population)||length(population)!=1L||
      !is.finite(as.numeric(population)))
     stop("Cannot sample until exact unique eligible population is known.")
-  modes <- c("all","n","percent")
+  modes <- c("all","n","percent")\n  if(is.null(x$uncertain) || length(x$uncertain)!=1L ||\n     !x$uncertain %in% c("exclude","adjudicate"))\n    stop("Checkpoint decision must set uncertain = exclude or adjudicate.")
   if(!is.list(x)||!x$mode %in% modes)stop("Specify mode all, n or percent.")
   N <- as.integer(population)
   if(identical(x$mode,"all"))n<-N
@@ -199,7 +199,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     if(length(p)!=1L||is.na(p)||p<=0||p>100)stop("Invalid sample percentage.")
     n<-min(N,ceiling(N*p/100))
   }
-  list(mode=x$mode,selected=as.integer(n),population=N,
+  list(stage=stage,mode=x$mode,uncertain_policy=x$uncertain,\n       uncertain_handling=if(identical(x$uncertain,"exclude"))\n         "Exclude unresolved uncertain records from downstream stages; retain audit status" else\n         "Hold unresolved uncertain records for adjudication before handover",\n       selected=as.integer(n),population=N,
        seed=20261023L,policy="sample without replacement; retain sampled record IDs")
 }
 
