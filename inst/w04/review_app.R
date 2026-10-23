@@ -29,7 +29,7 @@ last_events<-function(e) {
 val<-function(x)if(is.null(x)||!length(x))"" else paste(unlist(x,use.names=FALSE),collapse="; ")
 utc<-function()format(Sys.time(),"%Y-%m-%dT%H:%M:%SZ",tz="UTC")
 ui<-fluidPage(
-  tags$head(tags$style(HTML("body{max-width:1220px;margin:auto}.box{border:1px solid #ddd;border-radius:8px;padding:18px;overflow-wrap:anywhere}pre{white-space:pre-wrap;font-family:inherit}"))),
+  tags$head(tags$meta(charset="utf-8"),tags$style(HTML("body{max-width:1220px;margin:auto}.box{border:1px solid #ddd;border-radius:8px;padding:18px;overflow-wrap:break-word;word-break:normal;hyphens:auto}pre{white-space:pre-wrap;font-family:inherit;overflow-wrap:break-word;word-break:normal;hyphens:auto}"))),
   titlePanel("W04 · Collective action screening (review v2)"),
   textOutput("reviewer"),h4(textOutput("progress")),
   conditionalPanel("output.ready && !output.complete",
@@ -95,7 +95,7 @@ server<-function(input,output,session){
   observeEvent(input[['next']],position(min(length(cases),position()+1L)))
   observeEvent(list(position(),saved()),{
     x<-last_events(saved())[[current()$review_case_id]]
-    updateRadioButtons(session,"decision",selected=if(is.null(x))character() else x$decision)
+    updateRadioButtons(session,"decision",selected=if(is.null(x))character(0) else x$decision)
     updateTextAreaInput(session,"reason",value=if(is.null(x))"" else x$reason)
   })
   output$bibliography<-renderUI({
@@ -150,8 +150,10 @@ server<-function(input,output,session){
       return(showNotification("Select a decision",type="error"))
     reason<-trimws(val(input$reason))
     # Reasons are optional for exclusions; required only for retain/uncertain.
-    if(input$decision %in% c("retain","uncertain") && !nzchar(reason))
-      return(showNotification("A reason is required only for Retain or Uncertain.",type="error"))
+    if(identical(input$decision,"retain") || identical(input$decision,"uncertain")) {
+      if(!nzchar(reason))
+        return(showNotification("A reason is required only for Retain or Uncertain.",type="error"))
+    }
     e<-list(schema="local-w04-review-decision-v1",
       review_case_id=x$review_case_id,record_id=x$record_id,
       queue_sha256=queuehash,reviewer=reviewer(),decision=input$decision,
