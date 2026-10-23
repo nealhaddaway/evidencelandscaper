@@ -309,7 +309,10 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     if(anyDuplicated(inv$record_id)||any(!inv$record_id%in%sample$record_id))
       stop("W09 extraction-ready inventory includes records outside this sample.")
     output<-publish_w09_evidence(map_path=map,w09_run=state$w09$run,
-               extraction_dir=extraction_dir,coordinates_csv=coordinates_csv)
+               extraction_dir=extraction_dir,coordinates_csv=coordinates_csv,
+               named_run=run_name,w00_run=state$w00$run_dir,
+               w04_run=state$w04$run,w07_run=state$w07$run,
+               w08_run=state$w08$run)
     state$published<-list(atlas=output$atlas,report=output$report,
           full_report=output$full_report,inventory_sha256=sha(inventory),
           extraction_manifest_sha256=sha(file.path(extraction_dir,"manifest.json")))
