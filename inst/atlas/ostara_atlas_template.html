@@ -35,7 +35,12 @@ v+="<p><b>Record:</b> "+esc(p.record_id)+"<br><b>Observation:</b> "+esc(c.observ
 v+="<p><b>Geography:</b> "+esc(countries(c).join(", "))+"<br><b>Coordinate basis:</b> "+esc(k.coordinate_basis)+"<br><b>Coordinate source:</b> "+esc(k.coordinate_source)+"</p>";
 v+="<p><b>Mechanisms:</b> "+esc(codes(c).join(", "))+"</p>";
 for(const f of ["objectives","actors","collaboration_activities","governance","resources_incentives","enablers","barriers","commodities","supply_chain_stages"])if(x[f]&&x[f].length)v+="<p><b>"+esc(f.replaceAll("_"," "))+":</b> "+esc(values(x[f]))+"</p>";
-for(const f of ["additional_mechanisms","author_conclusions"])for(const a of x[f]||[])v+="<p><b>"+esc(a.mechanism_id||a.conclusion||f)+":</b> "+esc(a.conclusion||"")+"<br><i>"+esc(a.source_quote||"")+"</i> "+esc(a.source_anchor||"")+"</p>";
+for(const f of ["additional_mechanisms","author_conclusions"])for(const a of x[f]||[]){
+if(a.mechanism_id)v+="<p>Mechanism: "+esc(a.mechanism_id)+"</p>";
+if(a.conclusion)v+="<p>[Model 1 justification] "+esc(a.conclusion)+"</p>";
+if(a.source_quote)v+="<p>[Model 2 justification] "+esc(a.source_quote)+"</p>";
+if(a.source_anchor)v+="<p><small>Source anchor: "+esc(a.source_anchor)+"</small></p>";
+}
 v+="<p><small>Source SHA-256: "+esc(p.source_sha256)+"<br>Prompt SHA-256: "+esc(c.extraction.prompt_sha256)+"</small></p>";
 $("info").innerHTML=v;$("popup").style.display="block";
 }
