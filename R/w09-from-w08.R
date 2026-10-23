@@ -6,10 +6,10 @@
 #' @param w08 W08 run directory.
 #' @param include_unvalidated Include failed quotation IDs provisionally.
 #' @param map_path Evidence-map directory.
-#' @param include_unclear Include uncertain records (FALSE by default: cases only).\n#' @param record_ids_csv Optional exact sampled publication IDs from checkpoint 2.
+#' @param include_unclear Include uncertain records (FALSE by default: cases only).\n#' @param record_ids_csv Optional exact sampled publication IDs from checkpoint 2.\n#' @param w04_run Explicit finalised source W04 run for this expansion.
 #' @return Prepared W09 directory with an auditable selection CSV.
 #' @export
-prepare_w09_from_w08 <- function(w08,include_unvalidated=TRUE,map_path=NULL,include_unclear=FALSE,record_ids_csv=NULL) {
+prepare_w09_from_w08 <- function(w08,include_unvalidated=TRUE,map_path=NULL,include_unclear=FALSE,record_ids_csv=NULL,w04_run=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,mustWork=TRUE)
   w08<-normalizePath(w08,mustWork=TRUE)
@@ -39,7 +39,7 @@ prepare_w09_from_w08 <- function(w08,include_unvalidated=TRUE,map_path=NULL,incl
   }
   candidates<-sort(unique(candidates))\n  if(!is.null(record_ids_csv)) {\n    record_ids_csv<-normalizePath(record_ids_csv,winslash="/",mustWork=TRUE)\n    x<-utils::read.csv(record_ids_csv,stringsAsFactors=FALSE)\n    if(!identical(names(x),"record_id")||anyDuplicated(x$record_id)||anyNA(x$record_id))\n      stop("Invalid checkpoint 2 sampled IDs.")\n    if(any(!x$record_id%in%candidates))stop("Selected extraction IDs were not eligible in W08.")\n    candidates<-sort(as.character(x$record_id))\n  }
   if(!length(candidates))stop("No eligible W09 candidates.")
-  w09<-prepare_w09_cases(map_path=map_path,record_ids=candidates)
+  w09<-prepare_w09_cases(map_path=map_path,record_ids=candidates,w04_run=w04_run)
   selection<-data.frame(record_id=candidates,
     w08_status=unname(reasons[candidates]),
     evidence_validation=ifelse(grepl("^unvalidated_",reasons[candidates]),
