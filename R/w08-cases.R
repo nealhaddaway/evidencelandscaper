@@ -14,9 +14,12 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6",
                             map_path=NULL,prompt_file=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
-  prompt_file<-if(is.null(prompt_file))
-    system.file("w08","case_identification_prompt_v1.txt",package="evidencelandscaper")
-    else normalizePath(prompt_file,winslash="/",mustWork=TRUE)
+  if(is.null(prompt_file)) {
+    prompt_file<-system.file("w08","case_identification_prompt_v1.txt",
+                             package="evidencelandscaper")
+  } else {
+    prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
+  }
   if(!nzchar(prompt_file)||!file.exists(prompt_file))
     stop("W08 case-identification prompt not found.")
   form_file<-system.file("w08","case_identification_fields_v1.csv",
@@ -153,7 +156,8 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6",
                                          "historical","unclear"))
         stop("W08 invalid case categories: ",record_id)
       # Evidence must be an excerpt from submitted title or abstract.
-      if(!grepl(ca$supporting_evidence,input_text,fixed=TRUE))
+      norm<-function(x)gsub("[[:space:]]+"," ",trimws(x))
+      if(!grepl(norm(ca$supporting_evidence),norm(input_text),fixed=TRUE))
         stop("W08 evidence excerpt not in input: ",record_id)
     }
     invisible(TRUE)
@@ -235,8 +239,11 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6",
         stop("Existing W08 review CSV differs; preserve reviewer edits: ",spec$path)
     } else utils::write.csv(spec$data,spec$path,row.names=FALSE,na="")
   }
-  final<-c(info,list(status="PILOT_COMPLETE",responses_sha256=sha(out),
-    status_counts=as.list(summary),candidate_cases=nrow(flat)))
+  final<-info
+  final$status<-"PILOT_COMPLETE"
+  final$responses_sha256<-sha(out)
+  final$status_counts<-as.list(summary)
+  final$candidate_cases<-nrow(flat)
   jsonlite::write_json(final,file.path(dest,"summary.json"),
                        auto_unbox=TRUE,pretty=TRUE)
   message("[W08] Completed ",n," abstract assessments; ",nrow(flat),
