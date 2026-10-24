@@ -63,7 +63,7 @@ run_w00_full <- function(map) {
     stop("Existing W00 manifest does not identify this full retrieval run.")
   if(!is.null(previous) && identical(previous$status,"success"))
     return(invisible(manifest_file))
-  if(!is.null(previous) && !previous$status %in% c("failed","running"))
+  if(!is.null(previous) && !previous$status %in% c("failed","running","incomplete"))
     stop("Unexpected W00 manifest status; inspect before resuming.")
   if(is.null(previous)) {
     existing<-sources[vapply(sources,function(x)
@@ -109,11 +109,17 @@ run_w00_full <- function(map) {
                          auto_unbox = TRUE, null = "null")
   }
   save_manifest("running")
+  unavailable<-c("agricola","pubmed","ethos","epmc_preprints")
   for (i in seq_along(sources)) {
     src <- sources[[i]]
     message("[W00 full] [", i, "/", length(sources), "] ", src)
     dest <- file.path(run_dir, "sources", src)
     prior<-results[[src]]
+    if(!is.null(prior) && identical(prior$status,"unavailable") &&
+       !identical(previous$status,"incomplete")) {
+      message("[W00 full] Previously recorded unavailable source ",src,"; skipping repeat failed requests.")
+      next
+    }
     if(!is.null(prior) && identical(prior$status,"success")) {
       mf<-file.path(dest,"manifest.json")
       if(!file.exists(mf))
@@ -221,16 +227,30 @@ run_w00_full <- function(map) {
            manifest_sha256=digest::digest(file=mf,algo="sha256",serialize=FALSE))
     }, error = function(e) list(status = "failed",
                                error = conditionMessage(e)))
-    results[[src]] <- result
-    save_manifest(if (result$status == "success") "running" else "failed")
-    if (result$status != "success") {
-      stop("W00 full retrieval failed at ", src, ": ", result$error,
-           ". Output retained for diagnosis; no subsequent databases run.",
-           call. = FALSE)
+    if(identical(result$status,"failed") && src %in% unavailable &&
+       grepl("HTTP 503",result$error,fixed=TRUE)) {
+      result$status<-"unavailable"
+      result$reason<-"Provider HTTP 503 after retries; no records harvested"
+      message("[W00 full] ",src,
+              " unavailable (HTTP 503). Continuing remaining databases; ",
+              "this run will NOT be marked complete.")
     }
+    results[[src]] <- result
+    save_manifest(if(result$status=="failed")"failed" else "running")
+    if(identical(result$status,"failed")) {
+      stop("W00 full retrieval failed at ",src,": ",result$error,
+           ". Outputs retained; no subsequent databases run.",call.=FALSE)
+    }
+    if(identical(result$status,"unavailable"))next
     message("[W00 full] ", src, ": ", result$records, " records")
   }
-  save_manifest("success")
-  message("[W00 full] All ", length(sources), " source harvests completed.")
+  pending<-names(results)[vapply(results,function(x)identical(x$status,"unavailable"),logical(1))]
+  if(length(pending)) {
+    save_manifest("incomplete")
+    message("[W00 full] Other providers processed; still unavailable: ",paste(pending,collapse=", "),". W01 must not start.")
+  } else {
+    save_manifest("success")
+    message("[W00 full] All ", length(sources), " source harvests completed.")
+  }
   invisible(manifest_file)
 }
