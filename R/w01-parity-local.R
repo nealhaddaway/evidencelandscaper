@@ -42,19 +42,19 @@ trial_w01_qgram_local <- function(map="Ostara_collective_action_map",
   if(length(ids)<2L)stop("Not enough signatures for parity trial.")
   set.seed(seed)
   chosen<-sort(sample(ids,min(n,length(ids))))
-  sig<-sig[idx%in%chosen]
+  sig<-sig[sig$idx %in% chosen, ]
   lengths<-setNames(nchar(meta$title_norm,type="chars"),as.character(meta$idx))
   message("[W01 parity] ",length(chosen)," real source records; ",nrow(sig),
           " archived rare q-gram signatures.")
   old<-data.table::copy(sig)
-  data.table::setkey(old,qgram)
+  data.table::setkeyv(old,"qgram")
   t_original<-system.time({
     expected<-old[old,allow.cartesian=TRUE,nomatch=0L][idx<i.idx,
-      .(shared_rare_qgrams=.N),by=.(i=idx,j=i.idx)]
-    expected<-expected[shared_rare_qgrams>=2L]
+      list(shared_rare_qgrams=.N),by=list(i=idx,j=i.idx)]
+    expected<-expected[expected$shared_rare_qgrams>=2L, ]
     ratio<-pmin(lengths[as.character(expected$i)],lengths[as.character(expected$j)]) /
       pmax(lengths[as.character(expected$i)],lengths[as.character(expected$j)])
-    expected<-expected[is.finite(ratio)&ratio>=0.75]
+    expected<-expected[is.finite(ratio)&ratio>=0.75, ]
     old_keys<-sort(paste(expected$i,expected$j,sep="::"))
   })
   dbfile<-tempfile(pattern="w01-parity-",fileext=".sqlite")
