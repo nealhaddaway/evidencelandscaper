@@ -181,7 +181,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     for(i in seq_len(20L)){
       phase<-state$status
       next_step<-switch(phase,
-        planned="scope",scoping="scope",scoped_counts_only="retrieve",
+        planned="scope",scoping="scope",scoped_counts_only="retrieve",retrieving="retrieve",
         retrieved=if(is.null(state$manual_inputs))"deduplicate" else
           if(file.exists(file.path(state$w00$run_dir,
             "accepted_manual_imports.json")))"deduplicate" else "import_manual",
@@ -685,8 +685,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     return(invisible(state))
   }
   if(step=="retrieve") {
-    if(!identical(state$status,"scoped_counts_only"))
-      stop("W00 scope must complete before retrieval.")
+    if(!state$status %in% c("scoped_counts_only","retrieving"))
+      stop("W00 must be scoped or an interrupted retrieval before continuation.")
     message("[",run_name,"] Running immutable W00 full retrieval from the scoped plan.")
     if(is.null(state$w00$run_dir) || is.null(state$w00$search_plan) ||
        is.null(state$w00$query_archive) || is.null(state$w00$source_selection))
