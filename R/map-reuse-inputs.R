@@ -5,6 +5,7 @@
 #' ontology/prompt pairs cause an explicit stop, not a silent guess.
 .orchestrator_reuse_inputs <- function(map, supplied) {
   sha<-function(p) digest::digest(file=p,algo="sha256",serialize=FALSE)
+  w04_hash<-function(p)digest::digest(paste(readLines(p,warn=FALSE,encoding="UTF-8"),collapse="\n"),algo="sha256",serialize=FALSE)
   if(is.null(supplied$screening_prompt)) {
     parent<-file.path(map,"runs","W01")
     roots<-if(dir.exists(parent))list.dirs(parent,recursive=FALSE) else character()
@@ -21,11 +22,11 @@
       z<-tryCatch(jsonlite::fromJSON(file.path(d,"finalised","summary.json")),
                   error=function(e)NULL)
       !is.null(m) && !is.null(z) && identical(z$status,"final") &&
-        identical(m$prompt_sha256,sha(file.path(d,"screening_prompt.txt")))
+        identical(m$prompt_sha256,w04_hash(file.path(d,"screening_prompt.txt")) )
     },w04)
     if(!length(valid))stop("No completed, checksum-verified Ostara W04 screening prompt found.")
     # The finalised run, not an arbitrary older trial, is the authority.
-    hashes<-unique(vapply(valid,function(d)sha(file.path(d,"screening_prompt.txt")),character(1)))
+    hashes<-unique(vapply(valid,function(d)w04_hash(file.path(d,"screening_prompt.txt")),character(1)))
     if(length(hashes)!=1L)
       stop("Completed Ostara W04 runs use different prompts; cannot identify a single approved version.")
     supplied$screening_prompt<-file.path(valid[[1L]],"screening_prompt.txt")
