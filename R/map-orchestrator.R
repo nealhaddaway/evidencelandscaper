@@ -174,7 +174,11 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
       phase<-state$status
       next_step<-switch(phase,
         planned="scope",scoping="scope",scoped_counts_only="retrieve",
-        retrieved=if(file.exists(file.path(state$w00$run_dir,\n          "accepted_manual_imports.json")))"deduplicate" else NULL,\n        w01_scored="finish_w01",
+        retrieved=if(file.exists(file.path(state$w00$run_dir,
+          "accepted_manual_imports.json")))"deduplicate" else
+          if(!is.null(state$manual_inputs))"import_manual" else NULL,
+        manual_importing="import_manual",
+        w01_scored="finish_w01",
         w01_classifying="finish_w01",w01_review_pending="finish_w01",
         screening_scope_saved="enrich",enriching="enrich",w03_complete="screen",
         w04_screened="finalize_screen",w04_final="code",
