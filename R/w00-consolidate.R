@@ -78,8 +78,19 @@ consolidate_w00 <- function(plan) {
         return(invisible(existing_manifest))
       }
     }
-    stop("Existing consolidated output is incomplete or changed; refusing overwrite.",
-         call. = FALSE)
+    # An interrupted write has no validated publication manifest. Preserve
+    # its bytes separately and recreate this exact deterministic consolidation.
+    if(file.exists(existing_manifest)) {
+      stop("Existing consolidated manifest is invalid or changed; refusing overwrite.",
+           call.=FALSE)
+    }
+    recovery<-file.path(run_dir,"interrupted_consolidations")
+    dir.create(recovery,recursive=TRUE,showWarnings=FALSE)
+    target<-file.path(recovery,paste0(basename(output),"-",
+      format(Sys.time(),"%Y%m%dT%H%M%S",tz="UTC")))
+    if(file.exists(target)||!file.rename(output,target))
+      stop("Could not archive incomplete consolidation: ",output,call.=FALSE)
+    message("[W00] Archived incomplete consolidation without deletion: ",target)
   }
   full_file <- file.path(run_dir, "w00_full_retrieval_manifest.json")
   sample_file <- file.path(run_dir, "w00_retrieval_manifest.json")
