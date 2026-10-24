@@ -54,13 +54,18 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
     stop("Model identifier required.")
 
   if(!is.null(manual_ris)) {
-    if(!is.character(manual_ris)||length(manual_ris)!=2L||
-       !setequal(names(manual_ris),c("cba","pqdt")))
-      stop("Supply exactly cba and pqdt named RIS paths.")
-    manual_ris<-vapply(manual_ris[c("cba","pqdt")],function(p)
-      normalizePath(path.expand(p),winslash="/",mustWork=TRUE),character(1))
-    if(any(!grepl("[.]ris$",manual_ris,ignore.case=TRUE)))
-      stop("Both manual inputs must be RIS files.")
+    if(!is.list(manual_ris) || !setequal(names(manual_ris),c("cba","pqdt")))
+      stop("manual_ris must be list(cba=...,pqdt=...), each with one or more RIS paths.")
+    manual_ris<-lapply(manual_ris[c("cba","pqdt")],function(paths) {
+      if(!is.character(paths)||!length(paths)||anyNA(paths)||
+         any(!grepl("[.]ris$",paths,ignore.case=TRUE)))
+        stop("Each manual source needs one or more .ris files.")
+      paths<-vapply(paths,function(p)normalizePath(path.expand(p),
+        winslash="/",mustWork=TRUE),character(1))
+      if(anyDuplicated(basename(paths)))
+        stop("Duplicate RIS filenames within a source. Rename the original exports uniquely.")
+      paths
+    })
     if(!is.null(manual_search_strings)&&
        (!is.character(manual_search_strings)||
         !setequal(names(manual_search_strings),c("cba","pqdt"))||
@@ -94,14 +99,17 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
     dir.create(file.path(home,"manual_inputs"))
     manual_inputs<-list()
     for(src in c("cba","pqdt")) {
-      dst<-file.path(home,"manual_inputs",paste0(src,".ris"))
-      if(!file.copy(manual_ris[[src]],dst,overwrite=FALSE))
-        stop("Cannot archive manual RIS: ",src)
-      if(file.info(dst)$size==0L)stop("Empty RIS file: ",src)
+      destdir<-file.path(home,"manual_inputs",src)
+      dir.create(destdir)
+      dest<-file.path(destdir,basename(manual_ris[[src]]))
+      if(!all(file.copy(manual_ris[[src]],dest,overwrite=FALSE)))
+        stop("Cannot archive all RIS files for ",src)
+      if(any(file.info(dest)$size==0L))stop("Empty RIS file for ",src)
       q<-if(is.null(manual_search_strings))
         "NOT_RECORDED: exact manual query not supplied" else
         unname(manual_search_strings[[src]])
-      manual_inputs[[src]]<-list(path=dst,sha256=sha(dst),search_string=q)
+      manual_inputs[[src]]<-list(paths=unname(dest),
+        sha256=unname(vapply(dest,sha,character(1))),search_string=q)
     }
   }
   state <- list(schema="evidencelandscaper-orchestration-v1",
@@ -311,11 +319,14 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     imports<-list()
     for(src in c("cba","pqdt")) {
       x<-state$manual_inputs[[src]]
-      if(!file.exists(x$path)||!identical(sha(x$path),x$sha256))
+      if(length(x$paths)!=length(x$sha256)||
+         any(!file.exists(unlist(x$paths)))||
+         !identical(unname(vapply(unlist(x$paths),sha,character(1))),
+                    unname(unlist(x$sha256))))
         stop("Archived RIS checksum mismatch for ",src)
       existing<-state$manual_imports[[src]]
       if(is.null(existing)) {
-        existing<-import_ris(map=map,files=x$path,source=src,
+        existing<-import_ris(map=map,files=unlist(x$paths),source=src,
           database=if(src=="cba")"CAB Abstracts" else "ProQuest Dissertations & Theses",
           search_date=as.character(Sys.Date()),search_string=x$search_string,
           keyword_semantics="unknown")
