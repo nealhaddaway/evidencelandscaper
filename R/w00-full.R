@@ -55,15 +55,23 @@ run_w00_full <- function(map) {
   run_dir <- normalizePath(dirname(dirname(plan$search_plan)),
                            winslash = "/", mustWork = TRUE)
   manifest_file <- file.path(run_dir, "w00_full_retrieval_manifest.json")
-  if (file.exists(manifest_file)) {
-    stop("W00 full retrieval manifest exists, refusing to overwrite: ",
-         manifest_file, call. = FALSE)
+  previous <- if(file.exists(manifest_file))
+    jsonlite::fromJSON(manifest_file,simplifyVector=FALSE) else NULL
+  if(!is.null(previous) &&
+     (!identical(previous$run_id,basename(run_dir)) ||
+      !identical(previous$schema,"evidencelandscaper-w00-full-retrieval-v1")))
+    stop("Existing W00 manifest does not identify this full retrieval run.")
+  if(!is.null(previous) && identical(previous$status,"success"))
+    return(invisible(manifest_file))
+  if(!is.null(previous) && !previous$status %in% c("failed","running"))
+    stop("Unexpected W00 manifest status; inspect before resuming.")
+  if(is.null(previous)) {
+    existing<-sources[vapply(sources,function(x)
+      dir.exists(file.path(run_dir,"sources",x)),logical(1))]
+    if(length(existing))
+      stop("Unregistered W00 source output exists: ",
+           paste(existing,collapse=", "),". Inspect before proceeding.")
   }
-  existing <- sources[vapply(sources, function(x)
-    dir.exists(file.path(run_dir, "sources", x)), logical(1))]
-  if (length(existing)) stop("Existing W00 source outputs for ",
-                             paste(existing, collapse = ", "),
-                             ". Use a fresh plan.", call. = FALSE)
   archive <- jsonlite::fromJSON(file.path(plan$query_archive, "manifest.json"),
                                 simplifyVector = FALSE)
   asset <- function(name) {
@@ -82,8 +90,12 @@ run_w00_full <- function(map) {
              collapse = "\n"), call. = FALSE)
     invisible(output)
   }
-  results <- list()
-  started <- format(Sys.time(), tz = "UTC", format = "%Y-%m-%dT%H:%M:%SZ")
+  results <- if(is.null(previous))list() else previous$sources
+  if(is.null(results))results<-list()
+  if(length(setdiff(names(results),sources)))
+    stop("Saved W00 manifest contains unexpected sources.")
+  started <- if(!is.null(previous))previous$started_at_utc else
+    format(Sys.time(), tz = "UTC", format = "%Y-%m-%dT%H:%M:%SZ")
   save_manifest <- function(status) {
     out <- list(schema = "evidencelandscaper-w00-full-retrieval-v1",
                 status = status, mode = "full", run_id = basename(run_dir),
@@ -101,6 +113,40 @@ run_w00_full <- function(map) {
     src <- sources[[i]]
     message("[W00 full] [", i, "/", length(sources), "] ", src)
     dest <- file.path(run_dir, "sources", src)
+    prior<-results[[src]]
+    if(!is.null(prior) && identical(prior$status,"success")) {
+      mf<-file.path(dest,"manifest.json")
+      if(!file.exists(mf))
+        stop("Missing previously successful source manifest: ",src)
+      verified_m<-jsonlite::fromJSON(mf,simplifyVector=FALSE)
+      if(!identical(verified_m$status,"success"))
+        stop("Previous successful source manifest is not successful: ",src)
+      actual_sha<-digest::digest(file=mf,algo="sha256",serialize=FALSE)
+      if(is.null(prior$manifest_sha256)) {
+        # Legacy interrupted runs did not store per-source manifest hashes.
+        # Register immutable checksum now and preserve the original harvest.
+        prior$manifest_sha256<-actual_sha
+        results[[src]]<-prior
+        save_manifest("running")
+      }
+      if(!identical(actual_sha,prior$manifest_sha256))
+        stop("Previously successful ",src,
+             " source manifest changed. Preserve outputs and investigate.")
+      message("[W00 full] Verified existing ",src,
+              ": ",prior$records," records; skipping API requests")
+      next
+    }
+    if(dir.exists(dest)) {
+      # Never delete an incomplete provider response. Move it aside so a retry
+      # cannot overwrite or mix data with an earlier unsuccessful attempt.
+      recovery<-file.path(run_dir,"failed_source_attempts")
+      dir.create(recovery,recursive=TRUE,showWarnings=FALSE)
+      dst<-file.path(recovery,paste0(src,"-",format(Sys.time(),
+        "%Y%m%dT%H%M%S",tz="UTC")))
+      if(file.exists(dst)||!file.rename(dest,dst))
+        stop("Cannot safely archive failed ",src," attempt: ",dest)
+      message("[W00 full] Archived incomplete ",src," attempt: ",dst)
+    }
     dir.create(dest, showWarnings = FALSE, recursive = TRUE)
     result <- tryCatch({
       entry <- archive$queries[[src]]
@@ -171,7 +217,8 @@ run_w00_full <- function(map) {
           !is.numeric(count) || count < 0)
         stop("Invalid retrieved record count in source manifest.")
       list(status = "success", records = as.integer(count),
-           manifest = paste0("sources/", src, "/manifest.json"))
+           manifest = paste0("sources/", src, "/manifest.json"),
+           manifest_sha256=digest::digest(file=mf,algo="sha256",serialize=FALSE))
     }, error = function(e) list(status = "failed",
                                error = conditionMessage(e)))
     results[[src]] <- result
