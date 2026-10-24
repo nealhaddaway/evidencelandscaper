@@ -24,7 +24,8 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
                              screening_prompt=NULL,w07_prompt=NULL,
                              ontology_file=NULL,w08_prompt=NULL,
                              model="gpt-6-luna",
-                             w01_uncertain=c("quarantine","adjudicate")) {
+                             w01_uncertain=c("quarantine","adjudicate"),
+                             manual_ris=NULL,manual_search_strings=NULL) {
   w01_uncertain<-match.arg(w01_uncertain)
   map <- open_map(map)
   if(length(run_name)!=1L || is.na(run_name) ||
@@ -52,6 +53,21 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
   if(length(model)!=1L||is.na(model)||!nzchar(model))
     stop("Model identifier required.")
 
+  if(!is.null(manual_ris)) {
+    if(!is.character(manual_ris)||length(manual_ris)!=2L||
+       !setequal(names(manual_ris),c("cba","pqdt")))
+      stop("Supply exactly cba and pqdt named RIS paths.")
+    manual_ris<-vapply(manual_ris[c("cba","pqdt")],function(p)
+      normalizePath(path.expand(p),winslash="/",mustWork=TRUE),character(1))
+    if(any(!grepl("[.]ris$",manual_ris,ignore.case=TRUE)))
+      stop("Both manual inputs must be RIS files.")
+    if(!is.null(manual_search_strings)&&
+       (!is.character(manual_search_strings)||
+        !setequal(names(manual_search_strings),c("cba","pqdt"))||
+        anyNA(manual_search_strings)||
+        any(!nzchar(trimws(manual_search_strings)))))
+      stop("Manual search strings must be named cba and pqdt.")
+  }
   home <- file.path(map,"runs","orchestrated",run_name)
   if(dir.exists(home))
     stop("Named run already exists. Use resume_evidence_map(), not a new run.")
@@ -73,12 +89,27 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
       inputs[[nm]]<-list(path=archived_input,sha256=sha(archived_input))
     }
   }
+  manual_inputs<-NULL
+  if(!is.null(manual_ris)) {
+    dir.create(file.path(home,"manual_inputs"))
+    manual_inputs<-list()
+    for(src in c("cba","pqdt")) {
+      dst<-file.path(home,"manual_inputs",paste0(src,".ris"))
+      if(!file.copy(manual_ris[[src]],dst,overwrite=FALSE))
+        stop("Cannot archive manual RIS: ",src)
+      if(file.info(dst)$size==0L)stop("Empty RIS file: ",src)
+      q<-if(is.null(manual_search_strings))
+        "NOT_RECORDED: exact manual query not supplied" else
+        unname(manual_search_strings[[src]])
+      manual_inputs[[src]]<-list(path=dst,sha256=sha(dst),search_string=q)
+    }
+  }
   state <- list(schema="evidencelandscaper-orchestration-v1",
       run_name=run_name,map_path=map,run_dir=home,
       search_sha256=sha(archived),status="planned",
       created_at_utc=format(Sys.time(),"%Y-%m-%dT%H:%M:%SZ",tz="UTC"),
       decision1=NULL,decision2=NULL,scope=NULL,w00=NULL,
-      inputs=inputs,model=model,
+      inputs=inputs,model=model,manual_inputs=manual_inputs,
       w01_uncertain_policy=w01_uncertain,
       notes="One cumulative map; methods expansions are distinct runs, not separate reviews.")
   .orchestrator_save(state)
@@ -106,7 +137,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","publish","status"),
+                                step=c("auto","scope","retrieve","import_manual","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","publish","status"),
                                 screening=NULL,extraction=NULL,sources=NULL,
                                 screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
                                 w08_prompt=NULL,model="gpt-6-luna",
@@ -258,6 +289,43 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
             state$scope$unknown_source_counts," source counts unavailable.")
     message("[",run_name,"] These are GROSS database hits, not deduplicated records.")
     message("[",run_name,"] Retrieval/deduplication required before sampling checkpoint 1.")
+    return(invisible(state))
+  }
+  if(step=="import_manual") {
+    if(!state$status %in% c("retrieved","manual_importing"))
+      stop("Complete automated W00 before manual RIS ingestion.")
+    if(is.null(state$manual_inputs)||
+       !setequal(names(state$manual_inputs),c("cba","pqdt")))
+      stop("Both manual RIS files must be supplied at the beginning of the named run.")
+    if(file.exists(file.path(state$w00$run_dir,"accepted_manual_imports.json"))) {
+      state$status<-"retrieved"
+      .orchestrator_save(state)
+      return(invisible(state))
+    }
+    state$status<-"manual_importing"
+    .orchestrator_save(state)
+    imports<-list()
+    for(src in c("cba","pqdt")) {
+      x<-state$manual_inputs[[src]]
+      if(!file.exists(x$path)||!identical(sha(x$path),x$sha256))
+        stop("Archived RIS checksum mismatch for ",src)
+      existing<-state$manual_imports[[src]]
+      if(is.null(existing)) {
+        existing<-import_ris(map=map,files=x$path,source=src,
+          database=if(src=="cba")"CAB Abstracts" else "ProQuest Dissertations & Theses",
+          search_date=as.character(Sys.Date()),search_string=x$search_string,
+          keyword_semantics="unknown")
+        if(is.null(state$manual_imports))state$manual_imports<-list()
+        state$manual_imports[[src]]<-existing
+        .orchestrator_save(state)
+      }
+      imports[[src]]<-existing
+    }
+    accepted<-accept_w00_ris(state$w00,imports=unlist(imports,use.names=TRUE))
+    state$w00$manual_acceptance<-accepted
+    state$status<-"retrieved"
+    .orchestrator_save(state)
+    message("[",run_name,"] Both manual RIS sources accepted before W01.")
     return(invisible(state))
   }
   if(step=="retrieve_fulltexts") {
