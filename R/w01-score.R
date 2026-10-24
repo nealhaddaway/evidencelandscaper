@@ -34,6 +34,7 @@ score_w01_candidates <- function(candidates) {
             "--upstream-dir", file.path(dirname(candidates), "union"),
             "--output-dir", output, "--target-n",
             as.character(max(2000L, n)))
+  message("[W01] Stage 3/3: scoring ", format(n,big.mark=","), " candidate pairs...")
   result <- suppressWarnings(system2(file.path(R.home("bin"), "Rscript"),
       args = vapply(args, shQuote, character(1)),
       stdout = TRUE, stderr = TRUE))
