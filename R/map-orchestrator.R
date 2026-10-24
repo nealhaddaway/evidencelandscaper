@@ -709,9 +709,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     if(is.null(plan$run_dir)||!file.exists(file.path(plan$run_dir,"w00_full_retrieval_manifest.json")))
       stop("Original completed W00 retrieval unavailable.")
     if(identical(state$status,"retrieved")) {
-      message("[",run_name,"] W00: consolidating exact archived run.")
-      consolidated<-consolidate_w00(plan)
-      state$w00$consolidated_manifest<-consolidated
+      message("[",run_name,"] W00: reusing source manifests; no consolidation rewrite.")
       state$status<-"consolidated"
       .orchestrator_save(state)
     }
