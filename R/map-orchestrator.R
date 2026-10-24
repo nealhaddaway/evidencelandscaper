@@ -699,6 +699,14 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     .orchestrator_save(state)
     retrieval <- run_w00_full(plan)
     state$w00$retrieval_manifest <- retrieval
+    retrieval_status<-jsonlite::fromJSON(retrieval,simplifyVector=FALSE)
+    if(!identical(retrieval_status$status,"success")) {
+      state$status<-"retrieving"
+      .orchestrator_save(state)
+      message("[",run_name,"] W00 is incomplete; remaining provider outages ",
+              "are recorded in the manifest. W01 has NOT started.")
+      return(invisible(state))
+    }
     state$status <- "retrieved"
     .orchestrator_save(state)
     message("[",run_name,"] W00 retrieval completed; input checksum preserved.")
