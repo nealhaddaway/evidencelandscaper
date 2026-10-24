@@ -487,31 +487,96 @@ fwrite(sig,file.path(output_dir,"title_qgram_signatures.csv"))
 progress("rare q-gram signatures built",nrow(sig),nrow(sig),paste("titles:",uniqueN(sig$idx)))
 checkpoint("qgram_signatures_complete",uniqueN(sig$idx),nrow(meta),list(signature_rows=nrow(sig)))
 
-# Self-join by q-gram, count shared retained signatures.
-setkey(sig,qgram)
-cand <- sig[sig,allow.cartesian=TRUE,nomatch=0L][idx < i.idx,
-  .(shared_rare_qgrams=.N),by=.(record_i=idx,record_j=i.idx)]
-cand <- cand[shared_rare_qgrams>=2L]
-title_len <- nchar(meta$title_norm,type="chars")
-cand[,len_ratio:=pmin(title_len[record_i],title_len[record_j])/pmax(title_len[record_i],title_len[record_j])]
-cand <- cand[is.finite(len_ratio) & len_ratio>=0.75]
-full_qgram_candidate_n <- nrow(cand)
-cand <- cand[record_i > prior_n | record_j > prior_n]
-progress("rare q-gram candidate join complete",nrow(cand),nrow(cand),
-         sprintf("incremental=%d old-old excluded=%d",nrow(cand),full_qgram_candidate_n-nrow(cand)))
-checkpoint("qgram_candidate_join_complete",nrow(cand),NULL,
-           list(candidate_pairs=nrow(cand),old_old_qgram_pairs_excluded=full_qgram_candidate_n-nrow(cand)))
-
-for (k in seq_len(nrow(cand))) {
-  a <- cand$record_i[[k]]; b <- cand$record_j[[k]]
-  key <- paste(a,b,sep="::")
-  if (!exists(key,pairs,inherits=FALSE)) assign(key,list(i=a,j=b,blocks="rare_qgram_title"),pairs)
-  else {
-    z <- get(key,pairs,inherits=FALSE); z$blocks <- unique(c(z$blocks,"rare_qgram_title")); assign(key,z,pairs)
-  }
-  if (k %% 5000L==0L) progress("q-gram candidates added",k,nrow(cand))
+# Preserve the original q-gram candidate semantics while counting overlaps
+# in an on-disk SQLite table rather than a corpus-wide Cartesian self-join.
+# Each retained q-gram contributes exactly one count to each distinct ID pair.
+# No title-length, old-old, or >=2 rule is relaxed.
+progress("opening disk-backed rare q-gram candidate index")
+if(!requireNamespace("DBI",quietly=TRUE) ||
+   !requireNamespace("RSQLite",quietly=TRUE))
+  stop("Offline W01 requires local packages DBI and RSQLite.")
+db_path<-file.path(output_dir,"qgram_pairs.sqlite")
+db<-DBI::dbConnect(RSQLite::SQLite(),db_path)
+DBI::dbExecute(db,"PRAGMA journal_mode=WAL")
+DBI::dbExecute(db,"CREATE TABLE IF NOT EXISTS overlaps (i INTEGER NOT NULL, j INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY(i,j)) WITHOUT ROWID")
+# The index is rebuilt deterministically from saved title signatures after an
+# interrupted attempt is archived by the existing run_w01_initial wrapper.
+DBI::dbExecute(db,"DELETE FROM overlaps")
+setorder(sig,qgram,idx)
+sig_groups<-split(sig$idx,sig$qgram)
+title_len<-nchar(meta$title_norm,type="chars")
+group_total<-length(sig_groups)
+insert<-DBI::dbSendStatement(db,
+ "INSERT INTO overlaps(i,j,n) VALUES(?,?,1) ON CONFLICT(i,j) DO UPDATE SET n=MIN(2,n+1)")
+on.exit(try(DBI::dbClearResult(insert),silent=TRUE),add=TRUE)
+on.exit(try(DBI::dbDisconnect(db),silent=TRUE),add=TRUE)
+DBI::dbBegin(db)
+batch_i<-integer(); batch_j<-integer()
+flush_pairs<-function() {
+  if(!length(batch_i))return(invisible(NULL))
+  DBI::dbBind(insert,list(batch_i,batch_j))
+  batch_i <<- integer(); batch_j <<- integer()
 }
-rm(qgram_rows,qdt,qfreq,sig,cand); gc()
+for(g in seq_along(sig_groups)) {
+  v<-sort(unique(sig_groups[[g]]),method="radix")
+  if(length(v)>1L) for(k in seq_len(length(v)-1L)) {
+    i<-v[[k]]
+    js<-v[seq.int(k+1L,length(v))]
+    js<-js[(i>prior_n | js>prior_n) &
+      is.finite(title_len[i]) & is.finite(title_len[js]) &
+      pmin(title_len[i],title_len[js])/pmax(title_len[i],title_len[js])>=0.75]
+    if(length(js)) {
+      batch_i<-c(batch_i,rep.int(i,length(js)))
+      batch_j<-c(batch_j,js)
+      if(length(batch_i)>=2000L)flush_pairs()
+    }
+  }
+  if(g%%100L==0L||g==group_total) {
+    flush_pairs()
+    DBI::dbCommit(db)
+    progress("rare q-gram groups processed",g,group_total)
+    checkpoint("qgram_group_processing",g,group_total)
+    if(g<group_total)DBI::dbBegin(db)
+  }
+}
+rm(sig_groups,qgram_rows,qdt,qfreq,sig)
+gc()
+# SQL uses a unique (i,j) key and a saturated overlap count (1 or 2):
+# original q-gram filter is equivalent to WHERE n >= 2.
+full_qgram_candidate_n<-DBI::dbGetQuery(db,
+  "SELECT COUNT(*) AS n FROM overlaps WHERE n>=2")$n[[1L]]
+progress("rare q-gram overlap index complete",full_qgram_candidate_n,
+         full_qgram_candidate_n)
+candidate_count<-0L
+offset<-0L
+repeat {
+  rows<-DBI::dbGetQuery(db,
+    paste0("SELECT i,j FROM overlaps WHERE n>=2 ORDER BY i,j LIMIT 2000 OFFSET ",offset))
+  if(!nrow(rows))break
+  for(k in seq_len(nrow(rows))) {
+    i<-rows$i[[k]];j<-rows$j[[k]]
+    key<-paste(i,j,sep="::")
+    if(!exists(key,pairs,inherits=FALSE))
+      assign(key,list(i=i,j=j,blocks="rare_qgram_title"),pairs)
+    else {
+      z<-get(key,pairs,inherits=FALSE)
+      z$blocks<-unique(c(z$blocks,"rare_qgram_title"))
+      assign(key,z,pairs)
+    }
+  }
+  offset<-offset+nrow(rows)
+  candidate_count<-candidate_count+nrow(rows)
+  progress("q-gram candidates merged into original W01 pairs",
+           candidate_count,full_qgram_candidate_n)
+  checkpoint("qgram_candidate_merge",candidate_count,full_qgram_candidate_n)
+}
+DBI::dbClearResult(insert)
+DBI::dbDisconnect(db)
+progress("rare q-gram candidate join complete",
+         candidate_count,full_qgram_candidate_n)
+checkpoint("qgram_candidate_join_complete",candidate_count,
+           full_qgram_candidate_n,
+           list(old_old_qgram_pairs_excluded=TRUE))
 pair_keys <- ls(pairs,all.names=TRUE)
 progress("incremental candidate generation complete",length(pair_keys),length(pair_keys))
 checkpoint("candidate_generation_complete",length(pair_keys),length(pair_keys),list(incremental_candidate_pairs=length(pair_keys)))
