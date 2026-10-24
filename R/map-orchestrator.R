@@ -145,11 +145,11 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","import_manual","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","publish","status"),
+                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","publish","status"),
                                 screening=NULL,extraction=NULL,sources=NULL,
                                 screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
                                 w08_prompt=NULL,model="gpt-6-luna",
-                                extraction_dir=NULL,coordinates_csv=NULL) {
+                                extraction_dir=NULL,coordinates_csv=NULL,cab_import=NULL) {
   step <- match.arg(step)
   map <- open_map(map)
   home <- file.path(map,"runs","orchestrated",run_name)
@@ -297,6 +297,49 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
             state$scope$unknown_source_counts," source counts unavailable.")
     message("[",run_name,"] These are GROSS database hits, not deduplicated records.")
     message("[",run_name,"] Retrieval/deduplication required before sampling checkpoint 1.")
+    return(invisible(state))
+  }
+  if(step=="approve_partial_w00") {
+    if(!identical(state$status,"retrieving"))
+      stop("Partial W00 approval is only allowed before W01.")
+    path<-file.path(state$w00$run_dir,"w00_full_retrieval_manifest.json")
+    if(!file.exists(path))stop("W00 retrieval manifest missing.")
+    mf<-jsonlite::fromJSON(path,simplifyVector=FALSE)
+    if(!identical(mf$status,"incomplete"))
+      stop("Expected an incomplete, finished W00 harvest.")
+    incomplete<-names(Filter(function(z)!identical(z$status,"success"),mf$sources))
+    expected<-c("agricola","pubmed","ethos","epmc_preprints")
+    if(!setequal(incomplete,expected) ||
+       !all(vapply(mf$sources[incomplete],function(z)
+         identical(z$status,"unavailable") &&
+         grepl("HTTP 503",z$error,fixed=TRUE),logical(1))))
+      stop("Incomplete W00 sources differ from the explicitly approved four 503 outages.")
+    if(length(mf$sources)!=25L)
+      stop("W00 is missing provider outcomes; partial approval refused.")
+    if(!is.null(cab_import)) {
+      if(!is.character(cab_import)||length(cab_import)!=1L)
+        stop("cab_import must be the existing import_ris() output directory.")
+      registry<-file.path(state$w00$run_dir,"accepted_manual_imports.json")
+      if(file.exists(registry))stop("Manual RIS registry exists; verify before approval.")
+      state$w00$manual_acceptance<-accept_w00_ris(
+        state$w00,imports=c(cba=cab_import))
+    }
+    approval<-file.path(state$w00$run_dir,"approved_partial_retrieval.json")
+    if(file.exists(approval))stop("Partial approval already exists.")
+    jsonlite::write_json(list(
+      schema="evidencelandscaper-w00-partial-approval-v1",
+      run_id=basename(state$w00$run_dir),
+      original_manifest_sha256=sha(path),
+      unavailable_sources=as.list(sort(incomplete)),
+      authorisation="User explicitly approved proceeding to W01 with four unavailable sources",
+      created_at_utc=format(Sys.time(),tz="UTC",format="%Y-%m-%dT%H:%M:%SZ")
+    ),approval,auto_unbox=TRUE,pretty=TRUE)
+    state$w00$partial_approval<-approval
+    state$status<-"retrieved"
+    .orchestrator_save(state)
+    message("[",run_name,"] Approved partial W00: ",
+      length(mf$sources)-length(incomplete)," successful automated sources; ",
+      "four 503 failures retained; proceeding towards W01.")
     return(invisible(state))
   }
   if(step=="import_manual") {
