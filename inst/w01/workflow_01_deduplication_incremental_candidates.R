@@ -412,6 +412,12 @@ if (validate_index_only) {
 # decisions are restored from the previous Workflow 01 state and must not be
 # recomputed. This is a memory optimisation only; candidate rules are unchanged.
 pairs <- new.env(hash=TRUE,parent=emptyenv())
+max_overlap_pairs <- as.integer(Sys.getenv("W01_MAX_QGRAM_PAIRS","1500000"))
+max_total_pairs <- as.integer(Sys.getenv("W01_MAX_CANDIDATE_PAIRS","1500000"))
+if(is.na(max_overlap_pairs)||max_overlap_pairs<1L||
+   is.na(max_total_pairs)||max_total_pairs<1L)
+  stop("W01 pair safety limits must be positive integers.")
+
 add_pairs_from_groups <- function(dt,key_col,block,max_group=500L) {
   x <- dt[!is.na(get(key_col)) & nzchar(get(key_col)),.(idx,key=get(key_col))]
   g <- x[,.N,by=key][N>1L & N<=max_group]
@@ -497,11 +503,6 @@ qgram_groups <- split(sig$idx,sig$qgram)
 rm(sig,qdt,qfreq,qgram_rows)
 gc()
 overlaps <- new.env(hash=TRUE,parent=emptyenv())
-max_overlap_pairs <- as.integer(Sys.getenv("W01_MAX_QGRAM_PAIRS","1500000"))
-max_total_pairs <- as.integer(Sys.getenv("W01_MAX_CANDIDATE_PAIRS","1500000"))
-if(is.na(max_overlap_pairs)||max_overlap_pairs<1L||
-   is.na(max_total_pairs)||max_total_pairs<1L)
-  stop("W01 pair safety limits must be positive integers.")
 title_len <- nchar(meta$title_norm,type="chars")
 n_groups <- length(qgram_groups)
 for(g in seq_along(qgram_groups)) {
