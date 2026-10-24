@@ -41,6 +41,7 @@ run_w01_initial <- function(source_manifest) {
       stop("W01 main ", name, " failed: ",
            paste(tail(result, 30L), collapse = "\n"), call. = FALSE)
   }
+  message("[W01] Stage 1/3: assembling validated source union...")
   execute("workflow_01_deduplication_build_union.R",
     c("--first-run", "true", "--old-dir", empty,
       "--input-manifest", source_manifest,
@@ -48,6 +49,7 @@ run_w01_initial <- function(source_manifest) {
   union_manifest <- file.path(union, "source_inputs.json")
   if (!file.exists(union_manifest))
     stop("W01 union did not return a source manifest.", call. = FALSE)
+  message("[W01] Stage 2/3: constructing duplicate candidates; large candidate sets can take time...")
   execute("workflow_01_deduplication_incremental_candidates.R",
     c("--first-run", "true", "--input-manifest", union_manifest,
       "--output-dir", candidates, "--score-n", "1"))
