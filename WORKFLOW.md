@@ -1,5 +1,12 @@
 # Ostara workflow: W00–W07
 
+## Non-negotiable implementation and handover rule
+
+**Explicit user directive (24 October 2026; applies to every future handover):** Reuse the existing, proven GitHub workflow scripts, algorithms, source adapters, deduplication rules, and artefact conventions. **Never invent or rewrite an existing process.** Changes are permitted only where demonstrably necessary to make those original GitHub processes execute from local RStudio rather than GitHub Actions. If a genuinely new process is unavoidable, establish and explain that exception explicitly before implementing it. Preserve prior runs, outputs, provenance, and source data; do not modify other repositories. Every subsequent chat handover must repeat this rule verbatim or equivalently and treat it as binding.
+
+The RStudio orchestrator bypasses the redundant local full-corpus W00 reserialisation and passes immutable successful W00 source manifests into the existing W01 sidecar adapters and original union script. The four explicitly approved, unavailable Europe PMC sources remain in the parent audit and are not represented as zero-hit sources. A verified manual CAB acceptance is included by its original source adapter.
+
+
 **Start here.** This guide describes the local RStudio workflow implemented in `evidencelandscaper` as of 23 October 2026. Review data remain in the locally configured map directory; this repository contains package code, **not** your project corpus. The pipeline is being developed iteratively, and previous model runs and human decisions must not be overwritten.
 
 ## 0. Set up once
