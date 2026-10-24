@@ -19,8 +19,27 @@ run_w01_initial <- function(source_manifest) {
   root <- dirname(source_manifest)
   union <- file.path(root, "union")
   candidates <- file.path(root, "candidates")
-  if (dir.exists(union) || dir.exists(candidates)) {
-    stop("W01 initial output already exists; refusing overwrite.", call. = FALSE)
+  # A prior interrupted attempt must not overwrite validated union data.
+  union_manifest <- file.path(union, "source_inputs.json")
+  union_ready <- file.exists(union_manifest)
+  if(dir.exists(union) && !union_ready)
+    stop("Incomplete W01 union exists: ",union,
+         ". Preserve and inspect before retry.")
+  if(dir.exists(candidates)) {
+    summary_file<-file.path(candidates,"summary.json")
+    if(file.exists(summary_file)) {
+      summary<-tryCatch(jsonlite::fromJSON(summary_file,
+        simplifyVector=FALSE),error=function(e)NULL)
+      if(!is.null(summary) && identical(summary$status,"success")) {
+        message("[W01] Reusing completed candidate directory: ",candidates)
+        return(invisible(candidates))
+      }
+    }
+    backup<-file.path(root,paste0("candidates-interrupted-",
+      format(Sys.time(),"%Y%m%dT%H%M%S",tz="UTC")))
+    if(file.exists(backup)||!file.rename(candidates,backup))
+      stop("Cannot preserve interrupted candidates: ",candidates)
+    message("[W01] Archived interrupted candidate attempt: ",backup)
   }
   empty <- file.path(root, "empty_prior_state")
   if (dir.exists(empty) && length(list.files(empty, all.files = TRUE,
@@ -42,10 +61,11 @@ run_w01_initial <- function(source_manifest) {
            paste(tail(result, 30L), collapse = "\n"), call. = FALSE)
   }
   message("[W01] Stage 1/3: assembling validated source union...")
-  execute("workflow_01_deduplication_build_union.R",
+  if(!union_ready) execute("workflow_01_deduplication_build_union.R",
     c("--first-run", "true", "--old-dir", empty,
       "--input-manifest", source_manifest,
       "--expected-prior-manifestations", "0", "--output-dir", union))
+  else message("[W01] Reusing completed source union.")
   union_manifest <- file.path(union, "source_inputs.json")
   if (!file.exists(union_manifest))
     stop("W01 union did not return a source manifest.", call. = FALSE)
