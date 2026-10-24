@@ -13,6 +13,7 @@ prepare_w01 <- function(map,w00_run=NULL) {
   root <- file.path(map, "runs", "W00")
   runs <- if (dir.exists(root)) list.dirs(root, recursive = FALSE,
                                          full.names = TRUE) else character()
+  partial_ok <- FALSE
   if(!is.null(w00_run)) {
     run <- normalizePath(w00_run,winslash="/",mustWork=TRUE)
     if(!identical(dirname(run),normalizePath(root,winslash="/",mustWork=TRUE)))
@@ -41,37 +42,50 @@ prepare_w01 <- function(map,w00_run=NULL) {
       stop("Multiple or no W00 full runs; pass w00_run explicitly.")
     run <- candidates[[1L]]
   }
-  consolidated <- file.path(run, "consolidated")
+  # RStudio adapter only: read the existing W00 source manifests directly.
+  # Never materialise the redundant full-corpus W00 consolidation.
   revision <- file.path(run, "accepted_manual_imports.json")
-  if(file.exists(revision)) {
-    revision_sha<-digest::digest(file=revision,algo="sha256",serialize=FALSE)
-    base_mf<-file.path(consolidated,"manifest.json")
-    base<-if(file.exists(base_mf))
-      jsonlite::fromJSON(base_mf,simplifyVector=FALSE) else NULL
-    if(is.null(base)||!identical(base$manual_registry_sha256,revision_sha))
-      consolidated<-file.path(run,paste0("consolidated-manual-",substr(revision_sha,1L,12L)))
+  registry <- if(file.exists(revision))
+    jsonlite::fromJSON(revision,simplifyVector=FALSE) else NULL
+  if(!is.null(registry) && !identical(registry$run_id,basename(run)))
+    stop("Manual RIS acceptance belongs to a different run.")
+  parent_state <- jsonlite::fromJSON(
+    file.path(run,"w00_full_retrieval_manifest.json"),simplifyVector=FALSE)
+  automated <- Filter(function(z)identical(z$status,"success"),parent_state$sources)
+  absent <- Filter(function(z)!identical(z$status,"success"),parent_state$sources)
+  if(length(absent) && !partial_ok)
+    stop("Unapproved unavailable W00 sources.")
+  if(length(absent) && !all(vapply(absent,
+    function(z)identical(z$status,"unavailable"),logical(1))))
+    stop("Unexpected unsuccessful W00 source; refusing W01.")
+  counts <- lapply(automated,function(z)list(records=as.integer(z$records)))
+  if(!is.null(registry)) for(src in names(registry$imports))
+    counts[[src]]<-list(records=as.integer(registry$imports[[src]]$records))
+  source_names <- names(counts)
+  if(!length(source_names) || anyDuplicated(source_names))
+    stop("No distinct, successful W00 sources.")
+  total <- sum(vapply(counts,function(z)z$records,integer(1)))
+  source_fingerprint <- digest::digest(list(
+    parent=digest::digest(file=file.path(run,"w00_full_retrieval_manifest.json"),
+                          algo="sha256",serialize=FALSE),
+    manual=if(file.exists(revision))
+      digest::digest(file=revision,algo="sha256",serialize=FALSE) else NULL,
+    sources=counts),algo="sha256")
+  dest <- file.path(map,"runs","W01",paste0(
+    "prepare-",basename(run),"-direct-",substr(source_fingerprint,1L,12L)))
+  ready <- file.path(dest,"source_inputs.json")
+  if(file.exists(ready)) {
+    previous<-jsonlite::fromJSON(ready,simplifyVector=FALSE)
+    if(!identical(previous$schema,"living-evidence-map-workflow01-source-inputs-v1") ||
+       !identical(previous$status,"validated") ||
+       !identical(previous$source_w00_run,basename(run)) ||
+       !identical(previous$consolidated_sha256,source_fingerprint))
+      stop("Existing direct W01 preparation has incompatible provenance.")
+    message("[W01 prepare] Reusing existing manifest: ",ready)
+    return(invisible(ready))
   }
-  cm <- file.path(consolidated, "manifest.json")
-  if (!file.exists(cm)) stop("Consolidate the full W00 run first.", call. = FALSE)
-  meta <- jsonlite::fromJSON(cm, simplifyVector = FALSE)
-  data_file <- file.path(consolidated, "records.jsonl")
-  if (!identical(meta$status, "success") ||
-      !identical(meta$records_sha256,
-                 digest::digest(file = data_file, algo = "sha256",
-                                serialize = FALSE))) {
-    stop("Consolidated W00 checksum or status invalid.", call. = FALSE)
-  }
-  source_names <- names(meta$sources)
-  if (!length(source_names) || anyDuplicated(source_names) ||
-      sum(vapply(meta$sources, function(x) as.integer(x$records),
-                 integer(1))) != meta$record_count)
-    stop("W00 source-count reconciliation failed.", call. = FALSE)
-  dest <- file.path(map, "runs", "W01", paste0("prepare-", meta$run_id,
-                         "-", substr(meta$records_sha256, 1L, 12L)))
-  if (file.exists(file.path(dest, "source_inputs.json"))) {
-    stop("Completed W01 preparation already exists: ",
-         file.path(dest, "source_inputs.json"), call. = FALSE)
-  }
+  meta<-list(sources=counts,record_count=total,run_id=basename(run),
+             records_sha256=source_fingerprint)
   asset <- function(name) {
     p <- system.file("w01", name, package = "evidencelandscaper")
     if (!nzchar(p)) stop("Missing W01 main adapter: ", name, call. = FALSE)
