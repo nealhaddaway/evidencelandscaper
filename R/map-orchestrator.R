@@ -143,7 +143,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
       phase<-state$status
       next_step<-switch(phase,
         planned="scope",scoping="scope",scoped_counts_only="retrieve",
-        retrieved="deduplicate",w01_scored="finish_w01",
+        retrieved=if(file.exists(file.path(state$w00$run_dir,\n          "accepted_manual_imports.json")))"deduplicate" else NULL,\n        w01_scored="finish_w01",
         w01_classifying="finish_w01",w01_review_pending="finish_w01",
         screening_scope_saved="enrich",enriching="enrich",w03_complete="screen",
         w04_screened="finalize_screen",w04_final="code",
@@ -151,7 +151,13 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         w09_prepared="retrieve_fulltexts",retrieving_fulltexts="retrieve_fulltexts",
         fulltexts_ready="extract",extracting="extract",
         extracted="publish",NULL)
-      if(is.null(next_step))break
+      if(is.null(next_step)) {
+        if(identical(phase,"retrieved"))
+          message("[",run_name,"] MANUAL W00 CHECKPOINT: import CAB Abstracts ",
+                  "and PQD&T RIS, then accept_w00_ris(state$w00,imports=...). ",
+                  "Resume step='auto' after accepting both; W01 has NOT started.")
+        break
+      }
       message("[",run_name,"] Orchestrator: ",phase," -> ",next_step)
       state<-resume_evidence_map(run_name,map=map,step=next_step,
         sources=sources,screening_prompt=screening_prompt,
