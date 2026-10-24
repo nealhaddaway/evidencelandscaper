@@ -487,31 +487,80 @@ fwrite(sig,file.path(output_dir,"title_qgram_signatures.csv"))
 progress("rare q-gram signatures built",nrow(sig),nrow(sig),paste("titles:",uniqueN(sig$idx)))
 checkpoint("qgram_signatures_complete",uniqueN(sig$idx),nrow(meta),list(signature_rows=nrow(sig)))
 
-# Self-join by q-gram, count shared retained signatures.
-setkey(sig,qgram)
-cand <- sig[sig,allow.cartesian=TRUE,nomatch=0L][idx < i.idx,
-  .(shared_rare_qgrams=.N),by=.(record_i=idx,record_j=i.idx)]
-cand <- cand[shared_rare_qgrams>=2L]
+# Generate q-gram overlaps incrementally, avoiding the full Cartesian
+# self-join. Each retained q-gram is processed independently and the
+# pair intersection counter is bounded. A controlled failure is preferable
+# to exhausting swap on a workstation.
+progress("bounded q-gram pair enumeration started")
+setorder(sig,qgram,idx)
+qgram_groups <- split(sig$idx,sig$qgram)
+rm(sig,qdt,qfreq,qgram_rows)
+gc()
+overlaps <- new.env(hash=TRUE,parent=emptyenv())
+max_overlap_pairs <- as.integer(Sys.getenv("W01_MAX_QGRAM_PAIRS","1500000"))
+max_total_pairs <- as.integer(Sys.getenv("W01_MAX_CANDIDATE_PAIRS","1500000"))
+if(is.na(max_overlap_pairs)||max_overlap_pairs<1L||
+   is.na(max_total_pairs)||max_total_pairs<1L)
+  stop("W01 pair safety limits must be positive integers.")
 title_len <- nchar(meta$title_norm,type="chars")
-cand[,len_ratio:=pmin(title_len[record_i],title_len[record_j])/pmax(title_len[record_i],title_len[record_j])]
-cand <- cand[is.finite(len_ratio) & len_ratio>=0.75]
-full_qgram_candidate_n <- nrow(cand)
-cand <- cand[record_i > prior_n | record_j > prior_n]
-progress("rare q-gram candidate join complete",nrow(cand),nrow(cand),
-         sprintf("incremental=%d old-old excluded=%d",nrow(cand),full_qgram_candidate_n-nrow(cand)))
-checkpoint("qgram_candidate_join_complete",nrow(cand),NULL,
-           list(candidate_pairs=nrow(cand),old_old_qgram_pairs_excluded=full_qgram_candidate_n-nrow(cand)))
-
-for (k in seq_len(nrow(cand))) {
-  a <- cand$record_i[[k]]; b <- cand$record_j[[k]]
-  key <- paste(a,b,sep="::")
-  if (!exists(key,pairs,inherits=FALSE)) assign(key,list(i=a,j=b,blocks="rare_qgram_title"),pairs)
-  else {
-    z <- get(key,pairs,inherits=FALSE); z$blocks <- unique(c(z$blocks,"rare_qgram_title")); assign(key,z,pairs)
+n_groups <- length(qgram_groups)
+for(g in seq_along(qgram_groups)) {
+  v <- unique(qgram_groups[[g]])
+  if(length(v)>1L) {
+    for(i in seq_len(length(v)-1L)) {
+      a <- v[[i]]
+      js <- v[seq.int(i+1L,length(v))]
+      js <- js[(a>prior_n | js>prior_n) &
+                 is.finite(title_len[js]) &
+                 is.finite(title_len[a]) &
+                 pmin(title_len[a],title_len[js]) /
+                   pmax(title_len[a],title_len[js]) >= 0.75]
+      for(b in js) {
+        key <- paste(min(a,b),max(a,b),sep="::")
+        count <- if(exists(key,overlaps,inherits=FALSE))
+          get(key,overlaps,inherits=FALSE) else 0L
+        assign(key,min(count+1L,2L),envir=overlaps)
+      }
+    }
   }
-  if (k %% 5000L==0L) progress("q-gram candidates added",k,nrow(cand))
+  if(g %% 50L==0L || g==n_groups) {
+    n_overlap<-length(ls(overlaps,all.names=TRUE))
+    progress("q-gram groups enumerated",g,n_groups,
+             paste("candidate overlap keys:",n_overlap))
+    checkpoint("qgram_group_enumeration",g,n_groups,
+               list(overlap_keys=n_overlap))
+    if(n_overlap>max_overlap_pairs)
+      stop("W01 q-gram pair safety limit reached (",n_overlap,
+           "). Candidate stage stopped before RAM exhaustion. ",
+           "Do not increase the limit on a 16 GB computer.")
+  }
 }
-rm(qgram_rows,qdt,qfreq,sig,cand); gc()
+overlap_keys<-ls(overlaps,all.names=TRUE)
+n_supported<-0L
+for(k in seq_along(overlap_keys)) {
+  key<-overlap_keys[[k]]
+  if(get(key,overlaps,inherits=FALSE)<2L)next
+  ids<-as.integer(strsplit(key,"::",fixed=TRUE)[[1L]])
+  if(!exists(key,pairs,inherits=FALSE))
+    assign(key,list(i=ids[[1L]],j=ids[[2L]],blocks="rare_qgram_title"),pairs)
+  else {
+    z<-get(key,pairs,inherits=FALSE)
+    z$blocks<-unique(c(z$blocks,"rare_qgram_title"))
+    assign(key,z,pairs)
+  }
+  n_supported<-n_supported+1L
+  if(k %% 5000L==0L) {
+    progress("supported q-gram pairs merged",k,length(overlap_keys))
+    if(length(ls(pairs,all.names=TRUE))>max_total_pairs)
+      stop("W01 total candidate-pair memory safety limit reached.")
+  }
+}
+rm(qgram_groups,overlap_keys,overlaps)
+gc()
+progress("rare q-gram candidate join complete",n_supported,n_supported)
+checkpoint("qgram_candidate_join_complete",n_supported,n_supported)
+if(length(ls(pairs,all.names=TRUE))>max_total_pairs)
+  stop("W01 total candidate-pair safety limit reached.")
 pair_keys <- ls(pairs,all.names=TRUE)
 progress("incremental candidate generation complete",length(pair_keys),length(pair_keys))
 checkpoint("candidate_generation_complete",length(pair_keys),length(pair_keys),list(incremental_candidate_pairs=length(pair_keys)))
