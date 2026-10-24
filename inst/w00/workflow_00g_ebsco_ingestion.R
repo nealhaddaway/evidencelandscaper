@@ -274,17 +274,36 @@ harvest_query <- function(q, expected_total, label, raw_prefix, record_limit=Inf
       timeout=300
     )
 
+    observed_total <- extract_hits(ans$doc,sprintf("%s page %d",label,local_page))
+    if (!is.na(expected_total) && observed_total != expected_total) {
+      # A successful HTTP response may still contain a transient or inconsistent
+      # EBSCO hit count. Retry this exact page without advancing the cursor.
+      for (recheck in seq_len(3L)) {
+        message(sprintf(
+          "EBSCO %s %s page %d returned %d hits; expected %d. Rechecking (%d/3).",
+          source_slug,label,local_page,observed_total,expected_total,recheck
+        ))
+        Sys.sleep(min(8,2^recheck))
+        ans <- perform_xml(
+          "https://eit.ebscohost.com/Services/SearchService.asmx/Search",
+          list(prof=uid,pwd=pwd,authType="profile",db=db_code,query=q,
+               format="detailed",startrec=as.character(startrec),
+               numrec=as.character(page_size)),
+          sprintf("%s page %d recount %d",label,local_page,recheck),
+          timeout=300
+        )
+        observed_total <- extract_hits(ans$doc,sprintf("%s page %d recount %d",label,local_page,recheck))
+        if (observed_total == expected_total) break
+      }
+      if (observed_total != expected_total)
+        stop(sprintf(
+          "EBSCO partition total changed for %s (%s): expected=%d observed=%d after 3 page retries",
+          source_slug,label,expected_total,observed_total
+        ),call.=FALSE)
+    }
     raw_path <- file.path(raw_dir,sprintf("%s_%06d.xml",raw_prefix,local_page))
     writeBin(ans$raw,raw_path)
     local_files <- c(local_files,raw_path)
-
-    observed_total <- extract_hits(ans$doc,sprintf("%s page %d",label,local_page))
-    if (!is.na(expected_total) && observed_total != expected_total) {
-      stop(sprintf(
-        "EBSCO partition total changed for %s (%s): expected=%d observed=%d",
-        source_slug,label,expected_total,observed_total
-      ),call.=FALSE)
-    }
 
     rec_nodes <- xml_find_all(ans$doc,"//*[local-name()='rec']")
     if (!length(rec_nodes)) break
