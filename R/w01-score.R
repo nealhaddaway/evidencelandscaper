@@ -37,8 +37,8 @@ score_w01_candidates <- function(candidates) {
   message("[W01] Stage 3/3: scoring ", format(n,big.mark=","), " candidate pairs...")
   result <- suppressWarnings(system2(file.path(R.home("bin"), "Rscript"),
       args = vapply(args, shQuote, character(1)),
-      stdout = TRUE, stderr = TRUE))
-  code <- attr(result, "status")
+      stdout = "", stderr = ""))
+  code <- if(length(result)==1L && is.numeric(result)) as.integer(result) else attr(result, "status")
   if (!is.null(code) && code != 0L)
     stop("W01-main scoring failed: ",
          paste(tail(result, 35L), collapse = "\n"), call. = FALSE)
