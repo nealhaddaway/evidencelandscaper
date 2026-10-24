@@ -35,8 +35,8 @@ run_w01_initial <- function(source_manifest) {
   execute <- function(name, args) {
     result <- suppressWarnings(system2(file.path(R.home("bin"), "Rscript"),
       args = vapply(c(script(name), args), shQuote, character(1)),
-      stdout = TRUE, stderr = TRUE))
-    exit <- attr(result, "status")
+      stdout = "", stderr = ""))
+    exit <- if(length(result)==1L && is.numeric(result)) as.integer(result) else attr(result, "status")
     if (!is.null(exit) && exit != 0L)
       stop("W01 main ", name, " failed: ",
            paste(tail(result, 30L), collapse = "\n"), call. = FALSE)
