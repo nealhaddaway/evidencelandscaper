@@ -18,9 +18,17 @@ prepare_w01 <- function(map,w00_run=NULL) {
     if(!identical(dirname(run),normalizePath(root,winslash="/",mustWork=TRUE)))
       stop("Selected W00 run is not inside this map.")
     parent <- file.path(run,"w00_full_retrieval_manifest.json")
-    if(!file.exists(parent) ||
-       !identical(jsonlite::fromJSON(parent)$status,"success"))
-      stop("Explicit W00 retrieval is not complete.")
+    parent_state<-if(file.exists(parent))
+      jsonlite::fromJSON(parent,simplifyVector=FALSE) else NULL
+    approved<-file.path(run,"approved_partial_retrieval.json")
+    partial_ok<-!is.null(parent_state) &&
+      identical(parent_state$status,"incomplete") &&
+      file.exists(approved) &&
+      identical(jsonlite::fromJSON(approved,simplifyVector=FALSE)$original_manifest_sha256,
+                digest::digest(file=parent,algo="sha256",serialize=FALSE))
+    if(is.null(parent_state) ||
+       !(identical(parent_state$status,"success")||partial_ok))
+      stop("Explicit W00 retrieval is neither complete nor verified as approved partial.")
   } else {
     candidates <- character()
     for (candidate in runs) {
@@ -35,10 +43,13 @@ prepare_w01 <- function(map,w00_run=NULL) {
   }
   consolidated <- file.path(run, "consolidated")
   revision <- file.path(run, "accepted_manual_imports.json")
-  if (file.exists(revision)) {
-    sha <- digest::digest(file = revision, algo = "sha256", serialize = FALSE)
-    consolidated <- file.path(run, paste0("consolidated-manual-",
-                                         substr(sha, 1L, 12L)))
+  if(file.exists(revision)) {
+    revision_sha<-digest::digest(file=revision,algo="sha256",serialize=FALSE)
+    base_mf<-file.path(consolidated,"manifest.json")
+    base<-if(file.exists(base_mf))
+      jsonlite::fromJSON(base_mf,simplifyVector=FALSE) else NULL
+    if(is.null(base)||!identical(base$manual_registry_sha256,revision_sha))
+      consolidated<-file.path(run,paste0("consolidated-manual-",substr(revision_sha,1L,12L)))
   }
   cm <- file.path(consolidated, "manifest.json")
   if (!file.exists(cm)) stop("Consolidate the full W00 run first.", call. = FALSE)
