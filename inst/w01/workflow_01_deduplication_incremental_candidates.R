@@ -507,16 +507,24 @@ setorder(sig,qgram,idx)
 sig_groups<-split(sig$idx,sig$qgram)
 title_len<-nchar(meta$title_norm,type="chars")
 group_total<-length(sig_groups)
-insert<-DBI::dbSendStatement(db,
- "INSERT INTO overlaps(i,j,n) VALUES(?,?,1) ON CONFLICT(i,j) DO UPDATE SET n=MIN(2,n+1)")
-on.exit(try(DBI::dbClearResult(insert),silent=TRUE),add=TRUE)
-on.exit(try(DBI::dbDisconnect(db),silent=TRUE),add=TRUE)
+# Bulk stage pairs, aggregate their multiplicities, then update the
+# same (i,j) overlap counts. This preserves the original >=2 criterion
+# without issuing one indexed SQLite write per q-gram occurrence.
+DBI::dbExecute(db,"CREATE TEMP TABLE batch_pairs(i INTEGER NOT NULL,j INTEGER NOT NULL)")
 DBI::dbBegin(db)
-batch_i<-integer(); batch_j<-integer()
+batch_i<-integer();batch_j<-integer()
 flush_pairs<-function() {
   if(!length(batch_i))return(invisible(NULL))
-  DBI::dbBind(insert,list(batch_i,batch_j))
-  batch_i <<- integer(); batch_j <<- integer()
+  DBI::dbWriteTable(db,"batch_pairs",
+    data.frame(i=batch_i,j=batch_j),append=TRUE,row.names=FALSE)
+  DBI::dbExecute(db,paste(
+    "INSERT INTO overlaps(i,j,n)",
+    "SELECT i,j,MIN(2,COUNT(*)) FROM batch_pairs GROUP BY i,j",
+    "HAVING COUNT(*) > 0",
+    "ON CONFLICT(i,j) DO UPDATE SET n=MIN(2,overlaps.n+excluded.n)"))
+  DBI::dbExecute(db,"DELETE FROM batch_pairs")
+  batch_i <<- integer();batch_j <<- integer()
+  invisible(NULL)
 }
 for(g in seq_along(sig_groups)) {
   v<-sort(unique(sig_groups[[g]]),method="radix")
@@ -529,7 +537,7 @@ for(g in seq_along(sig_groups)) {
     if(length(js)) {
       batch_i<-c(batch_i,rep.int(i,length(js)))
       batch_j<-c(batch_j,js)
-      if(length(batch_i)>=2000L)flush_pairs()
+      if(length(batch_i)>=50000L)flush_pairs()
     }
   }
   if(g%%100L==0L||g==group_total) {
@@ -571,7 +579,6 @@ repeat {
            candidate_count,full_qgram_candidate_n)
   checkpoint("qgram_candidate_merge",candidate_count,full_qgram_candidate_n)
 }
-DBI::dbClearResult(insert)
 DBI::dbDisconnect(db)
 unlink(c(db_path,paste0(db_path,c("-wal","-shm"))))
 progress("rare q-gram candidate join complete",
