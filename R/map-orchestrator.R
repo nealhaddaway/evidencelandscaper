@@ -10,9 +10,9 @@
 #' @param sources Optional W00 source identifiers (defaults to configured full set).
 #' @param execute_scoping If TRUE, advance W00 onwards automatically until a
 #'   checkpoint or a validation blocker. FALSE creates an inert named plan.
-#' @param screening_prompt Approved W04 screening prompt TXT.
-#' @param w07_prompt Approved W07 mechanism-coding prompt TXT.
-#' @param ontology_file Approved W07 ontology CSV.
+#' @param screening_prompt Optional W04 prompt; defaults to the existing verified Ostara prompt.
+#' @param w07_prompt Optional W07 prompt; defaults to the verified 36-code archive.
+#' @param ontology_file Optional W07 CSV; defaults to the verified 36-code archive.
 #' @param w08_prompt Optional W08 case-identification prompt TXT.
 #' @param model Model used for coding and extraction.
 #' @param w01_uncertain How unresolved duplicate pairs are handled: quarantine
@@ -42,6 +42,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
   sha <- function(p) digest::digest(file=p,algo="sha256",serialize=FALSE)
   supplied<-list(screening_prompt=screening_prompt,w07_prompt=w07_prompt,
                  ontology_file=ontology_file,w08_prompt=w08_prompt)
+  supplied<-.orchestrator_reuse_inputs(map,supplied)
   for(nm in names(supplied))if(!is.null(supplied[[nm]])) {
     p<-normalizePath(path.expand(supplied[[nm]]),winslash="/",mustWork=TRUE)
     if(!nzchar(p)||file.info(p)$size==0)
@@ -50,13 +51,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
   }
   if(length(model)!=1L||is.na(model)||!nzchar(model))
     stop("Model identifier required.")
-  if(isTRUE(execute_scoping)) {
-    required<-c("screening_prompt","w07_prompt","ontology_file")
-    absent<-required[vapply(supplied[required],is.null,logical(1))]
-    if(length(absent))stop("Before starting a fully automatic run, provide approved inputs: ",
-                           paste(absent,collapse=", "),
-                           ". Use execute_scoping=FALSE to archive a plan only.")
-  }
+
   home <- file.path(map,"runs","orchestrated",run_name)
   if(dir.exists(home))
     stop("Named run already exists. Use resume_evidence_map(), not a new run.")
