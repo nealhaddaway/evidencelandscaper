@@ -201,8 +201,10 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         w07_prompt=w07_prompt,ontology_file=ontology_file,
         w08_prompt=w08_prompt,model=model,
         extraction_dir=extraction_dir,coordinates_csv=coordinates_csv)
-      if(identical(state$status,phase))
+      if(identical(state$status,phase)) {
+        if(identical(phase,"retrieving"))break
         stop("Orchestrator made no progress at ",phase)
+      }
     }
     .orchestrator_summary(state)
     return(invisible(state))
