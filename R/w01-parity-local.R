@@ -49,8 +49,13 @@ trial_w01_qgram_local <- function(map="Ostara_collective_action_map",
   old<-data.table::copy(sig)
   data.table::setkeyv(old,"qgram")
   t_original<-system.time({
-    expected<-old[old,allow.cartesian=TRUE,nomatch=0L][idx<i.idx,
-      list(shared_rare_qgrams=.N),by=list(i=idx,j=i.idx)]
+    joined<-old[old,allow.cartesian=TRUE,nomatch=0L]
+    joined<-joined[joined$idx<joined$i.idx, ]
+    # Explicitly name the columns before aggregating to avoid data.table
+    # expression scoping ambiguities in the installed package namespace.
+    grouped<-data.table::data.table(
+      i=as.integer(joined$idx),j=as.integer(joined$i.idx))
+    expected<-grouped[,list(shared_rare_qgrams=.N),by=c("i","j")]
     expected<-expected[expected$shared_rare_qgrams>=2L, ]
     ratio<-pmin(lengths[as.character(expected$i)],lengths[as.character(expected$j)]) /
       pmax(lengths[as.character(expected$i)],lengths[as.character(expected$j)])
