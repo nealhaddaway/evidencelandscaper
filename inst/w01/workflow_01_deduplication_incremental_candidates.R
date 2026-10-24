@@ -507,6 +507,12 @@ n_groups <- length(qgram_groups)
 for(g in seq_along(qgram_groups)) {
   v <- unique(qgram_groups[[g]])
   if(length(v)>1L) {
+    potential<-as.double(length(v))*(length(v)-1)/2
+    if(potential>max_overlap_pairs)
+      stop("W01 single q-gram group ",g,"/",n_groups,
+           " has ",format(potential,scientific=FALSE),
+           " possible pairs, exceeding workstation safety limit ",
+           max_overlap_pairs,". No candidate pairs were silently omitted.")
     for(i in seq_len(length(v)-1L)) {
       a <- v[[i]]
       js <- v[seq.int(i+1L,length(v))]
@@ -529,7 +535,7 @@ for(g in seq_along(qgram_groups)) {
              paste("candidate overlap keys:",n_overlap))
     checkpoint("qgram_group_enumeration",g,n_groups,
                list(overlap_keys=n_overlap))
-    if(n_overlap>max_overlap_pairs)
+    if(n_overlap>=max_overlap_pairs)
       stop("W01 q-gram pair safety limit reached (",n_overlap,
            "). Candidate stage stopped before RAM exhaustion. ",
            "Do not increase the limit on a 16 GB computer.")
@@ -549,9 +555,9 @@ for(k in seq_along(overlap_keys)) {
     assign(key,z,pairs)
   }
   n_supported<-n_supported+1L
-  if(k %% 5000L==0L) {
+  if(k %% 1000L==0L) {
     progress("supported q-gram pairs merged",k,length(overlap_keys))
-    if(length(ls(pairs,all.names=TRUE))>max_total_pairs)
+    if(length(ls(pairs,all.names=TRUE))>=max_total_pairs)
       stop("W01 total candidate-pair memory safety limit reached.")
   }
 }
