@@ -186,6 +186,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
           if(file.exists(file.path(state$w00$run_dir,
             "accepted_manual_imports.json")))"deduplicate" else "import_manual",
         manual_importing="import_manual",
+        consolidated="deduplicate",w01_prepared="deduplicate",
+        w01_candidates="deduplicate",
         w01_scored="finish_w01",
         w01_classifying="finish_w01",w01_review_pending="finish_w01",
         screening_scope_saved="enrich",enriching="enrich",w03_complete="screen",
@@ -701,26 +703,36 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     return(invisible(state))
   }
   if(step=="deduplicate") {
-    if(!identical(state$status,"retrieved"))
-      stop("W00 retrieval must be completed before first-run deduplication.")
+    if(!state$status %in% c("retrieved","consolidated","w01_prepared","w01_candidates"))
+      stop("W00 must be approved or W01 previously started before deduplication.")
     plan<-state$w00
     if(is.null(plan$run_dir)||!file.exists(file.path(plan$run_dir,"w00_full_retrieval_manifest.json")))
       stop("Original completed W00 retrieval unavailable.")
-    message("[",run_name,"] W00: consolidating exact archived run.")
-    consolidated<-consolidate_w00(plan)
-    state$w00$consolidated_manifest<-consolidated
-    state$status<-"consolidated"
-    .orchestrator_save(state)
-    message("[",run_name,"] W01: preparing record adapters for the exact W00 run.")
-    prepared<-prepare_w01(map,w00_run=plan$run_dir)
-    state$w01<-list(prepared_manifest=prepared)
-    state$status<-"w01_prepared"
-    .orchestrator_save(state)
-    message("[",run_name,"] W01: constructing duplicate candidates.")
-    candidates<-run_w01_initial(prepared)
-    state$w01$candidates<-candidates
-    state$status<-"w01_candidates"
-    .orchestrator_save(state)
+    if(identical(state$status,"retrieved")) {
+      message("[",run_name,"] W00: consolidating exact archived run.")
+      consolidated<-consolidate_w00(plan)
+      state$w00$consolidated_manifest<-consolidated
+      state$status<-"consolidated"
+      .orchestrator_save(state)
+    }
+    if(identical(state$status,"consolidated")) {
+      message("[",run_name,"] W01: preparing record adapters.")
+      prepared<-if(!is.null(state$w01$prepared_manifest))
+        state$w01$prepared_manifest else prepare_w01(map,w00_run=plan$run_dir)
+      state$w01<-list(prepared_manifest=prepared)
+      state$status<-"w01_prepared"
+      .orchestrator_save(state)
+    }
+    if(identical(state$status,"w01_prepared")) {
+      message("[",run_name,"] W01: constructing or recovering candidate pairs.")
+      candidates<-run_w01_initial(state$w01$prepared_manifest)
+      state$w01$candidates<-candidates
+      state$status<-"w01_candidates"
+      .orchestrator_save(state)
+    }
+    candidates<-state$w01$candidates
+    if(!dir.exists(candidates))stop("W01 candidate directory missing.")
+    message("[",run_name,"] W01: scoring candidate pairs.")
     scored<-score_w01_candidates(candidates)
     state$w01$scored<-scored
     state$status<-"w01_scored"
