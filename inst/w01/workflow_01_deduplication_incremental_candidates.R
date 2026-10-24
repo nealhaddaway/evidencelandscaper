@@ -495,7 +495,8 @@ progress("opening disk-backed rare q-gram candidate index")
 if(!requireNamespace("DBI",quietly=TRUE) ||
    !requireNamespace("RSQLite",quietly=TRUE))
   stop("Offline W01 requires local packages DBI and RSQLite.")
-db_path<-file.path(output_dir,"qgram_pairs.sqlite")
+db_path<-tempfile(pattern="w01-qgram-",fileext=".sqlite")
+progress("SQLite workfile on local temporary storage",extra=dirname(db_path))
 db<-DBI::dbConnect(RSQLite::SQLite(),db_path)
 DBI::dbExecute(db,"PRAGMA journal_mode=WAL")
 DBI::dbExecute(db,"CREATE TABLE IF NOT EXISTS overlaps (i INTEGER NOT NULL, j INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY(i,j)) WITHOUT ROWID")
@@ -572,6 +573,7 @@ repeat {
 }
 DBI::dbClearResult(insert)
 DBI::dbDisconnect(db)
+unlink(c(db_path,paste0(db_path,c("-wal","-shm"))))
 progress("rare q-gram candidate join complete",
          candidate_count,full_qgram_candidate_n)
 checkpoint("qgram_candidate_join_complete",candidate_count,
