@@ -95,14 +95,29 @@ consolidate_w00 <- function(plan) {
   sha <- function(p) digest::digest(file = p, algo = "sha256", serialize = FALSE)
   auto <- if (file.exists(parent_file)) read_json(parent_file) else NULL
   manual <- if (file.exists(accepted_file)) read_json(accepted_file) else NULL
-  if (!is.null(auto) && !identical(auto$status,
+  approval_file <- file.path(run_dir,"approved_partial_retrieval.json")
+  partial <- !is.null(auto) && identical(auto$status,"incomplete") &&
+    identical(parent_file,full_file)
+  missing_sources <- character()
+  if(partial) {
+    if(!file.exists(approval_file))
+      stop("Partial W00 requires explicit approval before consolidation.")
+    approval<-read_json(approval_file)
+    missing_sources<-names(Filter(function(z)!identical(z$status,"success"),auto$sources))
+    if(!identical(approval$run_id,basename(run_dir)) ||
+       !identical(approval$original_manifest_sha256,sha(parent_file)) ||
+       !setequal(unlist(approval$unavailable_sources),missing_sources) ||
+       !all(vapply(auto$sources[missing_sources],
+         function(z)identical(z$status,"unavailable"),logical(1))))
+      stop("Partial W00 approval no longer matches the source manifest.")
+  } else if (!is.null(auto) && !identical(auto$status,
       if (identical(parent_file, full_file)) "success" else "sample_success")) {
     stop("Automated W00 retrieval is not successfully completed.", call. = FALSE)
   }
   if (!is.null(manual) && !identical(manual$run_id, basename(run_dir))) {
     stop("Accepted RIS registry belongs to a different W00 run.", call. = FALSE)
   }
-  source_names <- c(names(auto$sources), names(manual$imports))
+  source_names <- c(setdiff(names(auto$sources),missing_sources), names(manual$imports))
   if (anyDuplicated(source_names)) stop("Automated and manual sources overlap.", call. = FALSE)
   if (!length(source_names)) stop("No sources selected.", call. = FALSE)
   records <- list()
@@ -127,7 +142,7 @@ consolidate_w00 <- function(plan) {
     lapply(lines, jsonlite::fromJSON, simplifyVector = FALSE)
   }
   `%||%` <- function(x, y) if (is.null(x)) y else x
-  if (!is.null(auto)) for (src in names(auto$sources)) {
+  if (!is.null(auto)) for (src in setdiff(names(auto$sources),missing_sources)) {
     entry <- auto$sources[[src]]
     if (!identical(entry$status, "success")) stop("Unsuccessful source: ", src, call. = FALSE)
     dir <- file.path(run_dir, "sources", src)
@@ -222,7 +237,10 @@ consolidate_w00 <- function(plan) {
     status = "success", format = "source_labelled_record_envelopes",
     w01_ready = FALSE, run_id = basename(run_dir),
     record_count = length(records), source_count = length(source_names),
-    sources = source_audit, records_file = "records.jsonl",
+    sources = source_audit, partial_retrieval=partial,
+    unavailable_sources=as.list(missing_sources),
+    partial_approval_sha256=if(partial)sha(approval_file) else NULL,
+    records_file = "records.jsonl",
     records_sha256 = sha(data_path),
     automated_manifest_sha256 = if (file.exists(parent_file)) sha(parent_file) else NULL,
     manual_registry_sha256 = if (file.exists(accepted_file)) sha(accepted_file) else NULL,
