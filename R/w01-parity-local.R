@@ -71,9 +71,23 @@ trial_w01_qgram_local <- function(map="Ostara_collective_action_map",
            unlink(c(dbfile,paste0(dbfile,c("-wal","-shm"))))},add=TRUE)
   DBI::dbExecute(con,
     "CREATE TABLE overlaps(i INTEGER NOT NULL,j INTEGER NOT NULL,n INTEGER NOT NULL,PRIMARY KEY(i,j)) WITHOUT ROWID")
-  insert<-DBI::dbSendStatement(con,
-    "INSERT INTO overlaps VALUES(?,?,1) ON CONFLICT(i,j) DO UPDATE SET n=MIN(2,n+1)")
+  DBI::dbExecute(con,"CREATE TEMP TABLE batch_pairs(i INTEGER NOT NULL,j INTEGER NOT NULL)")
+  batch_i<-integer();batch_j<-integer()
+  flush_pairs<-function() {
+    if(!length(batch_i))return(invisible(NULL))
+    DBI::dbWriteTable(con,"batch_pairs",data.frame(i=batch_i,j=batch_j),
+                      append=TRUE,row.names=FALSE)
+    DBI::dbExecute(con,paste(
+      "INSERT INTO overlaps(i,j,n)",
+      "SELECT i,j,MIN(2,COUNT(*)) FROM batch_pairs GROUP BY i,j",
+      "HAVING COUNT(*) > 0",
+      "ON CONFLICT(i,j) DO UPDATE SET n=MIN(2,overlaps.n+excluded.n)"))
+    DBI::dbExecute(con,"DELETE FROM batch_pairs")
+    batch_i <<- integer();batch_j <<- integer()
+    invisible(NULL)
+  }
   t_disk<-system.time({
+    DBI::dbBegin(con)
     for(v in split(sig$idx,sig$qgram)) {
       v<-sort(unique(v))
       if(length(v)<2L)next
@@ -83,10 +97,15 @@ trial_w01_qgram_local <- function(map="Ostara_collective_action_map",
         ratio<-pmin(lengths[as.character(i)],lengths[as.character(js)]) /
           pmax(lengths[as.character(i)],lengths[as.character(js)])
         js<-js[is.finite(ratio)&ratio>=0.75]
-        if(length(js))DBI::dbBind(insert,list(rep.int(i,length(js)),as.integer(js)))
+        if(length(js)) {
+          batch_i<-c(batch_i,rep.int(i,length(js)))
+          batch_j<-c(batch_j,as.integer(js))
+          if(length(batch_i)>=50000L)flush_pairs()
+        }
       }
     }
-    DBI::dbClearResult(insert)
+    flush_pairs()
+    DBI::dbCommit(con)
     actual<-DBI::dbGetQuery(con,
       "SELECT i,j FROM overlaps WHERE n>=2 ORDER BY i,j")
     disk_keys<-sort(paste(actual$i,actual$j,sep="::"))
