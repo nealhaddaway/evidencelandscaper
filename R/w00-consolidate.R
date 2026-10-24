@@ -153,7 +153,12 @@ consolidate_w00 <- function(plan) {
     lapply(lines, jsonlite::fromJSON, simplifyVector = FALSE)
   }
   `%||%` <- function(x, y) if (is.null(x)) y else x
-  if (!is.null(auto)) for (src in setdiff(names(auto$sources),missing_sources)) {
+  auto_names <- if(is.null(auto))character() else setdiff(names(auto$sources),missing_sources)
+  message("[W00] Consolidating ",length(auto_names)," successful automated sources",
+          " and ",if(is.null(manual))0L else length(manual$imports)," manual sources.")
+  if (!is.null(auto)) for (src in auto_names) {
+    message("[W00] Loading source ",match(src,auto_names),"/",length(auto_names),
+            ": ",src," (expected ",auto$sources[[src]]$records," records)")
     entry <- auto$sources[[src]]
     if (!identical(entry$status, "success")) stop("Unsuccessful source: ", src, call. = FALSE)
     dir <- file.path(run_dir, "sources", src)
@@ -208,8 +213,11 @@ consolidate_w00 <- function(plan) {
       origin <- file.path("sources", src, "raw/response_*.json")
     }
     append_rows(src, rows, origin, entry$records)
+    message("[W00] Source complete: ",src,"; cumulative records: ",
+            format(length(records),big.mark=","))
   }
   if (!is.null(manual)) for (src in names(manual$imports)) {
+    message("[W00] Loading manual source: ",src)
     entry <- manual$imports[[src]]
     path <- normalizePath(entry$import_directory, winslash = "/", mustWork = TRUE)
     map <- normalizePath(file.path(run_dir, "..", "..", ".."),
@@ -236,13 +244,21 @@ consolidate_w00 <- function(plan) {
       }
     }
     append_rows(src, jsonl(handoff), handoff, entry$records)
+    message("[W00] Manual source complete: ",src,"; cumulative records: ",
+            format(length(records),big.mark=","))
   }
   dir.create(output, recursive = TRUE, showWarnings = FALSE)
   data_path <- file.path(output, "records.jsonl")
   con <- file(data_path, "wt", encoding = "UTF-8")
   on.exit(try(close(con), silent = TRUE), add = TRUE)
-  for (record in records) writeLines(jsonlite::toJSON(record,
-    auto_unbox = TRUE, null = "null", na = "null"), con, useBytes = TRUE)
+  message("[W00] Writing consolidated records: ",format(length(records),big.mark=","))
+  for (i in seq_along(records)) {
+    writeLines(jsonlite::toJSON(records[[i]],
+      auto_unbox = TRUE, null = "null", na = "null"), con, useBytes = TRUE)
+    if(i %% 5000L==0L || i==length(records))
+      message("[W00] Written ",format(i,big.mark=","),"/",
+              format(length(records),big.mark=",")," consolidated records")
+  }
   close(con)
   manifest <- list(schema = "evidencelandscaper-w00-consolidated-v1",
     status = "success", format = "source_labelled_record_envelopes",
