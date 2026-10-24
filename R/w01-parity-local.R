@@ -46,20 +46,23 @@ trial_w01_qgram_local <- function(map="Ostara_collective_action_map",
   lengths<-setNames(nchar(meta$title_norm,type="chars"),as.character(meta$idx))
   message("[W01 parity] ",length(chosen)," real source records; ",nrow(sig),
           " archived rare q-gram signatures.")
-  old<-data.table::copy(sig)
-  data.table::setkeyv(old,"qgram")
+  # Independent small-sample reference using base R rather than data.table's
+  # non-standard evaluation. Equivalent to the original q-gram self-join:
+  # count shared retained q-grams for all ordered distinct record pairs.
   t_original<-system.time({
-    joined<-old[old,allow.cartesian=TRUE,nomatch=0L]
-    joined<-joined[joined$idx<joined$i.idx, ]
-    # Explicitly name the columns before aggregating to avoid data.table
-    # expression scoping ambiguities in the installed package namespace.
-    grouped<-data.table::data.table(
-      i=as.integer(joined$idx),j=as.integer(joined$i.idx))
-    expected<-grouped[,list(shared_rare_qgrams=.N),by=c("i","j")]
-    expected<-expected[expected$shared_rare_qgrams>=2L, ]
+    reference<-base::merge(
+      as.data.frame(sig)[,c("idx","qgram"),drop=FALSE],
+      as.data.frame(sig[, c("idx","qgram"),with=FALSE]),
+      by="qgram",all=FALSE,sort=FALSE)
+    reference<-reference[reference$idx.x<reference$idx.y,,drop=FALSE]
+    grouped<-stats::aggregate(
+      rep.int(1L,nrow(reference)),
+      by=list(i=reference$idx.x,j=reference$idx.y),FUN=sum)
+    names(grouped)[3L]<-"shared_rare_qgrams"
+    expected<-grouped[grouped$shared_rare_qgrams>=2L,,drop=FALSE]
     ratio<-pmin(lengths[as.character(expected$i)],lengths[as.character(expected$j)]) /
       pmax(lengths[as.character(expected$i)],lengths[as.character(expected$j)])
-    expected<-expected[is.finite(ratio)&ratio>=0.75, ]
+    expected<-expected[is.finite(ratio)&ratio>=0.75,,drop=FALSE]
     old_keys<-sort(paste(expected$i,expected$j,sep="::"))
   })
   dbfile<-tempfile(pattern="w01-parity-",fileext=".sqlite")
