@@ -715,7 +715,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     }
     if(identical(state$status,"consolidated")) {
       message("[",run_name,"] W01: preparing record adapters.")
-      prepared<-if(!is.null(state$w01$prepared_manifest))
+      prepared<-if(is.list(state$w01) && !is.null(state$w01$prepared_manifest))
         state$w01$prepared_manifest else prepare_w01(map,w00_run=plan$run_dir)
       state$w01<-list(prepared_manifest=prepared)
       state$status<-"w01_prepared"
