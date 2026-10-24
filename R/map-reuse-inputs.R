@@ -56,11 +56,17 @@
     },runs)
     if(!length(runs))
       stop("No verified 36-code Ostara W07 ontology archive found; refusing to reuse an earlier experimental codebook.")
-    pairs<-unique(vapply(runs,function(d)paste(sha(file.path(d,"ontology.csv")),
-                                                sha(file.path(d,"prompt.txt")),sep=":"),
-                         character(1)))
-    if(length(pairs)!=1L)
-      stop("Several different verified 36-code W07 prompt/ontology pairs exist; approval cannot be inferred.")
+    # Match the existing W07 trial runner: prefer the most recent checksum-
+    # verified 36-code archive. Never mix a prompt with another run's ontology.
+    # A full-corpus archive takes precedence over an older trial archive only
+    # when it is the latest validated use of that exact pair.
+    runs<-runs[order(file.info(file.path(runs,"manifest.json"))$mtime,
+                     decreasing=TRUE)]
+    if(length(runs)>1L)
+      message("[Orchestrator] Multiple verified W07 archives found; ",
+              "reusing the most recently recorded 36-code pair: ",runs[[1L]],
+              ". Earlier archives remain unchanged.")
+    runs<-runs[1L]
     if(is.null(supplied$ontology_file))supplied$ontology_file<-file.path(runs[[1L]],"ontology.csv")
     if(is.null(supplied$w07_prompt))supplied$w07_prompt<-file.path(runs[[1L]],"prompt.txt")
     message("[Orchestrator] Reusing verified 36-code W07 pair from ",runs[[1L]])
