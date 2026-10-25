@@ -149,7 +149,9 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
                                 screening=NULL,extraction=NULL,sources=NULL,
                                 screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
                                 w08_prompt=NULL,model="gpt-6-luna",
-                                extraction_dir=NULL,coordinates_csv=NULL,cab_import=NULL) {
+                                extraction_dir=NULL,coordinates_csv=NULL,cab_import=NULL,
+                                execution=c("local","github")) {
+  execution<-match.arg(execution)
   step <- match.arg(step)
   map <- open_map(map)
   home <- file.path(map,"runs","orchestrated",run_name)
@@ -202,7 +204,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         sources=sources,screening_prompt=screening_prompt,
         w07_prompt=w07_prompt,ontology_file=ontology_file,
         w08_prompt=w08_prompt,model=model,
-        extraction_dir=extraction_dir,coordinates_csv=coordinates_csv)
+        extraction_dir=extraction_dir,coordinates_csv=coordinates_csv,
+        execution=execution)
       if(identical(state$status,phase)) {
         if(identical(phase,"retrieving"))break
         stop("Orchestrator made no progress at ",phase)
@@ -720,6 +723,10 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
       state$w01<-list(prepared_manifest=prepared)
       state$status<-"w01_prepared"
       .orchestrator_save(state)
+    }
+    if(identical(state$status,"w01_prepared") && identical(execution,"github")) {
+      dispatch_w01_github(run_name,map=map)
+      return(invisible(jsonlite::fromJSON(state_path,simplifyVector=FALSE)))
     }
     if(identical(state$status,"w01_prepared")) {
       message("[",run_name,"] W01: constructing or recovering candidate pairs.")
