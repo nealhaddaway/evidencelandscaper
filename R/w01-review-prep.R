@@ -96,7 +96,9 @@ prepare_w01_review <- function(scored) {
                    algo="sha256",serialize=FALSE),character(1))
   if(anyDuplicated(pairs$pair_key))
     stop("Repeated candidate-pair identity after rescoring.")
-  # Only explicit review decisions enter LLM adjudication. Candidate-only\n  # unresolved pairs are retained in rescored evidence, not sent to the model.\n  review<-pairs[pairs$rescored_classification == "review",,drop=FALSE]
+  # Only explicit review decisions enter LLM adjudication.
+  # Candidate-only unresolved pairs remain archived, not sent to the model.
+  review<-pairs[pairs$rescored_classification == "review",,drop=FALSE]
   path<-file.path(destination,"human_review_pairs.csv")
   queue<-file.path(destination,"w01_review_cases.jsonl")
   if(file.exists(queue)) {
