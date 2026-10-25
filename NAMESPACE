@@ -77,3 +77,6 @@ export(sample_evidence_records)
 export(quarantine_w01_uncertain)
 
 export(trial_w01_qgram_local)
+
+export(dispatch_w01_github)
+export(collect_w01_github)
