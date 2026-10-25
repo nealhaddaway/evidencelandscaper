@@ -272,3 +272,14 @@ The v2.3 prompt and selected ontology are archived separately in each run. Set a
 ### Ostara provisional model selection (23 October 2026)
 
 W07 abstract mechanism coding (`trial_w07`), W08 case identification (`trial_w08_cases`) and W09 v2 full-text case extraction (`analyse_w09_cases_v2`) now default to `model="gpt-6-luna"`. This is a provisional cost-conscious choice pending client approval; it is not a claim of equal accuracy. To use Sol for any run, specify `model="gpt-5.6"` explicitly. Existing results and model-specific archives remain untouched. The model is recorded in each run's manifest. When comparing outputs use the same sample IDs, archived ontology and prompt, and explicitly select the relevant full W07 run for W09.
+
+
+## Optional remote W01 execution from RStudio
+
+**Local is the default.** For a future W01 run, `resume_evidence_map(run_name, map=map, step="auto", execution="github")` prepares source adapters locally and dispatches the original W01 union, candidate and scoring scripts on GitHub Actions. This is opt-in and requires an authenticated GitHub CLI (`gh auth login`). It does not migrate or interrupt an already-running W01 job. `execution="local"` remains the default.
+
+The dispatcher stages source-labelled JSONL files with SHA-256 digests in a tagged GitHub Release asset and dispatches `.github/workflows/optional-w01.yml`. The runner downloads the asset, verifies digests, executes the existing R functions, and uploads verified scoring outputs to the same Release. Once the Actions job has completed, call `collect_w01_github(run_name,map=map)` locally; this verifies returned digests and advances the local run to `w01_scored`, after which the original W01 adjudication and checkpoint pathway resumes.
+
+**Publication and licensing warning:** Release assets in a public repository may expose licensed database records; the function blocks public-repository uploads unless `allow_public_inputs=TRUE` is explicitly passed to `dispatch_w01_github()`. An existing private repository is the safer default for restricted records. Uploaded release assets persist until deliberately deleted; do not publish records that the relevant licensing terms prohibit transferring to GitHub. The GitHub runner has its own storage, RAM and job timeout constraints.
+
+This optional transfer and the Actions job have not yet been end-to-end validated. Do not use the untested route on the sole authoritative copy of source data, and never delete original local outputs.
