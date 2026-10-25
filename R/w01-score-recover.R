@@ -45,7 +45,9 @@
   if(sum(full_row_duplicates)!=extra ||
      any(duplicate_rows != full_row_duplicates))
     stop("Repeated scoring identities have conflicting content; refusing recovery.")
-  fixed<-d[!duplicate_rows]
+  # Explicit row-and-column subsetting: package-namespace execution can
+  # otherwise dispatch single-index data.table syntax as data.frame columns.
+  fixed<-d[which(!duplicate_rows), , drop=FALSE]
   if(nrow(fixed)!=expected_n || anyDuplicated(key(fixed)))
     stop("Recovered W01 scores fail uniqueness validation.")
   x$scoring_sample_n<-as.integer(expected_n)
