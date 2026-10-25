@@ -53,6 +53,9 @@ prepare_w01_review <- function(scored) {
   metadata<-file.path(scored,"normalised_metadata.csv")
   if(!file.exists(csv)||!file.exists(metadata))
     stop("Identifier rescoring outputs missing.")
+  # Ostara-only deterministic policy, after original identifier rescore and
+  # before the LLM queue. Never modify packaged W01 upstream scripts.
+  .apply_ostara_exact_abstract_policy(csv,metadata)
   pairs<-utils::read.csv(csv,stringsAsFactors=FALSE,check.names=FALSE)
   if(!all(c("record_i","record_j","rescored_classification",
             "rescored_rule","title_similarity","blocks") %in% names(pairs)))
