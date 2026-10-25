@@ -40,12 +40,15 @@ dispatch_w01_github <- function(run_name,map="Ostara_collective_action_map",
     if(!file.copy(src[[nm]],dest))stop("Could not stage W01 source: ",nm)
     if(!identical(sha(src[[nm]]),sha(dest)))stop("Staged source checksum mismatch: ",nm)
   }
+  input_hashes<-vapply(src,sha,character(1))
+  jsonlite::write_json(as.list(input_hashes),
+    file.path(stage,"sources.sha256.json"),auto_unbox=TRUE,pretty=TRUE)
   tag<-paste0("w01-transfer-",substr(state$search_sha256,1L,12L),"-",
               format(Sys.time(),"%Y%m%dT%H%M%S",tz="UTC"))
   input<-file.path(stage,"w01-input.tar.gz")
   oldwd<-getwd()
   setwd(stage)
-  tarstatus<-tryCatch(system2("tar",c("-czf","w01-input.tar.gz","sources")),
+  tarstatus<-tryCatch(system2("tar",c("-czf","w01-input.tar.gz","sources","sources.sha256.json")),
                       finally=setwd(oldwd))
   if(!identical(as.integer(tarstatus),0L))stop("Failed to package W01 inputs.")
   run_gh<-function(args) {
@@ -56,7 +59,7 @@ dispatch_w01_github <- function(run_name,map="Ostara_collective_action_map",
   }
   # Private-release assets are explicitly uploaded only after opt-in.
   run_gh(c("release","create",tag,"--repo",repo,"--target","main",
-           "--title",tag,"--notes","W01 temporary input transfer",
+           "--title",tag,"--notes","W01",
            "--latest=false",input))
   run_gh(c("workflow","run","optional-w01.yml","--repo",repo,
            "-f",paste0("transfer_tag=",tag)))
@@ -104,6 +107,15 @@ collect_w01_github <- function(run_name,map="Ostara_collective_action_map") {
   if(!file.exists(summary))stop("Remote scoring summary absent; no state transition.")
   x<-jsonlite::fromJSON(summary,simplifyVector=FALSE)
   if(!identical(x$status,"success"))stop("Remote W01 scoring not successful.")
+  checks<-file.path(dest,"runner_work","results.sha256.json")
+  if(!file.exists(checks))stop("Remote result checksums missing; no state transition.")
+  manifest<-jsonlite::fromJSON(checks,simplifyVector=TRUE)
+  for(nm in names(manifest)) {
+    file<-file.path(dest,"runner_work",nm)
+    if(!file.exists(file)||!identical(unname(digest::digest(file=file,algo="sha256",serialize=FALSE)),
+          unname(manifest[[nm]])))
+      stop("Remote checksum failed for ",nm,"; refusing handover.")
+  }
   state$w01$scored<-scored
   state$w01$candidates<-file.path(dest,"runner_work","candidates")
   state$status<-"w01_scored"
