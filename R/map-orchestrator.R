@@ -504,7 +504,9 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     return(invisible(state))
   }
   if(step=="screen") {
-    if(!identical(state$status,"w03_complete"))
+    if(identical(state$status,"screening"))
+      message("[",run_name,"] Resuming interrupted W04 from its saved checkpoint.")
+    else if(!identical(state$status,"w03_complete"))
       stop("W02/W03 and checkpoint 1 must complete before W04.")
     if(is.null(screening_prompt))stop("Supply the approved screening_prompt explicitly.")
     selected<-state$decision1$selected_ids_path
