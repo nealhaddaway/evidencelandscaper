@@ -145,7 +145,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","publish","status"),
+                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","prepare_w01_review","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","publish","status"),
                                 screening=NULL,extraction=NULL,sources=NULL,
                                 screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
                                 w08_prompt=NULL,model="gpt-6-luna",
@@ -598,6 +598,23 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     .orchestrator_save(state)
     message("[",run_name,"] W03 complete. W04 exact-ID adapter still required;",
       " screening model has NOT been called.")
+    return(invisible(state))
+  }
+  if(step=="prepare_w01_review") {
+    if(!state$status %in% c("w01_scored","w01_classifying"))
+      stop("Completed W01 scoring required for review preparation.")
+    scored<-state$w01$scored
+    if(!dir.exists(scored))stop("Saved W01 scoring directory missing.")
+    prepared<-continue_w01(scored,run_llm=FALSE,open_app=FALSE)
+    queue<-prepared$review_queue
+    n<-length(readLines(queue,warn=FALSE,encoding="UTF-8"))
+    state$w01$review_queue<-queue
+    state$w01$review_cases<-n
+    state$blocking_stage<-"W01 review prepared: explicit approval required before LLM"
+    state$status<-"w01_scored"
+    .orchestrator_save(state)
+    message("[",run_name,"] W01 review prepared: ",n,
+            " explicit review cases. PAUSED: no LLM calls.")
     return(invisible(state))
   }
   if(step=="finish_w01") {
