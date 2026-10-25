@@ -85,16 +85,27 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
     launch_review(dest,sm$status)
     return(invisible(dest))
   }
-  if(dir.exists(dest)&&length(list.files(dest,all.files=TRUE,no..=TRUE)))
-    stop("Existing partial W04 run at ",dest,
-         ". Preserve checkpoints for investigation; no automatic replacement.")
-  dir.create(dest,recursive=TRUE,showWarnings=FALSE)
-  writeLines(lines,copied_prompt,useBytes=TRUE)
-  jsonlite::write_json(list(
-    prompt_path=copied_prompt,
-    prompt_version=paste0("local-ostara-",substr(prompt_hash,1,12)),
-    response_schema_name="ostara_w04_relevance",
-    expected_prompt_sha256=prompt_hash),config,pretty=TRUE,auto_unbox=TRUE)
+  if(dir.exists(dest)&&length(list.files(dest,all.files=TRUE,no..=TRUE))) {
+    # Resume only an existing, identically configured W04 checkpoint.
+    # The original W04 engine validates checkpoint record IDs and skips completed IDs.
+    if(!file.exists(config)||!file.exists(copied_prompt))
+      stop("Partial W04 run has no immutable prompt/config; preserve for investigation.")
+    old<-jsonlite::fromJSON(config)
+    if(!identical(old$expected_prompt_sha256,prompt_hash) ||
+       !identical(old$prompt_path,copied_prompt) ||
+       !identical(old$response_schema_name,"ostara_w04_relevance") ||
+       !identical(sha(copied_prompt),sha(prompt_file)))
+      stop("Partial W04 prompt/config mismatch; refusing resume.")
+    message("[W04] Resuming existing checkpoints: ",dest)
+  } else {
+    dir.create(dest,recursive=TRUE,showWarnings=FALSE)
+    writeLines(lines,copied_prompt,useBytes=TRUE)
+    jsonlite::write_json(list(
+      prompt_path=copied_prompt,
+      prompt_version=paste0("local-ostara-",substr(prompt_hash,1,12)),
+      response_schema_name="ostara_w04_relevance",
+      expected_prompt_sha256=prompt_hash),config,pretty=TRUE,auto_unbox=TRUE)
+  }
   script<-system.file("w04","workflow_04_luna_consensus.R",
                       package="evidencelandscaper")
   if(!nzchar(script))stop("Original W04 scanner was not installed.")
@@ -106,7 +117,7 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
           "--checkpoint-every","10")
   cat("[W04] Running original screening engine; model API requests will incur costs.\n")
   log<-suppressWarnings(system2(file.path(R.home("bin"),"Rscript"),
-    args=vapply(args,shQuote,character(1)),stdout=TRUE,stderr=TRUE))
+    args=vapply(args,shQuote,character(1)),stdout="",stderr=""))
   result<-attr(log,"status")
   if(!is.null(result)&&result!=0L)
     stop("[W04] Screening script failed:\n",paste(tail(log,35L),collapse="\n"))
