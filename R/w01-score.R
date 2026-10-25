@@ -22,9 +22,17 @@ score_w01_candidates <- function(candidates) {
   if (length(n) != 1L || is.na(n) || n < 0L)
     stop("Invalid candidate pair count.", call. = FALSE)
   output <- file.path(dirname(candidates), "full_scoring")
-  if (dir.exists(output) || file.exists(output))
-    stop("W01 full scoring output exists; refusing overwrite: ",
-         output, call. = FALSE)
+  if (dir.exists(output) || file.exists(output)) {
+    # Completed subprocess outputs are authoritative. Never restart scoring,
+    # which would delete its durable checkpoint and repeat model-independent work.
+    if(!file.exists(file.path(output,"expanded_summary.json")))
+      stop("Interrupted W01 scoring has no success manifest; preserve its checkpoint: ",
+           output,call.=FALSE)
+    .recover_w01_scoring_final_overlap(output,candidates,n)
+    message("[W01] Reused verified completed scoring: ",format(n,big.mark=","),
+            " unique candidate pairs; no rescoring.")
+    return(invisible(output))
+  }
   script <- system.file("w01", "workflow_01_deduplication_incremental_score.R",
                         package = "evidencelandscaper")
   if (!nzchar(script)) stop("W01-main scoring script not packaged.", call. = FALSE)
