@@ -541,19 +541,32 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     return(invisible(state))
   }
   if(step=="code") {
-    if(!identical(state$status,"w04_final"))
+    if(!state$status %in% c("w04_final","coding"))
       stop("Final W04 screening must exist before W07 and W08.")
     if(is.null(w07_prompt)||is.null(ontology_file))
       stop("Provide approved w07_prompt and ontology_file explicitly.")
     w04<-state$w04$run
-    state$status<-"coding"
-    .orchestrator_save(state)
-    w07<-trial_w07(ontology_file=ontology_file,prompt_file=w07_prompt,
-                   n=0L,map_path=map,model=model,w04_run=w04)
-    state$w07<-list(run=w07)
-    .orchestrator_save(state)
+    if(identical(state$status,"w04_final")) {
+      state$status<-"coding"
+      .orchestrator_save(state)
+    }
+    if(!is.null(state$w07$run)) {
+      w07<-state$w07$run
+      if(!file.exists(file.path(w07,"manifest.json"))||
+         !file.exists(file.path(w07,"coding.jsonl")))
+        stop("Saved W07 coding outputs incomplete; refusing to repeat W07.")
+      message("[",run_name,"] Reusing completed W07 coding: ",w07)
+    } else {
+      w07<-trial_w07(ontology_file=ontology_file,prompt_file=w07_prompt,
+                     n=0L,map_path=map,model=model,w04_run=w04)
+      state$w07<-list(run=w07)
+      .orchestrator_save(state)
+    }
     w08<-trial_w08_cases(n=0L,map_path=map,model=model,
                          prompt_file=w08_prompt,w04_run=w04)
+    w08meta<-jsonlite::fromJSON(file.path(w08,"manifest.json"),simplifyVector=FALSE)
+    if(!identical(w08meta$status,"PILOT_COMPLETE"))
+      stop("W08 remains partially processed. Check preserved invalid response records; no checkpoint 2 yet.")
     state$w08<-list(run=w08)
     state$status<-"awaiting_extraction_scope"
     # Read line-delimited records independently; publication count is not
