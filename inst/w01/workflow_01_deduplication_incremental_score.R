@@ -352,6 +352,7 @@ score_one <- function(i,j,blocks) {
 }
 
 out <- vector("list", nrow(score_sample))
+last_written <- 0L
 checkpoint_path <- file.path(output_dir, "scored_checkpoint.csv")
 if (file.exists(checkpoint_path)) file.remove(checkpoint_path)
 
@@ -361,11 +362,12 @@ for (k in seq_len(nrow(score_sample))) {
   # Persist completed scoring in bounded chunks. This makes long full-corpus
   # runs recoverable from an uploaded artefact if the runner is interrupted.
   if (k %% 5000L == 0L || k == nrow(score_sample)) {
-    from <- max(1L, k - 4999L)
+    from <- last_written + 1L
     chunk <- rbindlist(out[from:k], fill=TRUE)
     chunk[, stratum := score_sample$stratum[from:k]]
     fwrite(chunk, checkpoint_path, append = file.exists(checkpoint_path),
            col.names = !file.exists(checkpoint_path))
+    last_written <- k
   }
 
   if (k %% 500L == 0L || k == nrow(score_sample)) {
