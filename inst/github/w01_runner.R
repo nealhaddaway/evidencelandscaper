@@ -4,6 +4,14 @@ args<-commandArgs(TRUE)
 if(length(args)!=1L)stop("Usage: w01_runner.R input_dir")
 root<-normalizePath(args[[1L]],mustWork=TRUE)
 library(evidencelandscaper)
+checks<-file.path(root,"sources.sha256.json")
+if(!file.exists(checks))stop("Input source checksums missing")
+expected<-jsonlite::fromJSON(checks,simplifyVector=TRUE)
+for(nm in names(expected)) {
+  f<-file.path(root,"sources",paste0(nm,".jsonl"))
+  if(!file.exists(f)||!identical(unname(digest::digest(file=f,algo="sha256",serialize=FALSE)),
+       unname(expected[[nm]])))stop("Input SHA-256 mismatch: ",nm)
+}
 inputs<-file.path(root,"sources")
 files<-sort(list.files(inputs,pattern="\\.jsonl$",full.names=TRUE))
 if(!length(files))stop("No input source files")
@@ -22,6 +30,16 @@ if(!file.exists(file.path(scored,"expanded_summary.json")))
 summary<-jsonlite::fromJSON(file.path(scored,"expanded_summary.json"))
 if(!identical(summary$status,"success"))stop("W01 scoring not successful")
 # Archive only the run worktree; validate all restored outputs locally.
+checks<-c("full_scoring/expanded_summary.json",
+ "full_scoring/scored_sample.csv", "full_scoring/expanded_scoring_sample.csv",
+ "candidates/all_candidate_pairs.csv")
+if(any(!file.exists(file.path(root,"runner_work",checks))))
+ stop("Required original W01 output missing")
+sha<-vapply(file.path(root,"runner_work",checks),function(p)
+ digest::digest(file=p,algo="sha256",serialize=FALSE),character(1))
+names(sha)<-checks
+jsonlite::write_json(as.list(sha),file.path(root,"runner_work","results.sha256.json"),
+ auto_unbox=TRUE,pretty=TRUE)
 oldwd<-getwd()
 setwd(root)
 on.exit(setwd(oldwd),add=TRUE)
