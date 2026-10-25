@@ -150,7 +150,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
                                 screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
                                 w08_prompt=NULL,model="gpt-6-luna",
                                 extraction_dir=NULL,coordinates_csv=NULL,cab_import=NULL,
-                                execution=c("local","github")) {
+                                execution=c("local","github"),allow_w01_llm=FALSE) {
   execution<-match.arg(execution)
   step <- match.arg(step)
   map <- open_map(map)
@@ -205,7 +205,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         w07_prompt=w07_prompt,ontology_file=ontology_file,
         w08_prompt=w08_prompt,model=model,
         extraction_dir=extraction_dir,coordinates_csv=coordinates_csv,
-        execution=execution)
+        execution=execution,allow_w01_llm=allow_w01_llm)
       if(identical(state$status,phase)) {
         if(identical(phase,"retrieving"))break
         stop("Orchestrator made no progress at ",phase)
@@ -615,6 +615,12 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     .orchestrator_save(state)
     message("[",run_name,"] W01 review prepared: ",n,
             " explicit review cases. PAUSED: no LLM calls.")
+    return(invisible(state))
+  }
+  if(step=="finish_w01" && !isTRUE(allow_w01_llm)) {
+    message("[",run_name,"] W01 LLM calls are not authorised. ",
+            "Run step='prepare_w01_review' to inspect the queue; ",
+            "allow_w01_llm=TRUE is required for further LLM execution.")
     return(invisible(state))
   }
   if(step=="finish_w01") {
