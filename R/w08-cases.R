@@ -216,7 +216,9 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
       issue<-tryCatch({validate(z,record_id,txt);NULL},
                       error=function(e)conditionMessage(e))
       if(is.null(issue))break
-      if(attempt==2L && startsWith(issue,"W08 evidence excerpt not in input:")) {
+      retryable<-startsWith(issue,"W08 evidence excerpt not in input:") ||
+        startsWith(issue,"W08 status/case-count inconsistency:")
+      if(attempt==2L && retryable) {
         failures<-c(failures,record_id)
         issue_path<-file.path(dest,"invalid_evidence_responses.jsonl")
         cat(jsonlite::toJSON(list(record_id=record_id,model=model,
@@ -224,15 +226,18 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
           auto_unbox=TRUE,null="null"),"\n",file=issue_path,
           append=TRUE,sep="")
         message("[W08] ",record_id,
-                " still has an unsupported quotation; retained for review; continuing.")
+                " still has an invalid response; retained for review; continuing.")
         break
       }
-      if(!startsWith(issue,"W08 evidence excerpt not in input:"))
+      if(!retryable)
         stop(issue)
-      message("[W08] Invalid model quotation for ",record_id,
-              "; retrying once with explicit source-verbatim instruction.")
+      message("[W08] Invalid model response for ",record_id,
+              "; retrying once with explicit validation instruction.")
       body$input[[1L]]$content[[1L]]$text<-paste0(
-        prompt,"\n\nRETRY VALIDATION: The previous response gave a ",
+        prompt,"\n\nRETRY VALIDATION: Ensure case_evidence_status and ",
+        "number of cases agree: specific_case exactly 1, multiple_cases ",
+        "at least 2, no_identifiable_case exactly 0, unclear at most 1. ",
+        "The previous response may also have given a ",
         "supporting_evidence quotation that was NOT a verbatim substring ",
         "of the supplied title or abstract. Return only exact continuous ",
         "source excerpts in supporting_evidence. Do not paraphrase, ",
