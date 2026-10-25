@@ -36,4 +36,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.transfer_tag }}
-        run: gh release upload "$TAG" w01-result.tar.gz --clobber=false
+        run: gh release upload "$TAG" w01-result.tar.gz
