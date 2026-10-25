@@ -94,7 +94,7 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_
     if(!identical(old$expected_prompt_sha256,prompt_hash) ||
        !identical(old$prompt_path,copied_prompt) ||
        !identical(old$response_schema_name,"ostara_w04_relevance") ||
-       !identical(sha(copied_prompt),sha(prompt_file)))
+       !identical(paste(readLines(copied_prompt,warn=FALSE),collapse="\n"),normalized_prompt))
       stop("Partial W04 prompt/config mismatch; refusing resume.")
     message("[W04] Resuming existing checkpoints: ",dest)
   } else {
