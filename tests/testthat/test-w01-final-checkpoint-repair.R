@@ -23,5 +23,6 @@ test_that("completed W01 scoring overlap is recovered without rescoring", {
   expect_equal(sum(duplicated(corrected[,c("record_i","record_j"),with=FALSE])),0L)
   expect_true(file.exists(file.path(dir,"original-scoring-before-checkpoint-repair",
                                     "scored_sample.csv")))
-  expect_silent(evidencelandscaper:::.recover_w01_scoring_final_overlap(dir,dir,n))
+  expect_message(evidencelandscaper:::.recover_w01_scoring_final_overlap(dir,dir,n),
+                 "already validated")
 })
