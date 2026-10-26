@@ -73,7 +73,7 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
   # within otherwise verbatim quotations. Match only after whitespace folding;
   # never use fuzzy semantic similarity or silently replace the model quote.
   fold_whitespace<-function(x) {
-    x<-gsub("[\\u00a0\\u2007\\u202f]"," ",x,perl=TRUE)
+    x<-gsub("[\\p{Zs}\\t\\r\\n]+"," ",x,perl=TRUE)
     trimws(gsub("[[:space:]]+"," ",x,perl=TRUE))
   }
   for(x in selected[!candidates%in%done]) {
