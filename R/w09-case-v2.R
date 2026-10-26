@@ -45,7 +45,8 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
    if(!identical(fm$original_ledger_sha256,sha(gate))||
       !identical(fm$final_audit_sha256,sha(finalpath)))
      stop("Final human eligibility review checksum mismatch.")
-   final<-utils::read.csv(finalpath,stringsAsFactors=FALSE)
+   final<-utils::read.csv(finalpath,stringsAsFactors=FALSE,
+                          colClasses=c(case_id="character"))
    if(anyDuplicated(paste(final$record_id,final$case_id))||
       any(!final$decision%in%c("eligible","ineligible")))
      stop("Final eligibility review has invalid or uncertain decisions.")
