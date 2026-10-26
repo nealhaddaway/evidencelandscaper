@@ -103,7 +103,7 @@ publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_d
       output_dir=dirname(output),
       params=list(map_path=map_path,w00_run=w00_run,w04_run=w04_run,
         w07_run=w07_run,w08_run=w08_run,w09_run=w09,
-        w09_extract_run=extraction_dir,named_run=named_run),
+        w09_extract_run=extraction_dir,w10_run=w10_run,named_run=named_run),
       envir=new.env(parent=globalenv()),quiet=TRUE)
   }
   full_report <- output
