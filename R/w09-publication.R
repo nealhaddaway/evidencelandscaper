@@ -8,10 +8,10 @@
 #' @param coordinates_csv Optional audited case-coordinate table.
 #' @return Path to versioned standalone HTML atlas.
 #' @export
-republish_w09_atlas <- function(w09,extraction_dir,coordinates_csv=NULL) {
+republish_w09_atlas <- function(w09,extraction_dir,coordinates_csv=NULL,w10_run=NULL) {
   if(!requireNamespace("maps",quietly=TRUE))
     stop("Install the R package 'maps' to embed world boundaries: install.packages('maps')")
-  root <- export_w09_evidence_atlas(w09,extraction_dir,coordinates_csv)
+  root <- export_w09_evidence_atlas(w09,extraction_dir,coordinates_csv,w10_run=w10_run)
   src <- file.path(root,"case_evidence.json")
   manifest <- jsonlite::fromJSON(file.path(root,"export_manifest.json"))
   if(!identical(digest::digest(file=src,algo="sha256",serialize=FALSE),
@@ -70,8 +70,8 @@ republish_w09_atlas <- function(w09,extraction_dir,coordinates_csv=NULL) {
 #' @inheritParams republish_w09_atlas
 #' @return Path to the versioned PDF.
 #' @export
-republish_w09_report <- function(w09,extraction_dir,coordinates_csv=NULL) {
-  root <- export_w09_evidence_atlas(w09,extraction_dir,coordinates_csv)
+republish_w09_report <- function(w09,extraction_dir,coordinates_csv=NULL,w10_run=NULL) {
+  root <- export_w09_evidence_atlas(w09,extraction_dir,coordinates_csv,w10_run=w10_run)
   m <- jsonlite::fromJSON(file.path(root,"export_manifest.json"))
   json <- file.path(root,"case_evidence.json")
   if(!identical(digest::digest(file=json,algo="sha256",serialize=FALSE),
