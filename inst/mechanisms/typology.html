@@ -16,7 +16,7 @@ main{max-width:1240px;margin:auto;padding:22px 24px 48px}.overview{display:grid;
 .mechanism,.candidate{padding:14px;margin:9px 0}.mechanism summary{cursor:pointer;font-weight:680}.id{font:11px ui-monospace,monospace;color:var(--green);margin-right:7px}
 .tags{display:flex;gap:7px;flex-wrap:wrap;margin:9px 0}.tag{background:#edf3ef;color:#34584d;border-radius:30px;padding:2px 8px;font-size:11px}.numbers{display:flex;gap:18px;margin-top:11px;color:var(--muted);font-size:12px}.num{font-weight:750;color:var(--green)}
 .bar{height:6px;border-radius:9px;background:#e9efeb;overflow:hidden;margin-top:8px}.bar span{display:block;height:100%;background:#5eaa8c}
-.field{margin:13px 0;padding-top:10px;border-top:1px solid #eef1ee}.field b{font-size:13px;color:#245b4e}.field .description{margin:5px 0}.parent-mechanism{font-size:11px;color:var(--muted);margin-bottom:3px;line-height:1.4}.description{white-space:pre-wrap;color:#41584e;font-size:13px}.candidate{border-left:4px solid #cc9a53}.candidate strong{display:block}.candidate small{color:var(--muted)}.empty{padding:35px;color:var(--muted);text-align:center}
+.field{margin:13px 0;padding-top:10px;border-top:1px solid #eef1ee}.field b{font-size:13px;color:#245b4e}.field .description{margin:5px 0}.parent-mechanism{font-size:11px;color:var(--muted);margin-bottom:3px;line-height:1.4}.description{white-space:pre-wrap;color:#41584e;font-size:13px}.candidate{border-left:4px solid #cc9a53}.candidate-group{margin:24px 0 30px}.candidate-group h3{font:23px Georgia,serif;margin-bottom:4px}.candidate strong{display:block}.candidate small{color:var(--muted)}.empty{padding:35px;color:var(--muted);text-align:center}
 footer{max-width:1240px;margin:0 auto;padding:14px 24px 30px;font-size:12px;color:var(--muted)}
 @media(max-width:800px){.overview{grid-template-columns:repeat(2,1fr)}.categories{grid-template-columns:1fr}.controls{display:block}input,select{width:100%;margin-bottom:12px}#category{width:100%}header{padding:28px 24px}}
 @media print{.controls,.tabs{display:none!important}.panel{break-inside:avoid}header{print-color-adjust:exact}}
@@ -47,20 +47,30 @@ const cats=[...new Set(a.map(x=>x.category))];let out='<div class="panel"><h2>St
 for(const cat of cats){out+='<div class="group"><header><h3>'+esc(catName(cat))+'</h3></header>';for(const m of a.filter(x=>x.category===cat)){
 const mx=Math.max(1,...d.ontology.map(sourceCount));out+='<details class="mechanism"><summary><span class="id">'+esc(m.id)+'</span>'+esc(m.label)+'</summary><div class="definition-fields">'+Object.entries(m.metadata||{}).filter(([k,v])=>v&&!["category","source_row_count"].includes(k)).map(([k,v])=>'<div class="field"><b>'+esc(fieldLabels[k]||({purpose_source:"Original purpose",category_label:"Category name"}[k])||k.replace(/_draft$/,"").replace(/_/g," ").replace(/\b\w/g,ch=>ch.toUpperCase()))+'</b><p class="description">'+esc(v)+'</p></div>').join("")+'</div></details><div class="numbers"><span>Targeted <span class="num">'+n(m.counts,"targeted")+'</span></span><span>Expanded <span class="num">'+n(m.counts,"expanded")+'</span></span></div><div class="bar"><span style="width:'+((sourceCount(m)/mx)*100).toFixed(1)+'%"></span></div>'; }out+='</div>';}out+='</div></div>';$("body").innerHTML=cats.length?out:'<div class="empty">No matching mechanisms</div>'}
 function candidates(){
- const proposals=d.harmonised||[],source=$("source").value,q=fs($("search").value.trim());
- const lookup=new Map(d.candidates.map(x=>[x.id,x]));
- let out='<div class="panel"><h2>Candidate mechanisms for team review</h2><p class="note">Provisional, consolidated ontology-ready wording, not an approved revision to the starting ontology. Hierarchical placement is indicative; no new ontology codes have been allocated. Expand each proposal to inspect the original suggestions. Initiative development stage denotes reported initiative maturity, not supply-chain stage.</p>';
- if(!proposals.length){out+='<p class="note">Harmonised CSV not provided. Showing original candidates until the separate review dataset is loaded.</p>';for(const x of d.candidates.filter(x=>(source==="all"||x.source===source)&&(!q||fs(x.description).includes(q))))out+='<div class="candidate"><strong>'+esc(x.description)+'</strong><p>'+esc(x.reason)+'</p></div>';}
- else for(const p of proposals){
-  const ids=String(p.source_candidate_ids||"").split(";").map(x=>x.trim()),originals=ids.map(id=>lookup.get(id)).filter(Boolean);
-  if(source!=="all"&&!originals.some(x=>x.source===source))continue;
-  if(q&&!fs([p.proposed_label,p.working_definition,p.parent_category,...originals.map(x=>x.description)].join(" ")).includes(q))continue;
-  const actions={existing_mechanism:"Existing mechanism",refine_existing:"Refine existing mechanism",new_lower_level:"Proposed lower-level mechanism",new_higher_level:"Proposed higher-level category"};
-  out+='<div class="candidate"><small>'+esc(p.parent_category||"Placement under review")+' · '+esc(actions[p.hierarchy_action]||p.hierarchy_action)+'</small><strong>'+esc(p.proposed_label)+'</strong><p class="description">'+esc(p.working_definition)+'</p><details><summary>Original suggestions ('+originals.length+')</summary>';
-  for(const x of originals)out+='<div class="field"><b>'+esc(x.id)+' · '+esc(x.source==="targeted"?"Targeted":"Expanded")+'</b><p class="description">'+esc(x.description)+'</p><p class="note">'+esc(x.reason)+'</p>'+(x.stage?'<small>Initiative development stage: '+esc(x.stage)+'</small>':"")+'</div>';
-  out+='</details></div>';
- }
- $("body").innerHTML=out+'</div>';
+const proposals=d.harmonised||[],source=$("source").value,q=fs($("search").value.trim());
+const lookup=new Map(d.candidates.map(x=>[x.id,x]));
+let out='<div class="panel"><h2>Candidate mechanisms for team review</h2><p class="note">Provisional ontology-ready proposals grouped under suggested parent categories. All 36 proposals are lower-level mechanism concepts; the parent category labels are provisional and have not yet been reconciled with existing coded categories. No new ontology codes are assigned. Expand to inspect the original W07 suggestions. Initiative development stage refers to the initiative’s maturity, not its supply-chain stage.</p>';
+if(!proposals.length){out+='<p class="note">Harmonised dataset not supplied; showing original suggestions.</p>';for(const x of d.candidates.filter(x=>(source==="all"||x.source===source)&&(!q||fs(x.description).includes(q))))out+='<div class="candidate"><strong>'+esc(x.description)+'</strong><p>'+esc(x.reason)+'</p></div>';}
+else {
+const groups=[...new Set(proposals.map(x=>x.parent_category||"Unassigned proposed category"))];
+for(const group of groups){
+const rows=proposals.filter(p=>{
+if((p.parent_category||"Unassigned proposed category")!==group)return false;
+const ids=String(p.source_candidate_ids||"").split(";").map(x=>x.trim()),orig=ids.map(id=>lookup.get(id)).filter(Boolean);
+return (source==="all"||orig.some(x=>x.source===source))&&(!q||fs([group,p.proposed_label,p.working_definition,...orig.map(x=>x.description)].join(" ")).includes(q));
+});
+if(!rows.length)continue;
+out+='<section class="candidate-group"><h3>'+esc(group)+'</h3><p class="note">Proposed parent category · placement against the approved ontology requires review</p>';
+for(const p of rows){
+const ids=String(p.source_candidate_ids||"").split(";").map(x=>x.trim()),originals=ids.map(id=>lookup.get(id)).filter(Boolean);
+out+='<div class="candidate"><small>Proposed lower-level mechanism · '+esc(p.proposal_id||"")+'</small><strong>'+esc(p.proposed_label)+'</strong><p class="description">'+esc(p.working_definition)+'</p><details><summary>Original suggestions ('+originals.length+')</summary>';
+for(const x of originals)out+='<div class="field"><b>Original suggestion '+esc(x.id.replace("W07-",""))+' · '+esc(x.source==="targeted"?"Targeted search":"Expanded search")+'</b><p class="description">'+esc(x.description)+'</p><p class="note">'+esc(x.reason)+'</p>'+(x.stage?'<small>Initiative development stage: '+esc(x.stage)+'</small>':"")+'</div>';
+out+='</details></div>';
+}
+out+='</section>';
+}
+}
+$("body").innerHTML=out+'</div>';
 }
 function proposed(){let a=d.harmonised||[];if(!a.length){$("body").innerHTML='<div class="panel"><h2>Proposed revised ontology</h2><p class="note">The original candidates have been exported for independent harmonisation. This view will show the review-ready ontology after a harmonised dataset has been supplied. No unreviewed mechanism changes are invented or added automatically.</p></div>';return}
 const actions={existing_mechanism:"Covered by existing mechanism",refine_existing:"Refine an existing mechanism",new_lower_level:"Proposed lower-level mechanism",new_higher_level:"Proposed higher-level category"};
