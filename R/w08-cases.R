@@ -183,6 +183,31 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
     txt<-paste(unlist(c(can$title,abs),use.names=FALSE),collapse=" ")
     validate(z,rid,txt)
   }
+  # An explicitly archived partial result can reach checkpoint 2 without
+  # repeating failed model calls. Verify the append-only validated ledger.
+  partial_path<-file.path(dest,"summary.json")
+  if(file.exists(partial_path)) {
+    old_summary<-jsonlite::fromJSON(partial_path,simplifyVector=FALSE)
+    statuses<-unlist(old_summary[names(old_summary)=="status"],use.names=FALSE)
+    partial_status<-if(length(statuses))tail(statuses,1L) else ""
+    unresolved<-setdiff(selected,done_ids)
+    archived_unresolved<-unlist(old_summary$unresolved_record_ids,use.names=FALSE)
+    if(identical(partial_status,"PILOT_PARTIAL") &&
+       identical(old_summary$responses_sha256,sha(out)) &&
+       identical(as.integer(old_summary$validated_records),as.integer(length(done))) &&
+       setequal(as.character(archived_unresolved),unresolved) &&
+       length(unresolved)>0L) {
+      corrected<-info
+      corrected$status<-"PILOT_PARTIAL"
+      corrected$validated_records<-length(done)
+      corrected$unresolved_record_ids<-as.list(unresolved)
+      corrected$responses_sha256<-sha(out)
+      jsonlite::write_json(corrected,partial_path,auto_unbox=TRUE,pretty=TRUE)
+      message("[W08] Reusing ",length(done)," validated records; ",
+        length(unresolved)," archived unvalidated record(s). No model calls.")
+      return(invisible(dest))
+    }
+  }
   message("[W08] Progress: ",length(done_ids)," of ",length(selected)," records completed; ",length(selected)-length(done_ids)," remaining.")
   progress_index<-length(done_ids)
   failures<-character()
