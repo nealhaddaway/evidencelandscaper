@@ -79,8 +79,9 @@ run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-6-luna")
       "rationale (string), quote (string); and overall ",
       "(eligible/ineligible/uncertain). No arrays or renamed fields.")
     body$input[[1L]]$content[[1L]]$text<-paste(instructions,
-      output_contract,sep="\\n\\n")
+      output_contract,sep="\n\n")
     for(attempt in seq_len(3L)) {
+      chunks<-character()
       result<-tryCatch({
         response<-httr2::request("https://api.openai.com/v1/responses")|>
           httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY"))|>
@@ -103,7 +104,7 @@ run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-6-luna")
         cat(as.character(jsonlite::toJSON(list(
           observation_id=item$observation_id,attempt=attempt,
           error=conditionMessage(result),raw_model_output=chunks[[1L]]),
-          auto_unbox=TRUE,null="null")),"\\n",
+          auto_unbox=TRUE,null="null")),"\n",
           file=file.path(run,"invalid_w10_responses.jsonl"),
           append=TRUE,sep="")
       }
@@ -114,7 +115,7 @@ run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-6-luna")
                ". Correct the OUTPUT STRUCTURE and identity only; ",
                "use the same substantive eligibility criteria. ",
                "Return a complete valid JSON object."),
-        sep="\\n\\n")
+        sep="\n\n")
       if(attempt<3L)Sys.sleep(2^attempt)
     }
     if(!success)stop("W10 stopped; completed responses preserved. Re-run to resume.")
