@@ -96,14 +96,17 @@ publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_d
   template_sha<-substr(digest::digest(file=template,algo="sha256",serialize=FALSE),1,12)
   extract_sha<-substr(digest::digest(file=file.path(extraction_dir,"manifest.json"),
                        algo="sha256",serialize=FALSE),1,12)
+  w10_sha<-if(is.null(w10_fulltext_run)) "initial" else
+    substr(digest::digest(file=file.path(w10_fulltext_run,"fulltext_decisions.jsonl"),
+                          algo="sha256",serialize=FALSE),1,12)
   output <- file.path(dirname(atlas),paste0("Ostara_full_review_",
-               extract_sha,"_",template_sha,".html"))
+               extract_sha,"_",template_sha,"_",w10_sha,".html"))
   if(!file.exists(output)) {
     rmarkdown::render(template,output_file=basename(output),
       output_dir=dirname(output),
       params=list(map_path=map_path,w00_run=w00_run,w04_run=w04_run,
         w07_run=w07_run,w08_run=w08_run,w09_run=w09,
-        w09_extract_run=extraction_dir,w10_run=w10_run,named_run=named_run),
+        w09_extract_run=extraction_dir,w10_run=w10_run,w10_fulltext_run=w10_fulltext_run,named_run=named_run),
       envir=new.env(parent=globalenv()),quiet=TRUE)
   }
   full_report <- output
