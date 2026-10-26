@@ -35,7 +35,27 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
     "uncertain. overall eligible only if all pass, ineligible if any fail, ",
     "otherwise uncertain. Quotes must be exact substrings and anchors must ",
     "occur in the supplied document. No cases is represented by [].")
-  fold<-function(x)trimws(gsub("[[:space:]]+"," ",x,perl=TRUE))
+  fold<-function(x,format) {
+    # PDF visual layout can insert whitespace between otherwise consecutive
+    # words; remove only spacing, not letters or punctuation. Normalize
+    # hyphenation solely where an actual line break follows a hyphen.
+    if(identical(format,"pdf")) {
+      x<-gsub("-[[:blank:]]*\\r?\\n[[:blank:]]*","",x,perl=TRUE)
+    }
+    x<-gsub("[\\p{Zs}\\t\\r\\n]+"," ",x,perl=TRUE)
+    trimws(x)
+  }
+  match_quote<-function(quote,unit,format) {
+    q<-fold(quote,format)
+    u<-fold(unit,format)
+    if(grepl(q,u,fixed=TRUE))return(TRUE)
+    if(!identical(format,"pdf"))return(FALSE)
+    # PDFs can wrap words at arbitrary column boundaries, even without
+    # a visible hyphen. For these cases compare the same full character
+    # sequence after deleting spacing, without fuzzy edits/substitutions.
+    compact<-function(x)gsub("[\\p{Zs}\\t\\r\\n]+","",x,perl=TRUE)
+    nzchar(compact(q))&&grepl(compact(q),compact(u),fixed=TRUE)
+  }
   for(id in record_ids[!record_ids%in%done]) {
     payload<-w09_text_payload(w09,id,max_pages=0L)
     source_rule<-paste0("Source format: ",payload$format,
@@ -103,7 +123,7 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
               units<-mapply(function(b,e)substr(payload$text,b,e),
                             labels+lens,ends,USE.NAMES=FALSE)
               found<-which(vapply(units,function(u)
-                grepl(fold(a$quote),fold(u),fixed=TRUE),logical(1)))
+                match_quote(a$quote,u,payload$format),logical(1)))
               if(length(found)!=1L)
                 stop("Quotation cannot be uniquely verified for criterion ",
                      k,": matched ",length(found)," source units.")
