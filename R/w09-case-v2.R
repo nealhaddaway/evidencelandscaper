@@ -233,8 +233,9 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
    }
    input<-list(record_id=id,w07_abstract_mechanism_ids=as.list(assigned),
      source_format=payload$format,source_sha256=payload$sha256,
-     eligible_cases=if(is.null(eligible_by_record))NULL else eligible_by_record[[id]],
      fulltext=payload$text)
+   if(!is.null(eligible_by_record))
+     input$eligible_cases<-eligible_by_record[[id]]
    body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
       input=list(list(role="system",content=list(list(type="input_text",
         text=instruction))),list(role="user",content=list(list(type="input_text",
