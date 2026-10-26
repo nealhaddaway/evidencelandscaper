@@ -80,10 +80,19 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
     id<-x$observation_id
     item<-lookup[[id]]
     payload<-w09_text_payload(w09,item$record_id,max_pages=0L)
+    source_instruction<-if(identical(payload$format,"pdf"))
+      "SOURCE FORMAT PDF: quote exact words as supplied and cite [PAGE n] anchors."
+    else if(identical(payload$format,"xml"))
+      "SOURCE FORMAT XML: use ONLY verbatim wording in the supplied [SECTION n] text. Cite [SECTION n], NEVER [PAGE n]. Do not copy a PDF rendering or reintroduce line-wrap hyphens."
+    else
+      "SOURCE FORMAT JSON: use ONLY verbatim wording in the supplied [TEXT BLOCK n] text. Cite [TEXT BLOCK n], NEVER [PAGE n]."
+    body_instruction<-paste(instruction,source_instruction,sep="\n\n")
     input<-jsonlite::toJSON(list(observation_id=id,case=item$case,
-      initial_assessment=x,fulltext=payload$text),auto_unbox=TRUE,null="null")
+      initial_assessment=x,source_format=payload$format,
+      source_anchor_type=payload$anchors,fulltext=payload$text),
+      auto_unbox=TRUE,null="null")
     body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
-      input=list(list(role="system",content=list(list(type="input_text",text=instruction))),
+      input=list(list(role="system",content=list(list(type="input_text",text=body_instruction))),
                  list(role="user",content=list(list(type="input_text",text=input)))),
       text=list(format=list(type="json_object")))
     good<-FALSE
@@ -144,7 +153,7 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
           file=file.path(target,"invalid_quote_attempts.jsonl"),
           append=TRUE,sep="")
         body$input[[1L]]$content[[1L]]$text<-paste0(
-          instruction,"\n\nCORRECTION: Your preceding answer failed ",
+          body_instruction,"\n\nCORRECTION: Your preceding answer failed ",
           conditionMessage(z),". Quotations must be copied character-for-character ",
           "from the supplied fulltext, with identical punctuation and spacing. ",
           "Line wrapping in PDF extraction is normalised by the validator; ",
@@ -157,7 +166,21 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
       }
       if(attempt<3L)Sys.sleep(2^attempt)
     }
-    if(!good)stop("W10 full-text pass interrupted; completed cases are checkpointed.")
+    if(!good) {
+      # A persistent source-quote mismatch cannot establish eligibility.
+      # Preserve it for human verification, but do not block all later cases.
+      msg<-if(inherits(z,"error"))conditionMessage(z) else "Invalid W10 response"
+      if(!grepl("Nonverbatim full-text quotation",msg,fixed=TRUE))
+        stop("W10 full-text pass interrupted; completed cases are checkpointed.")
+      z<-list(observation_id=id,overall="uncertain",
+        criteria=stats::setNames(lapply(c("A","B","C","D"),function(k)
+          list(status="uncertain",
+               rationale="Automated full-text assessment could not provide a verifiable source quotation; manual review required.",
+               quote="",anchor="")),c("A","B","C","D")),
+        manual_review_required=TRUE,verification_error=msg)
+      message("[W10 full text] ",id,
+        " requires human source verification; preserved as uncertain.")
+    }
     z$record_id<-item$record_id
     z$previous_decision<-x$overall
     z$fulltext_source_sha256<-payload$sha256
