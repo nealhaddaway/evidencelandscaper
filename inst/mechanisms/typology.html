@@ -1,0 +1,57 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ostara | Mechanism typology</title>
+<style>
+:root{--dark:#193a32;--green:#176957;--line:#dce5df;--muted:#65766e;--bg:#f6f8f5}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font:15px/1.5 system-ui,-apple-system,sans-serif;color:var(--dark)}
+header{background:#183d34;color:white;padding:35px max(24px,calc((100vw - 1240px)/2))}
+h1{font:clamp(27px,4vw,44px)/1.15 Georgia,serif;margin:8px 0}header p{margin:0;max-width:760px;color:#d7e7df}
+main{max-width:1240px;margin:auto;padding:22px 24px 48px}.overview{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:0 0 20px}
+.stat,.panel,.mechanism,.candidate{background:white;border:1px solid var(--line);border-radius:11px}
+.stat{padding:16px}.stat strong{display:block;font-size:29px;line-height:1.4}.stat small{color:var(--muted)}
+.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;background:white;padding:15px;border-radius:11px;border:1px solid var(--line);margin-bottom:20px}
+.controls label{font-size:12px;font-weight:650;color:var(--muted)}input,select{padding:9px 11px;border:1px solid #c7d6cc;border-radius:6px;display:block;margin-top:5px;min-width:190px;background:white;color:var(--dark)}input{min-width:270px}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:19px}.tabs button{background:white;border:1px solid var(--line);border-radius:8px;padding:10px 15px;cursor:pointer;color:var(--dark)}.tabs button.active{background:var(--green);color:white;border-color:var(--green)}
+.panel{padding:20px;margin-bottom:18px}h2{font:27px Georgia,serif;margin:2px 0 9px}h3{margin:0;font-size:18px}p.note{color:var(--muted);font-size:13px;margin:5px 0 15px}
+.categories{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}.group{min-width:0}.group header{background:#eaf2ec;color:var(--dark);padding:12px;border-radius:8px;margin-bottom:10px}
+.mechanism,.candidate{padding:14px;margin:9px 0}.mechanism summary{cursor:pointer;font-weight:680}.id{font:11px ui-monospace,monospace;color:var(--green);margin-right:7px}
+.tags{display:flex;gap:7px;flex-wrap:wrap;margin:9px 0}.tag{background:#edf3ef;color:#34584d;border-radius:30px;padding:2px 8px;font-size:11px}.numbers{display:flex;gap:18px;margin-top:11px;color:var(--muted);font-size:12px}.num{font-weight:750;color:var(--green)}
+.bar{height:6px;border-radius:9px;background:#e9efeb;overflow:hidden;margin-top:8px}.bar span{display:block;height:100%;background:#5eaa8c}
+.description{white-space:pre-wrap;color:#41584e;font-size:13px}.candidate{border-left:4px solid #cc9a53}.candidate strong{display:block}.candidate small{color:var(--muted)}.empty{padding:35px;color:var(--muted);text-align:center}
+footer{max-width:1240px;margin:0 auto;padding:14px 24px 30px;font-size:12px;color:var(--muted)}
+@media(max-width:800px){.overview{grid-template-columns:repeat(2,1fr)}.categories{grid-template-columns:1fr}.controls{display:block}input,select{width:100%;margin-bottom:12px}header{padding:28px 24px}}
+@media print{.controls,.tabs{display:none!important}.panel{break-inside:avoid}header{print-color-adjust:exact}}
+</style></head><body>
+<header><div style="letter-spacing:.14em;font-size:12px;color:#a9d6c1">OSTARA · METHODS DEVELOPMENT</div>
+<h1>Collective-action mechanism typology</h1><p>Starting ontology, observed coding and proposed additions across two systematic searches. Explore the mechanisms themselves, not individual case records.</p></header>
+<main><div class="overview" id="overview"></div>
+<div class="controls"><div><label for="search">Find a mechanism</label><input id="search" placeholder="Name, definition, code or candidate…"></div><div><label for="source">Search dataset</label><select id="source"><option value="all">Both searches</option><option value="targeted">Targeted search</option><option value="expanded">Expanded search</option></select></div><div><label for="category">Ontology category</label><select id="category"><option value="">All categories</option></select></div></div>
+<div class="tabs"><button class="active" data-tab="ontology">Starting ontology</button><button data-tab="candidates">Candidate mechanisms</button><button data-tab="comparison">Across the searches</button><button data-tab="methods">Methodology and provenance</button></div>
+<section id="body" aria-live="polite"></section></main>
+<footer>Counts refer to distinct publications assigned each mechanism in W07 title/abstract coding. Multiple assignments per publication are possible. Proposed mechanisms are unvalidated candidates, not additions to the approved ontology. No efficacy or prevalence claims are implied.</footer>
+<script type="application/json" id="data">__MECHANISM_DATA__</script>
+<script>(function(){"use strict";
+const d=JSON.parse(document.getElementById("data").textContent),$=x=>document.getElementById(x);
+const esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const h=(t,c)=>"<"+t+">"+c+"</"+t+">";
+let tab="ontology";
+const n=(o,k)=>Number((o||{})[k]||0),fs=(x)=>String(x||"").toLowerCase();
+const matching=(x)=>{const q=fs($("search").value.trim()),cat=$("category").value;
+return(!cat||x.category===cat)&&(!q||fs([x.id,x.label,x.category,x.details,x.description,x.reason].join(" ")).includes(q));};
+const sourceCount=x=>$("source").value==="all"?(n(x.counts,"targeted")+n(x.counts,"expanded")):n(x.counts,$("source").value);
+function stat(v,l){return'<div class="stat"><strong>'+esc(v)+'</strong><small>'+esc(l)+'</small></div>'}
+function stats(){$("overview").innerHTML=stat(d.ontology.length,"Approved mechanisms")+stat(d.candidates.length,"Candidate suggestions")+stat(d.sources.targeted.records,"Targeted publications coded")+stat(d.sources.expanded.records,"Expanded publications coded")}
+function ontology(){let a=d.ontology.filter(matching);a=a.filter(x=>$("source").value==="all"||sourceCount(x)>0);
+const cats=[...new Set(a.map(x=>x.category))];let out='<div class="panel"><h2>Starting ontology</h2><p class="note">Approved framework shown by category. Search-level bars are publication coding counts, not case counts. Click a mechanism for its source definition and metadata.</p><div class="categories">';
+for(const cat of cats){out+='<div class="group"><header><h3>'+esc(cat)+'</h3></header>';for(const m of a.filter(x=>x.category===cat)){
+const mx=Math.max(1,...d.ontology.map(sourceCount));out+='<details class="mechanism"><summary><span class="id">'+esc(m.id)+'</span>'+esc(m.label)+'</summary><p class="description">'+esc(m.details||"No additional definition supplied.")+'</p><div class="tags">'+Object.entries(m.metadata||{}).filter(([k,v])=>v).map(([k,v])=>'<span class="tag">'+esc(k)+': '+esc(v)+'</span>').join("")+'</div></details><div class="numbers"><span>Targeted <span class="num">'+n(m.counts,"targeted")+'</span></span><span>Expanded <span class="num">'+n(m.counts,"expanded")+'</span></span></div><div class="bar"><span style="width:'+((sourceCount(m)/mx)*100).toFixed(1)+'%"></span></div>'; }out+='</div>';}out+='</div></div>';$("body").innerHTML=cats.length?out:'<div class="empty">No matching mechanisms</div>'}
+function candidates(){let a=d.candidates.filter(matching).filter(x=>$("source").value==="all"||x.source===$("source").value);
+let out='<div class="panel"><h2>Candidate mechanisms for team review</h2><p class="note">These are model-proposed gaps recorded during W07 coding. Repeated suggestions may represent the same conceptual mechanism; they have not been merged or approved.</p>';
+for(const x of a){out+='<div class="candidate"><small>'+esc(x.source==="targeted"?"Targeted search":"Expanded search")+' · Candidate, not approved</small><strong>'+esc(x.description||"Unspecified candidate")+'</strong><p class="description">'+esc(x.reason)+'</p><div class="tags">'+(x.stage?'<span class="tag">Stage: '+esc(x.stage)+'</span>':"")+'</div></div>'}out+='</div>';$("body").innerHTML=a.length?out:'<div class="empty">No candidate suggestions in this selection</div>'}
+function comparison(){const a=d.ontology.filter(matching).sort((x,y)=>(sourceCount(y)-sourceCount(x)));let out='<div class="panel"><h2>Mechanisms across both searches</h2><p class="note">Side-by-side counts of distinct publications with a mechanism assignment, using the same approved mechanism identifiers in each search. Sampling and search strategies differ, so these counts are not directly comparable prevalence measures.</p><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left">Mechanism</th><th>Targeted</th><th>Expanded</th></tr></thead><tbody>';
+for(const x of a){out+='<tr style="border-top:1px solid #e3eae5"><td style="padding:10px"><span class="id">'+esc(x.id)+'</span>'+esc(x.label)+'</td><td style="text-align:center">'+n(x.counts,"targeted")+'</td><td style="text-align:center">'+n(x.counts,"expanded")+'</td></tr>'}out+='</tbody></table></div></div>';$("body").innerHTML=out}
+function methods(){$("body").innerHTML='<div class="panel"><h2>Methods and limitations</h2><p>Starting framework: '+d.ontology.length+' approved mechanisms from the archived W07 ontology. Candidate suggestions are extracted from W07 ontology-gap fields; no new codes are automatically added.</p><p>Targeted source: <code>'+esc(d.sources.targeted.path)+'</code></p><p>Expanded source: <code>'+esc(d.sources.expanded.path)+'</code></p><p><b>Provenance:</b> ontology SHA-256 '+esc(d.ontology_sha256)+'; targeted coding SHA-256 '+esc(d.sources.targeted.coding_sha256)+'; expanded coding SHA-256 '+esc(d.sources.expanded.coding_sha256)+'.</p><p>Scope: mechanism exploration and typology development, not eligible-case analysis or an effectiveness synthesis. W07 coding is title-and-abstract-level, and the expanded search used a 10% screening sample. The two searches are not interchangeable populations.</p></div>'}
+function render(){stats();const views={ontology,candidates,comparison,methods};views[tab]()}
+for(const b of document.querySelectorAll("[data-tab]"))b.onclick=()=>{tab=b.dataset.tab;document.querySelectorAll("[data-tab]").forEach(t=>t.classList.toggle("active",t===b));render()};
+for(const id of ["search","source","category"])$(id).addEventListener(id==="search"?"input":"change",render);
+for(const x of [...new Set(d.ontology.map(x=>x.category))])$("category").add(new Option(x,x));
+render();})();</script></body></html>
