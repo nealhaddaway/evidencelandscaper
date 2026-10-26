@@ -255,9 +255,11 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
   if(length(all)!=n || !setequal(vapply(all,function(z)z$record_id,character(1)),
                                   selected)) {
     missing_ids<-setdiff(selected,vapply(all,function(z)z$record_id,character(1)))
-    partial<-c(info,list(status="PILOT_PARTIAL",
-      validated_records=length(all),unresolved_record_ids=as.list(missing_ids),
-      responses_sha256=sha(out)))
+    partial<-info
+    partial$status<-"PILOT_PARTIAL"
+    partial$validated_records<-length(all)
+    partial$unresolved_record_ids<-as.list(missing_ids)
+    partial$responses_sha256<-sha(out)
     jsonlite::write_json(partial,file.path(dest,"summary.json"),
                          auto_unbox=TRUE,pretty=TRUE)
     message("[W08] Partial run: ",length(all)," of ",n,
