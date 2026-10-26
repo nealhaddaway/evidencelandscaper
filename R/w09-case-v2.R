@@ -172,18 +172,39 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
         text=instruction))),list(role="user",content=list(list(type="input_text",
         text=jsonlite::toJSON(input,auto_unbox=TRUE,null="null"))))),
       text=list(format=list(type="json_object")))
-   res<-httr2::request("https://api.openai.com/v1/responses")|>
-      httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY"))|>
-      httr2::req_body_json(body,auto_unbox=TRUE)|>
-      httr2::req_timeout(300)|>httr2::req_perform()|>
-      httr2::resp_body_json(simplifyVector=FALSE)
-   parts<-unlist(lapply(res$output,function(x)
-     unlist(lapply(x$content,function(y)
-       if(identical(y$type,"output_text"))y$text else NULL),use.names=FALSE)),
-     use.names=FALSE)
-   if(!length(parts))stop("W09 v2 model response missing.")
-   z<-jsonlite::fromJSON(parts[[1]],simplifyVector=FALSE)
-   validate(z,id,assigned,payload$text)
+   # Model output must satisfy the unchanged geographic and ontology checks.
+   # Retry only a subnational/country inconsistency with explicit instructions.
+   for(attempt in seq_len(3L)) {
+     res<-httr2::request("https://api.openai.com/v1/responses")|>
+       httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY"))|>
+       httr2::req_body_json(body,auto_unbox=TRUE)|>
+       httr2::req_timeout(300)|>httr2::req_perform()|>
+       httr2::resp_body_json(simplifyVector=FALSE)
+     parts<-unlist(lapply(res$output,function(x)
+       unlist(lapply(x$content,function(y)
+         if(identical(y$type,"output_text"))y$text else NULL),use.names=FALSE)),
+       use.names=FALSE)
+     if(!length(parts))stop("W09 v2 model response missing.")
+     z<-jsonlite::fromJSON(parts[[1]],simplifyVector=FALSE)
+     issue<-tryCatch({validate(z,id,assigned,payload$text);NULL},
+                     error=function(e)conditionMessage(e))
+     if(is.null(issue))break
+     if(!identical(issue,"Subnational location has no matching operational country."))stop(issue)
+     invalid_path<-file.path(target,"invalid_geography_responses.jsonl")
+     cat(jsonlite::toJSON(list(record_id=id,attempt=attempt,
+       validation_error=issue,response=z),auto_unbox=TRUE,null="null"),
+       "\n",file=invalid_path,append=TRUE,sep="")
+     if(attempt==3L)stop("W09 geography validation failed after 3 attempts for ",id,
+                         "; raw invalid outputs archived.")
+     message("[W09 extraction] ",id," invalid subnational-country relation; retry ",attempt+1L,"/3")
+     body$input[[1L]]$content[[1L]]$text<-paste0(instruction,
+       "\n\nGEOGRAPHY VALIDATION RETRY: For every subnational location, ",
+       "its country_iso3 MUST be present in the same case's countries array ",
+       "with the matching operational country. Do not invent countries or ",
+       "locations. If the source does not support the operational country, ",
+       "omit the unsupported subnational location; preserve all other ",
+       "supported evidence. Return the complete JSON response.")
+   }
    z$provenance<-list(source_format=payload$format,
      source_sha256=payload$sha256,source_path=payload$path,
      ontology_sha256=pm$ontology_sha256,
