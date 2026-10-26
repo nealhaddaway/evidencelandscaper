@@ -145,7 +145,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","prepare_w01_review","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","verify_cases","publish","status"),
+                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","prepare_w01_review","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","verify_cases","verify_fulltexts","publish","status"),
                                 screening=NULL,extraction=NULL,sources=NULL,
                                 screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
                                 w08_prompt=NULL,model="gpt-6-luna",
@@ -197,7 +197,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         extraction_scope_saved="prepare_extraction",
         w09_prepared="retrieve_fulltexts",retrieving_fulltexts="retrieve_fulltexts",
         fulltexts_ready="extract",extracting="extract",
-        extracted="verify_cases",w10_verifying="verify_cases",w10_verified="publish",NULL)
+        extracted="verify_cases",w10_verifying="verify_cases",w10_verified="verify_fulltexts",w10_fulltext_verifying="verify_fulltexts",NULL)
       if(is.null(next_step))break
       message("[",run_name,"] Orchestrator: ",phase," -> ",next_step)
       state<-resume_evidence_map(run_name,map=map,step=next_step,
@@ -457,6 +457,24 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     state$status<-"w10_verified"
     .orchestrator_save(state)
     message("[",run_name,"] W10 relevance decisions saved: ",result)
+    return(invisible(state))
+  }
+  if(step=="verify_fulltexts") {
+    if(!state$status %in% c("w10_verified","w10_fulltext_verifying","w10_fulltext_verified"))
+      stop("Complete the initial W10 relevance pass first.")
+    if(is.null(state$w10$run)||is.null(state$w09$extraction_dir))
+      stop("W10 or W09 archived run missing.")
+    archived<-file.path(state$w04$run,"screening_prompt.txt")
+    state$status<-"w10_fulltext_verifying"
+    .orchestrator_save(state)
+    fulltext<-verify_w10_fulltext_cases(
+      w09=state$w09$run,extraction_dir=state$w09$extraction_dir,
+      w10_run=state$w10$run,w04_prompt=archived,model=model)
+    state$w10$fulltext_run<-fulltext
+    state$w10$fulltext_decisions_sha256<-sha(file.path(fulltext,"fulltext_decisions.jsonl"))
+    state$status<-"w10_fulltext_verified"
+    .orchestrator_save(state)
+    message("[",run_name,"] W10 full-text second pass saved: ",fulltext)
     return(invisible(state))
   }
   if(step=="publish") {
