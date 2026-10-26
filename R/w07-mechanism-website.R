@@ -6,9 +6,10 @@
 #' @param targeted_w07 Full W07 run directory for the targeted search.
 #' @param expanded_w07 Full W07 run directory for the expanded search.
 #' @param output_file Optional HTML destination.
+#' @param harmonised_csv Optional independently reviewed, harmonised mechanism dataset.
 #' @return Path to a standalone HTML page.
 #' @export
-publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL) {
+publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL,harmonised_csv=NULL) {
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
   readjl<-function(p)lapply(Filter(nzchar,readLines(p,warn=FALSE,encoding="UTF-8")),
                             jsonlite::fromJSON,simplifyVector=FALSE)
@@ -86,8 +87,33 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
         stage=value(z$initiative_stage),category="")
     }
   }
+  harmonised<-list()
+  harmonised_hash<-""
+  if(!is.null(harmonised_csv)) {
+    harmonised_csv<-normalizePath(harmonised_csv,mustWork=TRUE)
+    review<-utils::read.csv(harmonised_csv,stringsAsFactors=FALSE,check.names=FALSE)
+    required<-c("proposed_label","working_definition","hierarchy_action",
+                "parent_category","source_candidate_ids","review_status")
+    if(!all(required%in%names(review)))
+      stop("Harmonised dataset is missing: ",
+           paste(setdiff(required,names(review)),collapse=", "))
+    if(anyNA(review$proposed_label)||any(!nzchar(trimws(review$proposed_label))))
+      stop("Harmonised labels must be non-empty.")
+    ids<-vapply(seq_along(candidates),function(i)paste0("W07-",sprintf("%04d",i)),character(1))
+    for(i in seq_len(nrow(review))) {
+      row<-as.list(review[i,,drop=FALSE])
+      linked<-trimws(strsplit(as.character(row$source_candidate_ids),";",fixed=TRUE)[[1L]])
+      if(!length(linked)||any(!linked%in%ids))
+        stop("Unknown original candidate ID in harmonised dataset row ",i)
+      if(!as.character(row$hierarchy_action)%in%c("existing_mechanism","refine_existing",
+          "new_lower_level","new_higher_level"))
+        stop("Invalid hierarchy action in row ",i)
+      harmonised[[i]]<-lapply(row,as.character)
+    }
+    harmonised_hash<-sha(harmonised_csv)
+  }
   data<-list(schema="ostara-mechanism-meeting-v1",
-    ontology=onto_rows,candidates=candidates,
+    ontology=onto_rows,candidates=candidates,harmonised=harmonised,
     ontology_sha256=targeted$ont_hash,
     sources=list(targeted=list(path=targeted$folder,records=length(targeted$records),
                                coding_sha256=targeted$coding_hash),
@@ -103,7 +129,7 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
     dir<-file.path(dirname(dirname(dirname(targeted$folder))),"reports","mechanism_typology")
     dir.create(dir,recursive=TRUE,showWarnings=FALSE)
     key<-substr(digest::digest(c(targeted$ont_hash,targeted$coding_hash,
-      expanded$coding_hash,sha(template)),algo="sha256"),1L,12L)
+      expanded$coding_hash,harmonised_hash,sha(template)),algo="sha256"),1L,12L)
     output_file<-file.path(dir,paste0("ostara_mechanisms_",key,".html"))
   } else {
     dir.create(dirname(output_file),recursive=TRUE,showWarnings=FALSE)
