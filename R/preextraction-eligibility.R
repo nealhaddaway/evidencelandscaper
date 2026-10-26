@@ -184,8 +184,10 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
     if(anyDuplicated(oldkeys)||any(!oldkeys%in%newkeys))
       stop("Manual review contains duplicate or unexpected cases.")
     immutable<-setdiff(names(review),c("decision","rationale"))
-    if(length(oldkeys)&&!identical(old[immutable],
-                                  review[match(oldkeys,newkeys),immutable,drop=FALSE]))
+    if(length(oldkeys)&&
+       !identical(lapply(old[immutable],unname),
+                  lapply(review[match(oldkeys,newkeys),immutable,drop=FALSE],
+                         unname)))
       stop("Manual review changed source evidence or case identity.")
     extra<-review[!newkeys%in%oldkeys,,drop=FALSE]
     if(nrow(extra))utils::write.csv(rbind(old,extra),review_path,row.names=FALSE)
@@ -230,7 +232,8 @@ finalise_preextraction_eligibility <- function(gate) {
     stop("Resolve every uncertain case with eligible/ineligible and a rationale.")
   fixed_fields<-setdiff(names(correction),c("decision","rationale"))
   if(nrow(correction)&&
-     !identical(correction[fixed_fields],uncertain[fixed_fields]))
+     !identical(lapply(correction[fixed_fields],unname),
+                lapply(uncertain[fixed_fields],unname)))
     stop("Manual review changed original case identities or model evidence.")
   final<-orig
   final$initial_decision<-final$decision
