@@ -1,0 +1,153 @@
+#' Reassess W10 uncertain and ineligible case observations against full text
+#'
+#' Preserves the initial W10 ledger. Each append-only full-text judgement
+#' concerns the original case observation, not the publication as a whole.
+#' @param w09 Verified W09 retrieval directory.
+#' @param extraction_dir Existing full-text extraction directory.
+#' @param w10_run Existing complete first-pass W10 directory.
+#' @param w04_prompt Archived W04 criteria.
+#' @param model OpenAI Responses model.
+#' @return Second-pass audit directory.
+#' @export
+verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,model="gpt-6-luna") {
+  w09<-normalizePath(w09,mustWork=TRUE)
+  extraction_dir<-normalizePath(extraction_dir,mustWork=TRUE)
+  w10_run<-normalizePath(w10_run,mustWork=TRUE)
+  w04_prompt<-normalizePath(w04_prompt,mustWork=TRUE)
+  sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
+  previous<-file.path(w10_run,"w10_decisions.jsonl")
+  src<-file.path(extraction_dir,"fulltext_case_registry_normalised.jsonl")
+  first_manifest<-jsonlite::fromJSON(file.path(w10_run,"manifest.json"),simplifyVector=FALSE)
+  if(!identical(first_manifest$decisions_sha256,sha(previous)) ||
+     !identical(first_manifest$w09_registry_sha256,sha(src)) ||
+     !identical(first_manifest$w04_prompt_sha256,sha(w04_prompt)))
+    stop("First-pass W10 provenance differs from archived inputs.")
+  lines<-function(path) {
+    x<-readLines(path,warn=FALSE,encoding="UTF-8")
+    lapply(x[nzchar(trimws(x))],jsonlite::fromJSON,simplifyVector=FALSE)
+  }
+  originals<-lines(src)
+  decisions<-lines(previous)
+  all_ids<-unlist(lapply(originals,function(z)
+    vapply(seq_along(z$cases),function(j)paste0(z$record_id,"-case-",sprintf("%03d",j)),
+           character(1))),use.names=FALSE)
+  ids<-vapply(decisions,function(x)x$observation_id,character(1))
+  if(anyDuplicated(ids)||!setequal(all_ids,ids))
+    stop("First-pass W10 does not cover all case observations.")
+  selected<-Filter(function(x)x$overall%in%c("uncertain","ineligible"),decisions)
+  target<-file.path(w10_run,paste0("fulltext-pass-",substr(sha(previous),1,12),
+                                  "-",gsub("[^A-Za-z0-9_-]","_",model)))
+  dir.create(target,recursive=TRUE,showWarnings=FALSE)
+  ledger<-file.path(target,"fulltext_decisions.jsonl")
+  saved<-if(file.exists(ledger))lines(ledger) else list()
+  done<-vapply(saved,function(x)x$observation_id,character(1))
+  candidates<-vapply(selected,function(x)x$observation_id,character(1))
+  if(anyDuplicated(done)||any(!done%in%candidates))stop("Invalid second-pass checkpoint.")
+  if(!nzchar(Sys.getenv("OPENAI_API_KEY"))&&length(done)<length(selected))
+    stop("OPENAI_API_KEY required for unfinished second-pass checks.")
+  prompt<-paste(readLines(w04_prompt,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  instruction<-paste0(
+    "You are verifying the relevance of ONE named case observation, not the ",
+    "overall publication. Read the provided full text and original W09 case ",
+    "description. For each of the four archived W04 mandatory criteria A ",
+    "(collectivity), B (environmental/social sustainability), C (scale), ",
+    "D (substantive system focus), return status pass/fail/uncertain with ",
+    "rationale, a verbatim exact SOURCE FULL-TEXT quote and its [PAGE n], ",
+    "[SECTION n], or [TEXT BLOCK n] anchor where supported. Leave quote ",
+    "and anchor empty if no supporting text exists. Never use general ",
+    "sustainability background or another case's purpose to establish this ",
+    "case's sustainability. An indirect environmental/social objective is ",
+    "acceptable if specifically supported for this arrangement. Absence of ",
+    "evidence is uncertain, not a demonstrated fail. Do not infer relevance ",
+    "solely from commercial partnership, technology, traceability, or growth. ",
+    "Return one JSON object containing observation_id; criteria object with ",
+    "A,B,C,D each with status, rationale, quote, anchor; and overall ",
+    "eligible/ineligible/uncertain. Overall eligible iff four pass, ",
+    "ineligible iff any fail, uncertain otherwise. ",
+    "\n\nARCHIVED W04 SCREENING PROMPT:\n",prompt)
+  lookup<-list()
+  for(z in originals)for(j in seq_along(z$cases))
+    lookup[[paste0(z$record_id,"-case-",sprintf("%03d",j))]]<-
+      list(record_id=z$record_id,case=z$cases[[j]])
+  for(x in selected[!candidates%in%done]) {
+    id<-x$observation_id
+    item<-lookup[[id]]
+    payload<-w09_text_payload(w09,item$record_id,max_pages=0L)
+    input<-jsonlite::toJSON(list(observation_id=id,case=item$case,
+      initial_assessment=x,fulltext=payload$text),auto_unbox=TRUE,null="null")
+    body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
+      input=list(list(role="system",content=list(list(type="input_text",text=instruction))),
+                 list(role="user",content=list(list(type="input_text",text=input)))),
+      text=list(format=list(type="json_object")))
+    good<-FALSE
+    for(attempt in seq_len(3L)) {
+      z<-tryCatch({
+        response<-httr2::request("https://api.openai.com/v1/responses")|>
+          httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY"))|>
+          httr2::req_body_json(body,auto_unbox=TRUE)|>
+          httr2::req_timeout(300)|>httr2::req_perform()|>
+          httr2::resp_body_json(simplifyVector=FALSE)
+        parts<-unlist(lapply(response$output,function(t)
+          unlist(lapply(t$content,function(y)
+            if(identical(y$type,"output_text"))y$text else NULL),
+            use.names=FALSE)),use.names=FALSE)
+        if(!length(parts))stop("No model output.")
+        z<-jsonlite::fromJSON(parts[[1L]],simplifyVector=FALSE)
+        if(!identical(z$observation_id,id)||!is.list(z$criteria)||
+           !setequal(names(z$criteria),c("A","B","C","D")))
+          stop("Unexpected case ID or criteria.")
+        statuses<-vapply(c("A","B","C","D"),function(k) {
+          a<-z$criteria[[k]]
+          if(is.null(a$status)||!a$status%in%c("pass","fail","uncertain")||
+             !is.character(a$rationale)||length(a$rationale)!=1L||
+             !nzchar(trimws(a$rationale))||
+             !is.character(a$quote)||length(a$quote)!=1L||
+             !is.character(a$anchor)||length(a$anchor)!=1L)
+            stop("Invalid criterion fields.")
+          if(nzchar(a$quote)&&!grepl(a$quote,payload$text,fixed=TRUE))
+            stop("Nonverbatim full-text quotation.")
+          if(nzchar(a$quote)&&!nzchar(a$anchor))
+            stop("Missing quotation source anchor.")
+          if(nzchar(a$anchor)&&!grepl(a$anchor,payload$text,fixed=TRUE))
+            stop("Unknown full-text source anchor.")
+          a$status
+        },character(1))
+        expected<-if(any(statuses=="fail"))"ineligible" else
+          if(all(statuses=="pass"))"eligible" else "uncertain"
+        if(!identical(z$overall,expected))stop("Inconsistent overall result.")
+        z
+      },error=function(e)e)
+      if(!inherits(z,"error")){good<-TRUE;break}
+      message("[W10 full text] ",id," attempt ",attempt,
+              "/3: ",conditionMessage(z))
+      if(attempt<3L)Sys.sleep(2^attempt)
+    }
+    if(!good)stop("W10 full-text pass interrupted; completed cases are checkpointed.")
+    z$record_id<-item$record_id
+    z$previous_decision<-x$overall
+    z$fulltext_source_sha256<-payload$sha256
+    z$fulltext_source_path<-payload$path
+    z$w09_registry_sha256<-sha(src)
+    z$first_pass_sha256<-sha(previous)
+    z$w04_prompt_sha256<-sha(w04_prompt)
+    z$model<-model
+    cat(as.character(jsonlite::toJSON(z,auto_unbox=TRUE,null="null")),
+        "\n",file=ledger,append=TRUE,sep="")
+    message("[W10 full text] ",length(done)+1L,"/",length(candidates),
+            " ",id,": ",x$overall," -> ",z$overall)
+    done<-c(done,id)
+  }
+  final<-if(file.exists(ledger))lines(ledger) else list()
+  if(length(final)!=length(selected))stop("Incomplete second-pass ledger.")
+  audit<-data.frame(observation_id=vapply(final,function(z)z$observation_id,character(1)),
+    previous=vapply(final,function(z)z$previous_decision,character(1)),
+    fulltext=vapply(final,function(z)z$overall,character(1)))
+  utils::write.csv(audit,file.path(target,"decision_transitions.csv"),row.names=FALSE)
+  jsonlite::write_json(list(first_pass_sha256=sha(previous),
+    w09_registry_sha256=sha(src),w04_prompt_sha256=sha(w04_prompt),
+    second_pass_sha256=sha(ledger),model=model,
+    assessed=length(final),source="verified W09 full texts"),
+    file.path(target,"manifest.json"),auto_unbox=TRUE,pretty=TRUE)
+  message("[W10 full text] Complete: ",file.path(target,"decision_transitions.csv"))
+  invisible(target)
+}
