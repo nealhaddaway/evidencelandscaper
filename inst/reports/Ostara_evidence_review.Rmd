@@ -19,6 +19,7 @@ params:
   w08_run: null
   w09_run: null
   w09_extract_run: null
+  w10_run: null
 ---
 
 ```{r setup, include=FALSE}
@@ -136,6 +137,22 @@ selected <- data.frame(
   Stage=c("W00 searching", "W07 mechanism coding", "W08 case identification", "W09 retrieval", "W09 full-text extraction"),
   Selected_source=vapply(list(w00,w07,w08,w09,w09ex),function(x) if(is.null(x)) "Not available" else basename(x),character(1)))
 show_table(selected)
+```
+
+# W10 case-level relevance verification
+
+The W10 audit applies the four mandatory W04 criteria separately to every full-text case observation: collectivity, environmental or social sustainability, scale, and substantive system focus. Eligible cases pass all four; ineligible cases fail at least one; uncertain cases have insufficient evidence and no demonstrated failure. W09 source extraction is preserved unchanged.
+
+```{r w10-relevance}
+if (!is.null(params$w10_run)) {
+  w10path <- normalizePath(params$w10_run,mustWork=TRUE)
+  decisions <- read_jsonl(file.path(w10path,"w10_decisions.jsonl"))
+  if (!length(decisions)) stop("No W10 relevance decisions available.")
+  decision_counts <- as.data.frame(table(vapply(decisions,function(z)z$overall,character(1))))
+  names(decision_counts) <- c("decision","cases")
+  show_table(decision_counts)
+  cat("W10 complete decision ledger: ",file.path(w10path,"w10_decisions.jsonl"),"\n\n")
+} else empty_message("W10 case relevance verification not supplied for this historical report.")
 ```
 
 # Searching and record preparation
