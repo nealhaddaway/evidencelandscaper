@@ -1,0 +1,33 @@
+W10 CASE-LEVEL RELEVANCE ASSESSMENT | Version 2
+
+PURPOSE AND UNIT
+Determine whether ONE extracted real-world collective-action case is eligible for the Ostara sustainability evidence atlas. The unit is the particular case arrangement, not the publication. Do not transfer objectives, achievements or sustainability rhetoric from other cases, article background, general discussion, or author affiliations. Assess the four criteria together but report each separately.
+
+A. COLLECTIVITY
+Pass only when there is evidence that distinct actors or decision-making units deliberately coordinate, align, govern or pool decisions, commitments, activities, responsibilities, risks or resources towards a shared objective. A government system used by multiple parties, a technology platform, ordinary supplier-customer transactions, regulation alone, consultation alone or coincident participation is not automatically collective action. A research team studying a problem is not itself the qualifying intervention. If specific collective coordination is unclear, mark uncertain.
+
+B. SUSTAINABILITY (REQUIRED SCOPE BOUNDARY)
+Pass only when THIS collective arrangement has an evidenced environmental or social sustainability objective within production, sourcing, shared-resource or closely associated governance systems.
+
+Qualifying environmental objectives can include biodiversity, ecosystem restoration, avoided deforestation, sustainable land or water management, climate mitigation or adaptation, pollution or waste reduction and natural-resource resilience.
+
+Qualifying social sustainability objectives can include fair or secure livelihoods in production systems, labour rights and working conditions, equity and inclusion, human rights, community control of or equitable access to productive or shared natural resources, and durable social resilience connected to those systems. Economic activity, income growth or organisational survival ALONE do not establish sustainable livelihoods: there must be an identifiable equity, livelihood-security, rights, vulnerability or comparable sustainability objective.
+
+An objective need not contain the word sustainability or demonstrate effectiveness. Compliance or risk management qualifies when the intervention's substantive environmental or social sustainability objective is evidenced. Failed or proposed initiatives may qualify if their purpose is clear.
+
+Explicit nonqualifying cases, UNLESS the source demonstrates an additional qualifying sustainability objective attributable to the arrangement: ordinary food safety and consumer protection; product recalls; standard trade traceability; administrative efficiency; digitisation; commercial sales or profit growth; productivity or output maximisation; general economic competitiveness; regulatory compliance for routine safety or trade; and cooperation to improve purely technical services. These activities can have social benefits but are not automatically social sustainability.
+
+In particular, a coordinated system tracking imported beef to improve food safety, enable product recalls and reassure consumers does NOT pass criterion B solely on those grounds. Do not relabel consumer health and confidence as community wellbeing to bypass this boundary. A documented additional objective such as reducing food waste, improving producer livelihood security, enforcing workers' rights or preventing environmental harm could change the assessment.
+
+If the supplied evidence explicitly describes only nonqualifying objectives and no qualifying sustainability purpose for this case, fail B with an evidence-grounded rationale. If the case's objectives are incompletely described and a sustainability purpose remains plausible but unsupported, mark uncertain, not fail. Do not infer a qualifying purpose from the commodity, sector, technology, partner type or publication title.
+
+C. SCALE
+Pass when the coordination mechanism extends beyond an individual actor's independent initiative or single privately managed property; collaboration across organisations, properties, communities or jurisdictions qualifies. Multiple users of a product alone do not establish qualifying scale without a collective coordination mechanism.
+
+D. SUBSTANTIVE SYSTEM FOCUS
+Pass when the arrangement substantively concerns production, sourcing, shared resources or their institutional, financial, market or governance conditions. Do not require food, farming or a particular commodity sector. A purely consumer-demand initiative with no relevant production/resource-system mechanism fails.
+
+EVIDENCE AND DECISIONS
+Use only evidence attributable to THIS case from the supplied source. For the first pass, assess the extracted case fields; for the second pass, read the original full text and identify case-specific evidence. Support pass and fail decisions with concise reasons and verbatim quotations when possible. Never fabricate or paraphrase a quotation as verbatim. Full-text quotations must match the supplied representation; use its actual [PAGE n], [SECTION n] or [TEXT BLOCK n] anchors, not guessed page numbers.
+
+For each A/B/C/D return pass, fail or uncertain, rationale and quotation; the full-text pass also requires the matching source anchor. Overall is eligible if ALL pass, ineligible if ANY fail, otherwise uncertain. An absence of evidence is not itself proof of failure. Do not change the case identity or merge separate initiatives.
