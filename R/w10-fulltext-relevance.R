@@ -69,6 +69,13 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
   for(z in originals)for(j in seq_along(z$cases))
     lookup[[paste0(z$record_id,"-case-",sprintf("%03d",j))]]<-
       list(record_id=z$record_id,case=z$cases[[j]])
+  # PDF/XML extraction frequently inserts line breaks and non-breaking spaces
+  # within otherwise verbatim quotations. Match only after whitespace folding;
+  # never use fuzzy semantic similarity or silently replace the model quote.
+  fold_whitespace<-function(x) {
+    x<-gsub("[\\u00a0\\u2007\\u202f]"," ",x,perl=TRUE)
+    trimws(gsub("[[:space:]]+"," ",x,perl=TRUE))
+  }
   for(x in selected[!candidates%in%done]) {
     id<-x$observation_id
     item<-lookup[[id]]
@@ -105,7 +112,8 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
              !is.character(a$quote)||length(a$quote)!=1L||
              !is.character(a$anchor)||length(a$anchor)!=1L)
             stop("Invalid criterion fields.")
-          if(nzchar(a$quote)&&!grepl(a$quote,payload$text,fixed=TRUE)) {
+          if(nzchar(a$quote)&&!grepl(fold_whitespace(a$quote),
+              fold_whitespace(payload$text),fixed=TRUE)) {
             invalid_quotes<<-c(invalid_quotes,k)
           }
           if(nzchar(a$quote)&&!nzchar(a$anchor))
@@ -130,7 +138,8 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
       # substrings of the supplied document, without changing the case scope.
       if(grepl("Nonverbatim full-text quotation",conditionMessage(z),fixed=TRUE)) {
         cat(as.character(jsonlite::toJSON(list(observation_id=id,
-          attempt=attempt,error=conditionMessage(z)),
+          attempt=attempt,error=conditionMessage(z),
+          response=if(exists("parts",inherits=FALSE)&&length(parts))parts[[1L]] else NULL),
           auto_unbox=TRUE,null="null")),"\n",
           file=file.path(target,"invalid_quote_attempts.jsonl"),
           append=TRUE,sep="")
@@ -138,7 +147,9 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
           instruction,"\n\nCORRECTION: Your preceding answer failed ",
           conditionMessage(z),". Quotations must be copied character-for-character ",
           "from the supplied fulltext, with identical punctuation and spacing. ",
-          "Use a shorter exact continuous substring when necessary. ",
+          "Line wrapping in PDF extraction is normalised by the validator; ",
+          "do not paraphrase or replace words. Use a short, exact passage ",
+          "of at least 20 characters when possible. ",
           "If you cannot find an exact source quote, set quote and anchor ",
           "to empty strings and classify the criterion uncertain unless ",
           "other verified evidence conclusively supports the judgement. ",
