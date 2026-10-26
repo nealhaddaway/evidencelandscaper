@@ -139,17 +139,31 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
   }
   all<-lapply(Filter(nzchar,readLines(ledger,warn=FALSE)),
               jsonlite::fromJSON,simplifyVector=FALSE)
-  cases<-unlist(lapply(all,function(z)lapply(z$cases,function(ca)
-    data.frame(record_id=z$record_id,case_id=ca$case_id,
+  evidence_fields<-unlist(lapply(c("A","B","C","D"),function(k)
+    paste0(k,c("_status","_rationale","_quote","_anchor"))),
+    use.names=FALSE)
+  cases<-unlist(lapply(all,function(z)lapply(z$cases,function(ca) {
+    fields<-unlist(lapply(c("A","B","C","D"),function(k) {
+      a<-ca$criteria[[k]]
+      vals<-list(a$status,a$rationale,a$quote,a$anchor)
+      stats::setNames(vals,paste0(k,
+        c("_status","_rationale","_quote","_anchor")))
+    }),recursive=FALSE)
+    do.call(data.frame,c(list(record_id=z$record_id,case_id=ca$case_id,
       description=ca$description,decision=ca$overall,
-      source_sha256=z$source_sha256,stringsAsFactors=FALSE))),recursive=FALSE)
-  tab<-if(length(cases))do.call(rbind,cases) else
-    data.frame(record_id=character(),case_id=character(),
+      source_sha256=z$source_sha256),fields,
+      list(stringsAsFactors=FALSE)))
+  })),recursive=FALSE)
+  tab<-if(length(cases))do.call(rbind,cases) else {
+    blank<-data.frame(record_id=character(),case_id=character(),
       description=character(),decision=character(),source_sha256=character())
+    for(nm in evidence_fields)blank[[nm]]<-character()
+    blank
+  }
   utils::write.csv(tab,file.path(target,"candidate_case_eligibility.csv"),
                    row.names=FALSE)
   review<-tab[tab$decision=="uncertain",
-               c("record_id","case_id","description"),drop=FALSE]
+               setdiff(names(tab),"decision"),drop=FALSE]
   review$decision<-rep("",nrow(review))
   review$rationale<-rep("",nrow(review))
   review_path<-file.path(target,"manual_eligibility_review.csv")
@@ -180,7 +194,7 @@ finalise_preextraction_eligibility <- function(gate) {
                         colClasses=c(case_id="character"))
   correction<-utils::read.csv(review,stringsAsFactors=FALSE,check.names=FALSE,
                                 na.strings=NULL,colClasses=c(case_id="character"))
-  required<-c("record_id","case_id","description","decision","rationale")
+  required<-c(setdiff(names(orig),"decision"),"decision","rationale")
   if(!identical(names(correction),required))
     stop("Unexpected manual review columns.")
   key<-function(x)paste(x$record_id,x$case_id,sep="/")
@@ -193,10 +207,10 @@ finalise_preextraction_eligibility <- function(gate) {
      (any(!correction$decision%in%c("eligible","ineligible"))||
       any(!nzchar(trimws(correction$rationale)))))
     stop("Resolve every uncertain case with eligible/ineligible and a rationale.")
+  fixed_fields<-setdiff(names(correction),c("decision","rationale"))
   if(nrow(correction)&&
-     !identical(as.character(correction$description),
-                as.character(uncertain$description)))
-    stop("Manual review changed the original candidate descriptions.")
+     !identical(correction[fixed_fields],uncertain[fixed_fields]))
+    stop("Manual review changed original case identities or model evidence.")
   final<-orig
   final$initial_decision<-final$decision
   final$decision_source<-rep("model",nrow(final))
