@@ -14,6 +14,14 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
      jsonlite::fromJSON,simplifyVector=FALSE) else list()
   done<-vapply(items,function(z)z$record_id,character(1))
   if(anyDuplicated(done)||any(!done%in%record_ids))stop("Unexpected eligibility checkpoint IDs.")
+  for(saved in items) {
+    if(!identical(saved$prompt_sha256,rule_sha)||
+       !identical(saved$model,model))
+      stop("Saved pre-extraction eligibility decision uses changed rules or model.")
+    current<-w09_text_payload(w09,saved$record_id,max_pages=0L)
+    if(!identical(saved$source_sha256,current$sha256))
+      stop("Full-text source changed after a prior eligibility decision: ",saved$record_id)
+  }
   instructions<-paste(readLines(rules,warn=FALSE,encoding="UTF-8"),collapse="\n")
   instructions<-paste0(instructions,
     "\n\nPRE-EXTRACTION GATE. Identify EACH distinct real-world candidate ",
@@ -74,12 +82,24 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
                !is.character(a$quote)||length(a$quote)!=1L||
                !is.character(a$anchor)||length(a$anchor)!=1L)
               stop("Invalid eligibility criterion fields.")
-            if(nzchar(a$quote) &&
-               !grepl(fold(a$quote),fold(payload$text),fixed=TRUE))
-              stop("Unverifiable source quotation.")
-            if(nzchar(a$anchor) &&
-               !grepl(a$anchor,payload$text,fixed=TRUE))
-              stop("Unknown source anchor.")
+            if(identical(a$status,"pass") &&
+               (!nzchar(a$quote)||!nzchar(a$anchor)))
+              stop("Passing eligibility criterion requires a source-grounded quotation and anchor.")
+            if(xor(nzchar(a$quote),nzchar(a$anchor)))
+              stop("Quote and source anchor must both be present or absent.")
+            if(nzchar(a$anchor)) {
+              pos<-regexpr(a$anchor,payload$text,fixed=TRUE)[[1L]]
+              if(pos<0L)stop("Unknown source anchor.")
+              start<-pos+nchar(a$anchor)
+              remainder<-substring(payload$text,start)
+              next_anchor<-regexpr(
+                "\\[(PAGE|SECTION|TEXT BLOCK) [0-9]+\\]",
+                remainder,perl=TRUE)[[1L]]
+              section<-if(next_anchor<0L)remainder else
+                substr(remainder,1L,next_anchor-1L)
+              if(!grepl(fold(a$quote),fold(section),fixed=TRUE))
+                stop("Quotation cannot be verified within its source anchor.")
+            }
             a$status
           },character(1))
           expected<-if(any(statuses=="fail"))"ineligible" else
