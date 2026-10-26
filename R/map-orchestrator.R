@@ -145,7 +145,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","prepare_w01_review","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","verify_cases","verify_fulltexts","publish","status"),
+                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","prepare_w01_review","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","assess_fulltexts","extract","verify_cases","verify_fulltexts","publish","status"),
                                 screening=NULL,extraction=NULL,sources=NULL,
                                 screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
                                 w08_prompt=NULL,model="gpt-6-luna",
@@ -196,7 +196,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         w04_screened="finalize_screen",w04_final="code",
         extraction_scope_saved="prepare_extraction",
         w09_prepared="retrieve_fulltexts",retrieving_fulltexts="retrieve_fulltexts",
-        fulltexts_ready="extract",extracting="extract",
+        fulltexts_ready="assess_fulltexts",assessing_fulltexts="assess_fulltexts",
+        preextraction_verified="extract",extracting="extract",
         extracted="verify_cases",w10_verifying="verify_cases",w10_verified="verify_fulltexts",w10_fulltext_verifying="verify_fulltexts",NULL)
       if(is.null(next_step))break
       message("[",run_name,"] Orchestrator: ",phase," -> ",next_step)
@@ -422,19 +423,65 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
             " extraction-ready; see validation CSV for outstanding documents.")
     return(invisible(state))
   }
+  if(step=="assess_fulltexts") {
+    if(!state$status %in% c("fulltexts_ready","assessing_fulltexts",
+                            "preextraction_verified"))
+      stop("Full-text validation must complete before the eligibility gate.")
+    inv<-state$w09$inventory
+    if(!file.exists(inv)||!identical(sha(inv),state$w09$inventory_sha256))
+      stop("Verified full-text inventory has changed.")
+    df<-utils::read.csv(inv,stringsAsFactors=FALSE)
+    if(!nrow(df)||anyDuplicated(df$record_id))
+      stop("Invalid full-text inventory.")
+    state$status<-"assessing_fulltexts"
+    .orchestrator_save(state)
+    gate<-run_preextraction_eligibility(
+      w09=state$w09$run,record_ids=as.character(df$record_id),model=model)
+    audit<-utils::read.csv(file.path(gate,"candidate_case_eligibility.csv"),
+                            stringsAsFactors=FALSE)
+    state$preextraction<-list(run=gate,
+       ledger_sha256=sha(file.path(gate,"candidate_case_decisions.jsonl")),
+       audit_sha256=sha(file.path(gate,"candidate_case_eligibility.csv")),
+       eligible=sum(audit$decision=="eligible"),
+       ineligible=sum(audit$decision=="ineligible"),
+       uncertain=sum(audit$decision=="uncertain"))
+    state$status<-"preextraction_verified"
+    .orchestrator_save(state)
+    message("[",run_name,"] Pre-extraction eligibility complete: ",
+       state$preextraction$eligible," eligible, ",
+       state$preextraction$ineligible," ineligible, ",
+       state$preextraction$uncertain,
+       " uncertain (held out pending adjudication).")
+    return(invisible(state))
+  }
   if(step=="extract") {
-    if(!state$status %in% c("fulltexts_ready","extracting"))
-      stop("Verified full-text inventory required before model extraction.")
+    if(!state$status %in% c("preextraction_verified","extracting"))
+      stop("Pre-extraction eligibility verification required before detailed extraction.")
+    if(is.null(state$preextraction$run)||
+       !file.exists(file.path(state$preextraction$run,"candidate_case_decisions.jsonl"))||
+       !identical(sha(file.path(state$preextraction$run,"candidate_case_decisions.jsonl")),
+                  state$preextraction$ledger_sha256))
+      stop("Approved eligibility ledger missing or changed.")
     w09<-state$w09$run
     inv<-state$w09$inventory
     if(!file.exists(inv)||!identical(sha(inv),state$w09$inventory_sha256))
       stop("Full-text inventory changed after validation.")
     df<-utils::read.csv(inv,stringsAsFactors=FALSE)
     if(anyDuplicated(df$record_id)||!nrow(df))stop("No unique extraction-ready IDs.")
+    audit_file<-file.path(state$preextraction$run,"candidate_case_eligibility.csv")
+    if(!identical(sha(audit_file),state$preextraction$audit_sha256))
+      stop("Pre-extraction eligibility audit has changed.")
+    audit<-utils::read.csv(audit_file,stringsAsFactors=FALSE)
+    eligible_ids<-unique(as.character(audit$record_id[audit$decision=="eligible"]))
+    if(!length(eligible_ids))
+      stop("No eligible case publications; nothing to extract.")
+    if(any(!eligible_ids%in%df$record_id))
+      stop("Eligibility gate contains records absent from validated full texts.")
     state$status<-"extracting"
     .orchestrator_save(state)
-    extraction<-analyse_w09_cases_v2(w09,record_ids=as.character(df$record_id),
-                         w07_run=state$w07$run,model=model,max_pages=0L)
+    extraction<-analyse_w09_cases_v2(w09,record_ids=eligible_ids,
+                         w07_run=state$w07$run,model=model,max_pages=0L,
+                         eligibility_dir=state$preextraction$run)
     state$w09$extraction_dir<-extraction
     state$status<-"extracted"
     .orchestrator_save(state)
