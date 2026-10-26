@@ -96,6 +96,18 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
         file=file.path(target,"invalid_responses.jsonl"),append=TRUE,sep="")
       message("[Pre-extraction eligibility] ",id," attempt ",attempt,
         "/3: ",conditionMessage(result))
+      if(attempt<3L) {
+        body$input[[1L]]$content[[1L]]$text<-paste0(instructions,
+          "\n\n",source_rule,
+          "\n\nCORRECT OUTPUT: Earlier response rejected because ",
+          conditionMessage(result),
+          ". Return ONE JSON object with record_id exactly ",
+          id," and cases as an array. Use case_id as a three-character ",
+          "STRING: 001, 002, etc. For each case include description; ",
+          "criteria as an OBJECT keyed A, B, C, D; each has status, ",
+          "rationale, verbatim quote and valid source anchor; and overall. ",
+          "Do not alter the eligibility definition or invent evidence.")
+      }
     }
     if(!accepted)stop("Pre-extraction gate interrupted; completed documents checkpointed.")
     result$source_sha256<-payload$sha256
