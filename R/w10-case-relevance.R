@@ -71,6 +71,15 @@ run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-6-luna")
                  list(role="user",content=list(list(type="input_text",text=input)))),
       text=list(format=list(type="json_object")))
     success<-FALSE
+    output_contract<-paste0(
+      "Return exactly one JSON object with observation_id equal to ",
+      jsonlite::toJSON(item$observation_id,auto_unbox=TRUE),
+      ", criteria an OBJECT with exactly A, B, C, D as keys; ",
+      "each criterion an object with status (pass/fail/uncertain), ",
+      "rationale (string), quote (string); and overall ",
+      "(eligible/ineligible/uncertain). No arrays or renamed fields.")
+    body$input[[1L]]$content[[1L]]$text<-paste(instructions,
+      output_contract,sep="\\n\\n")
     for(attempt in seq_len(3L)) {
       result<-tryCatch({
         response<-httr2::request("https://api.openai.com/v1/responses")|>
@@ -90,6 +99,22 @@ run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-6-luna")
       if(!inherits(result,"error")){success<-TRUE;break}
       message("[W10] ",item$observation_id," attempt ",attempt,
               "/3 failed: ",conditionMessage(result))
+      if(exists("chunks",inherits=FALSE) && length(chunks)) {
+        cat(as.character(jsonlite::toJSON(list(
+          observation_id=item$observation_id,attempt=attempt,
+          error=conditionMessage(result),raw_model_output=chunks[[1L]]),
+          auto_unbox=TRUE,null="null")),"\\n",
+          file=file.path(run,"invalid_w10_responses.jsonl"),
+          append=TRUE,sep="")
+      }
+      body$input[[1L]]$content[[1L]]$text<-paste(
+        instructions,output_contract,
+        paste0("Your preceding response was rejected: ",
+               conditionMessage(result),
+               ". Correct the OUTPUT STRUCTURE and identity only; ",
+               "use the same substantive eligibility criteria. ",
+               "Return a complete valid JSON object."),
+        sep="\\n\\n")
       if(attempt<3L)Sys.sleep(2^attempt)
     }
     if(!success)stop("W10 stopped; completed responses preserved. Re-run to resume.")
