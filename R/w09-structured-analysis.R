@@ -7,6 +7,11 @@ w09_text_payload <- function(w09,id,max_pages=0L) {
  if(!length(path))stop("No full-text file available for ",id)
  path<-path[[1L]]
  ext<-tolower(tools::file_ext(path))
+ if(identical(ext,"pdf"))
+   warning("[W09 source selection] No structured XML or JSON found at ",
+     file.path(w09,"structured",paste0(id,".xml")),
+     " or its .json counterpart. Using PDF as last-resort source: ",path,
+     call.=FALSE)
  if(ext=="pdf") {
    if(!requireNamespace("pdftools",quietly=TRUE))
      stop("Install pdftools to process PDF full texts.")
