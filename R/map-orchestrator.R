@@ -423,7 +423,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     return(invisible(state))
   }
   if(step=="extract") {
-    if(!identical(state$status,"fulltexts_ready"))
+    if(!state$status %in% c("fulltexts_ready","extracting"))
       stop("Verified full-text inventory required before model extraction.")
     w09<-state$w09$run
     inv<-state$w09$inventory
