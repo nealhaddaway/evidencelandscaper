@@ -20,6 +20,7 @@ params:
   w09_run: null
   w09_extract_run: null
   w10_run: null
+  w10_fulltext_run: null
 ---
 
 ```{r setup, include=FALSE}
@@ -153,6 +154,17 @@ if (!is.null(params$w10_run)) {
   show_table(decision_counts)
   cat("W10 complete decision ledger: ",file.path(w10path,"w10_decisions.jsonl"),"\n\n")
 } else empty_message("W10 case relevance verification not supplied for this historical report.")
+if(!is.null(params$w10_fulltext_run)) {
+  ft<-read_jsonl(file.path(params$w10_fulltext_run,"fulltext_decisions.jsonl"))
+  if(length(ft)) {
+    transitions<-as.data.frame(table(
+      initial=vapply(ft,function(z)z$previous_decision,character(1)),
+      fulltext=vapply(ft,function(z)z$overall,character(1))))
+    show_table(transitions[transitions$Freq>0,,drop=FALSE])
+    cat("The final atlas uses W10 full-text decisions for reassessed cases; ",
+        "first-pass eligible cases retain their initial eligibility pending validation.\n\n")
+  }
+}
 ```
 
 # Searching and record preparation
