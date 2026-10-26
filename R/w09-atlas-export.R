@@ -11,7 +11,7 @@
 #'   observation_id,latitude,longitude,coordinate_basis,coordinate_source.
 #' @return Output directory, invisibly.
 #' @export
-export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NULL, w10_run = NULL) {
+export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NULL, w10_run = NULL, w10_fulltext_run = NULL) {
   w09 <- normalizePath(w09, winslash = "/", mustWork = TRUE)
   extraction_dir <- normalizePath(extraction_dir, winslash = "/", mustWork = TRUE)
   sha <- function(p) digest::digest(file = p, algo = "sha256", serialize = FALSE)
@@ -127,6 +127,32 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
       identical(d$overall,expected)
     },logical(1))
     if(!all(valid))stop("W10 decisions inconsistent with mandatory criteria.")
+    if(!is.null(w10_fulltext_run)) {
+      w10_fulltext_run<-normalizePath(w10_fulltext_run,mustWork=TRUE)
+      second_file<-file.path(w10_fulltext_run,"fulltext_decisions.jsonl")
+      second_manifest<-jsonlite::fromJSON(file.path(w10_fulltext_run,"manifest.json"),simplifyVector=FALSE)
+      if(!identical(second_manifest$first_pass_sha256,sha(ledger)) ||
+         !identical(second_manifest$second_pass_sha256,sha(second_file)))
+        stop("W10 full-text decisions or provenance mismatch.")
+      second<-lapply(Filter(nzchar,readLines(second_file,warn=FALSE)),
+                     jsonlite::fromJSON,simplifyVector=FALSE)
+      needs<-did[vapply(decisions,function(d)
+        d$overall%in%c("uncertain","ineligible"),logical(1))]
+      sid<-vapply(second,function(d)d$observation_id,character(1))
+      if(anyDuplicated(sid)||!setequal(needs,sid))
+        stop("Full-text second pass does not cover all first-pass unresolved cases.")
+      for(d in second) {
+        idx<-match(d$observation_id,did)
+        if(!identical(d$previous_decision,decisions[[idx]]$overall))
+          stop("W10 transition fails to match initial decision.")
+        statuses<-vapply(c("A","B","C","D"),
+          function(k)d$criteria[[k]]$status,character(1))
+        expected<-if(any(statuses=="fail"))"ineligible" else
+          if(all(statuses=="pass"))"eligible" else "uncertain"
+        if(!identical(d$overall,expected))stop("Invalid W10 full-text criteria.")
+        decisions[[idx]]$overall<-d$overall
+      }
+    }
     accepted<-did[vapply(decisions,function(d)identical(d$overall,"eligible"),logical(1))]
     cases<-cases[allid%in%accepted]
     message("[W10 publication] ",length(cases),"/",length(allid),
@@ -157,6 +183,7 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
   inputs <- c(inv_path,registry_path,manifest_path,prompt_path,ontology_path)
   if(!is.null(coordinates_csv)) inputs <- c(inputs,coordinates_csv)
   if(!is.null(w10_run)) inputs <- c(inputs,file.path(w10_run,'w10_decisions.jsonl'))
+  if(!is.null(w10_fulltext_run)) inputs <- c(inputs,file.path(w10_fulltext_run,'fulltext_decisions.jsonl'))
   digest_key <- digest::digest(c("w09-linked-evidence-atlas-v2",vapply(inputs,sha,character(1))),algo="sha256",serialize=TRUE)
   output <- file.path(w09,"atlas_exports",paste0("linked-",substr(digest_key,1,12)))
   dir.create(output,recursive=TRUE,showWarnings=FALSE)
