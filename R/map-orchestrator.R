@@ -564,10 +564,13 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     }
     w08<-trial_w08_cases(n=0L,map_path=map,model=model,
                          prompt_file=w08_prompt,w04_run=w04)
-    w08meta<-jsonlite::fromJSON(file.path(w08,"manifest.json"),simplifyVector=FALSE)
-    if(!identical(w08meta$status,"PILOT_COMPLETE"))
-      stop("W08 remains partially processed. Check preserved invalid response records; no checkpoint 2 yet.")
-    state$w08<-list(run=w08)
+    w08summary<-jsonlite::fromJSON(file.path(w08,"summary.json"),simplifyVector=FALSE)
+    if(!w08summary$status %in% c("PILOT_COMPLETE","PILOT_PARTIAL"))
+      stop("W08 summary has unexpected status; refusing checkpoint.")
+    unresolved<-if(identical(w08summary$status,"PILOT_PARTIAL"))
+      unlist(w08summary$unresolved_record_ids,use.names=FALSE) else character()
+    state$w08<-list(run=w08,unresolved_record_ids=as.list(unresolved))
+    state$unvalidated_case_publications<-length(unresolved)
     state$status<-"awaiting_extraction_scope"
     # Read line-delimited records independently; publication count is not
     # the extracted case count.
@@ -582,7 +585,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     message("[",run_name,"] CHECKPOINT 2: ",state$case_bearing_publications,
             " case-bearing publications across ",state$assessed_publications,
             " W08 assessments; ",state$uncertain_case_publications,
-            " unclear classifications. Choose extraction scope and uncertain policy.")
+            " unclear classifications; ",length(unresolved),
+            " unvalidated record(s) excluded from case-bearing pool. Choose extraction scope and uncertain policy.")
     return(invisible(state))
   }
   if(step=="enrich") {
