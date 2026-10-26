@@ -145,7 +145,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","prepare_w01_review","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","publish","status"),
+                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","prepare_w01_review","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","extract","verify_cases","publish","status"),
                                 screening=NULL,extraction=NULL,sources=NULL,
                                 screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
                                 w08_prompt=NULL,model="gpt-6-luna",
@@ -197,7 +197,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         extraction_scope_saved="prepare_extraction",
         w09_prepared="retrieve_fulltexts",retrieving_fulltexts="retrieve_fulltexts",
         fulltexts_ready="extract",extracting="extract",
-        extracted="publish",NULL)
+        extracted="verify_cases",w10_verifying="verify_cases",w10_verified="publish",NULL)
       if(is.null(next_step))break
       message("[",run_name,"] Orchestrator: ",phase," -> ",next_step)
       state<-resume_evidence_map(run_name,map=map,step=next_step,
@@ -441,9 +441,30 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     message("[",run_name,"] W09 extraction saved: ",extraction)
     return(invisible(state))
   }
+  if(step=="verify_cases") {
+    if(!state$status %in% c("extracted","w10_verifying","w10_verified","published"))
+      stop("W09 full-text extraction must be complete before W10.")
+    if(is.null(state$w09$extraction_dir) || !dir.exists(state$w09$extraction_dir))
+      stop("W09 saved extraction directory missing.")
+    archived<-file.path(state$w04$run,"screening_prompt.txt")
+    if(!file.exists(archived))stop("W04 screening prompt archive missing.")
+    state$status<-"w10_verifying"
+    .orchestrator_save(state)
+    result<-run_w10_case_relevance(state$w09$extraction_dir,archived,model=model)
+    state$w10<-list(run=result,
+      decisions_sha256=sha(file.path(result,"w10_decisions.jsonl")),
+      w04_prompt_sha256=sha(archived))
+    state$status<-"w10_verified"
+    .orchestrator_save(state)
+    message("[",run_name,"] W10 relevance decisions saved: ",result)
+    return(invisible(state))
+  }
   if(step=="publish") {
-    if(!state$status %in% c("extracted","published"))
-      stop("Checkpoint 2 and W09 preparation must complete before publication.")
+    if(!state$status %in% c("w10_verified","published"))
+      stop("Complete W10 case relevance verification before definitive publication.")
+    if(is.null(state$w10$run) || !file.exists(file.path(state$w10$run,"w10_decisions.jsonl")) ||
+       !identical(sha(file.path(state$w10$run,"w10_decisions.jsonl")),state$w10$decisions_sha256))
+      stop("W10 verified decision ledger missing or changed.")
     if(is.null(extraction_dir))extraction_dir<-state$w09$extraction_dir
     if(is.null(extraction_dir))
       stop("Supply the explicit approved completed W09 extraction directory.")
@@ -467,7 +488,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
                extraction_dir=extraction_dir,coordinates_csv=coordinates_csv,
                named_run=run_name,w00_run=state$w00$run_dir,
                w04_run=state$w04$run,w07_run=state$w07$run,
-               w08_run=state$w08$run)
+               w08_run=state$w08$run,w10_run=state$w10$run)
     state$published<-list(atlas=output$atlas,report=output$report,
           full_report=output$full_report,inventory_sha256=sha(inventory),
           extraction_manifest_sha256=sha(file.path(extraction_dir,"manifest.json")))
