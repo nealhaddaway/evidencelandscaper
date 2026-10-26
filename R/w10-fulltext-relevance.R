@@ -88,8 +88,20 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
       input=list(list(role="system",content=list(list(type="input_text",text=body_instruction))),
                  list(role="user",content=list(list(type="input_text",text=input)))),
       text=list(format=list(type="json_object")))
+    # Output contract is separate from the approved case eligibility rules.
+    output_contract<-paste0(
+      "Return exactly one JSON OBJECT with observation_id equal to ",
+      as.character(jsonlite::toJSON(id,auto_unbox=TRUE)),
+      "; criteria must be a JSON OBJECT with exactly four keys A, B, C, D. ",
+      "Each criterion must be an object with status (pass/fail/uncertain), ",
+      "rationale (string), quote (string), anchor (string). ",
+      "Include overall (eligible/ineligible/uncertain). ",
+      "Do not return arrays, renamed criteria, markdown or extra cases.")
+    body$input[[1L]]$content[[1L]]$text<-paste(
+      body_instruction,output_contract,sep="\\n\\n")
     good<-FALSE
     for(attempt in seq_len(3L)) {
+      parts<-character()
       z<-tryCatch({
         response<-httr2::request("https://api.openai.com/v1/responses")|>
           httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY"))|>
@@ -135,6 +147,26 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
       if(!inherits(z,"error")){good<-TRUE;break}
       message("[W10 full text] ",id," attempt ",attempt,
               "/3: ",conditionMessage(z))
+      # Preserve the rejected raw response for exact diagnosis without
+      # altering accepted decisions or the W10 v2 eligibility rules.
+      cat(as.character(jsonlite::toJSON(list(
+        observation_id=id,attempt=attempt,error=conditionMessage(z),
+        raw_model_output=if(length(parts))parts[[1L]] else NULL),
+        auto_unbox=TRUE,null="null")),"\\n",
+        file=file.path(target,"invalid_fulltext_responses.jsonl"),
+        append=TRUE,sep="")
+      if(grepl("Unexpected case ID or criteria",conditionMessage(z),fixed=TRUE) ||
+         grepl("Invalid criterion fields",conditionMessage(z),fixed=TRUE) ||
+         grepl("Inconsistent overall result",conditionMessage(z),fixed=TRUE)) {
+        body$input[[1L]]$content[[1L]]$text<-paste(
+          body_instruction,output_contract,
+          paste0("CORRECTION: Your last response was rejected: ",
+            conditionMessage(z),
+            ". Keep the same case and substantive W10 v2 criteria, ",
+            "but return the exact required fields and the specified ",
+            "observation_id. Do not invent evidence."),
+          sep="\\n\\n")
+      }
       # A failed quote must not be silently accepted or normalised.
       # A correction request must name the faulty criterion and require exact
       # substrings of the supplied document, without changing the case scope.
