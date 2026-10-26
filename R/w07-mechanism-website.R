@@ -52,6 +52,15 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
   tcount<-tally(targeted);ecount<-tally(expanded)
   value<-function(x)if(is.null(x)||!length(x))"" else
     paste(as.character(unlist(x,use.names=FALSE)),collapse="; ")
+  category_field<-intersect(c("category_label","category_name","category_title","category_source_label"),names(onto))
+  category_names<-setNames(vapply(unique(onto$category_id),function(id){
+    z<-onto[onto$category_id==id,,drop=FALSE]
+    if(length(category_field)){
+      name<-trimws(as.character(z[[category_field[[1L]]]][[1L]]))
+      if(!is.na(name)&&nzchar(name))return(name)
+    }
+    paste(head(unique(as.character(z$mechanism_source_label)),3L),collapse=" · ")
+  },character(1)),unique(onto$category_id))
   onto_rows<-lapply(seq_len(nrow(onto)),function(i) {
     z<-onto[i,,drop=FALSE]
     extras<-as.list(z[setdiff(names(z),c("category_id","mechanism_id",
@@ -59,6 +68,7 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
     extras<-lapply(extras,value)
     list(id=as.character(z$mechanism_id),
          category=as.character(z$category_id),
+         category_label=unname(category_names[[as.character(z$category_id)]]),
          label=as.character(z$mechanism_source_label),
          details=value(extras[grep("definition|description|example|scope",
                                    names(extras),ignore.case=TRUE)]),
