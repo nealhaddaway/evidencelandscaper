@@ -90,7 +90,7 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
   json<-gsub("</script","<\\/script",json,fixed=TRUE)
   html<-paste(strsplit(html,"__MECHANISM_DATA__",fixed=TRUE)[[1L]],collapse=json)
   if(is.null(output_file)) {
-    dir<-file.path(dirname(dirname(targeted$folder)),"reports","mechanism_typology")
+    dir<-file.path(dirname(dirname(dirname(targeted$folder))),"reports","mechanism_typology")
     dir.create(dir,recursive=TRUE,showWarnings=FALSE)
     key<-substr(digest::digest(c(targeted$ont_hash,targeted$coding_hash,
       expanded$coding_hash,sha(template)),algo="sha256"),1L,12L)
