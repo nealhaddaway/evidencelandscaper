@@ -175,11 +175,29 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
    # Model output must satisfy the unchanged geographic and ontology checks.
    # Retry only a subnational/country inconsistency with explicit instructions.
    for(attempt in seq_len(3L)) {
-     res<-httr2::request("https://api.openai.com/v1/responses")|>
-       httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY"))|>
-       httr2::req_body_json(body,auto_unbox=TRUE)|>
-       httr2::req_timeout(300)|>httr2::req_perform()|>
-       httr2::resp_body_json(simplifyVector=FALSE)
+     # Retry transient transport timeouts without repeating completed records.
+     # Do not retry non-transient API errors.
+     response<-NULL
+     for(network_attempt in seq_len(3L)) {
+       attempt_result<-tryCatch(
+         httr2::request("https://api.openai.com/v1/responses")|>
+           httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY"))|>
+           httr2::req_body_json(body,auto_unbox=TRUE)|>
+           httr2::req_timeout(300)|>httr2::req_perform(),
+         error=function(e)e)
+       if(!inherits(attempt_result,"error")) {
+         response<-attempt_result
+         break
+       }
+       msg<-conditionMessage(attempt_result)
+       transient<-grepl("timed? ?out|timeout|connection reset|could not resolve host|failed to connect",
+                        msg,ignore.case=TRUE)
+       if(!transient||network_attempt==3L)stop(attempt_result)
+       message("[W09 extraction] ",id," transient network failure; retry ",
+               network_attempt+1L,"/3: ",msg)
+       Sys.sleep(2^network_attempt)
+     }
+     res<-httr2::resp_body_json(response,simplifyVector=FALSE)
      parts<-unlist(lapply(res$output,function(x)
        unlist(lapply(x$content,function(y)
          if(identical(y$type,"output_text"))y$text else NULL),use.names=FALSE)),
