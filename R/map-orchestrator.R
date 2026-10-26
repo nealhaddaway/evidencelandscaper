@@ -198,7 +198,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         w09_prepared="retrieve_fulltexts",retrieving_fulltexts="retrieve_fulltexts",
         fulltexts_ready="assess_fulltexts",assessing_fulltexts="assess_fulltexts",
         preextraction_verified="extract",extracting="extract",
-        extracted="verify_cases",w10_verifying="verify_cases",w10_verified="verify_fulltexts",w10_fulltext_verifying="verify_fulltexts",NULL)
+        extracted=if(is.null(state$preextraction))"verify_cases" else NULL,
+        w10_verifying="verify_cases",w10_verified="verify_fulltexts",w10_fulltext_verifying="verify_fulltexts",NULL)
       if(is.null(next_step))break
       message("[",run_name,"] Orchestrator: ",phase," -> ",next_step)
       state<-resume_evidence_map(run_name,map=map,step=next_step,
@@ -529,16 +530,35 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     return(invisible(state))
   }
   if(step=="publish") {
-    if(!state$status %in% c("w10_fulltext_verified","published"))
-      stop("Complete both W10 relevance passes before definitive publication.")
-    if(is.null(state$w10$fulltext_run)||
-       !file.exists(file.path(state$w10$fulltext_run,"fulltext_decisions.jsonl"))||
-       !identical(sha(file.path(state$w10$fulltext_run,"fulltext_decisions.jsonl")),
-                  state$w10$fulltext_decisions_sha256))
-      stop("W10 full-text decision ledger missing or changed.")
-    if(is.null(state$w10$run) || !file.exists(file.path(state$w10$run,"w10_decisions.jsonl")) ||
-       !identical(sha(file.path(state$w10$run,"w10_decisions.jsonl")),state$w10$decisions_sha256))
-      stop("W10 verified decision ledger missing or changed.")
+    gated<-!is.null(state$preextraction$run)
+    if(gated) {
+      if(!state$status %in% c("extracted","published"))
+        stop("Completed eligibility-first extraction required for publication.")
+      gate_file<-file.path(state$preextraction$run,"candidate_case_decisions.jsonl")
+      if(!file.exists(gate_file)||
+         !identical(sha(gate_file),state$preextraction$ledger_sha256))
+        stop("Pre-extraction case eligibility ledger changed.")
+      if(!is.null(state$w10$run))
+        stop("Mixed legacy W10 and eligibility-first publication is not supported.")
+      audit<-utils::read.csv(
+        file.path(state$preextraction$run,"candidate_case_eligibility.csv"),
+        stringsAsFactors=FALSE)
+      if(any(audit$decision=="uncertain"))
+        stop("Eligibility-first publication blocked by unresolved candidate cases; adjudicate before publication.")
+    } else {
+      if(!state$status %in% c("w10_fulltext_verified","published"))
+        stop("Complete both legacy W10 relevance passes before publication.")
+      if(is.null(state$w10$fulltext_run)||
+         !file.exists(file.path(state$w10$fulltext_run,"fulltext_decisions.jsonl"))||
+         !identical(sha(file.path(state$w10$fulltext_run,"fulltext_decisions.jsonl")),
+                    state$w10$fulltext_decisions_sha256))
+        stop("W10 full-text decision ledger missing or changed.")
+      if(is.null(state$w10$run)||
+         !file.exists(file.path(state$w10$run,"w10_decisions.jsonl"))||
+         !identical(sha(file.path(state$w10$run,"w10_decisions.jsonl")),
+                    state$w10$decisions_sha256))
+        stop("W10 verified decision ledger missing or changed.")
+    }
     if(is.null(extraction_dir))extraction_dir<-state$w09$extraction_dir
     if(is.null(extraction_dir))
       stop("Supply the explicit approved completed W09 extraction directory.")
@@ -562,8 +582,9 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
                extraction_dir=extraction_dir,coordinates_csv=coordinates_csv,
                named_run=run_name,w00_run=state$w00$run_dir,
                w04_run=state$w04$run,w07_run=state$w07$run,
-               w08_run=state$w08$run,w10_run=state$w10$run,
-               w10_fulltext_run=state$w10$fulltext_run)
+               w08_run=state$w08$run,
+               w10_run=if(gated)NULL else state$w10$run,
+               w10_fulltext_run=if(gated)NULL else state$w10$fulltext_run)
     state$published<-list(atlas=output$atlas,report=output$report,
           full_report=output$full_report,inventory_sha256=sha(inventory),
           extraction_manifest_sha256=sha(file.path(extraction_dir,"manifest.json")))
