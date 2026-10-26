@@ -11,7 +11,7 @@
 #'   observation_id,latitude,longitude,coordinate_basis,coordinate_source.
 #' @return Output directory, invisibly.
 #' @export
-export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NULL) {
+export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NULL, w10_run = NULL) {
   w09 <- normalizePath(w09, winslash = "/", mustWork = TRUE)
   extraction_dir <- normalizePath(extraction_dir, winslash = "/", mustWork = TRUE)
   sha <- function(p) digest::digest(file = p, algo = "sha256", serialize = FALSE)
@@ -105,11 +105,38 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
       )
     }
   }
+  if(!is.null(w10_run)) {
+    w10_run<-normalizePath(w10_run,mustWork=TRUE)
+    ledger<-file.path(w10_run,"w10_decisions.jsonl")
+    mpath<-file.path(w10_run,"manifest.json")
+    if(!file.exists(ledger)||!file.exists(mpath))stop("W10 completed decisions required.")
+    wm<-jsonlite::fromJSON(mpath,simplifyVector=FALSE)
+    norm<-file.path(extraction_dir,"fulltext_case_registry_normalised.jsonl")
+    if(!identical(wm$w09_registry_sha256,sha(norm)) ||
+       !identical(wm$decisions_sha256,sha(ledger)))
+      stop("W10 provenance or decision ledger mismatch.")
+    decisions<-lapply(Filter(nzchar,readLines(ledger,warn=FALSE)),
+                      jsonlite::fromJSON,simplifyVector=FALSE)
+    did<-vapply(decisions,function(d)d$observation_id,character(1))
+    allid<-vapply(cases,function(x)x$observation_id,character(1))
+    if(anyDuplicated(did)||!setequal(did,allid))
+      stop("W10 decisions do not cover exactly the extracted cases.")
+    valid<-vapply(decisions,function(d) {
+      sts<-vapply(c("A","B","C","D"),function(k)d$criteria[[k]]$status,character(1))
+      expected<-if(any(sts=="fail"))"ineligible" else if(all(sts=="pass"))"eligible" else "uncertain"
+      identical(d$overall,expected)
+    },logical(1))
+    if(!all(valid))stop("W10 decisions inconsistent with mandatory criteria.")
+    accepted<-did[vapply(decisions,function(d)identical(d$overall,"eligible"),logical(1))]
+    cases<-cases[allid%in%accepted]
+    message("[W10 publication] ",length(cases),"/",length(allid),
+            " cases eligible; all excluded/uncertain decisions preserved in ",ledger)
+  }
   if (!is.null(coordinates_csv)) {
     loc <- utils::read.csv(coordinates_csv, stringsAsFactors=FALSE)
     req <- c("observation_id","latitude","longitude","coordinate_basis","coordinate_source")
     if(!all(req %in% names(loc)) || anyDuplicated(loc$observation_id) ||
-       any(!loc$observation_id %in% vapply(cases, function(x)x$observation_id, character(1))))
+       FALSE)
       stop("Invalid coordinates CSV: require unique matched observation IDs and all coordinate provenance fields.")
     for(i in seq_along(cases)) {
       k <- match(cases[[i]]$observation_id, loc$observation_id)
@@ -129,6 +156,7 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
   # Content-addressed output avoids replacing or mixing extractions.
   inputs <- c(inv_path,registry_path,manifest_path,prompt_path,ontology_path)
   if(!is.null(coordinates_csv)) inputs <- c(inputs,coordinates_csv)
+  if(!is.null(w10_run)) inputs <- c(inputs,file.path(w10_run,'w10_decisions.jsonl'))
   digest_key <- digest::digest(c("w09-linked-evidence-atlas-v2",vapply(inputs,sha,character(1))),algo="sha256",serialize=TRUE)
   output <- file.path(w09,"atlas_exports",paste0("linked-",substr(digest_key,1,12)))
   dir.create(output,recursive=TRUE,showWarnings=FALSE)
