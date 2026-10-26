@@ -98,7 +98,7 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
       "Include overall (eligible/ineligible/uncertain). ",
       "Do not return arrays, renamed criteria, markdown or extra cases.")
     body$input[[1L]]$content[[1L]]$text<-paste(
-      body_instruction,output_contract,sep="\\n\\n")
+      body_instruction,output_contract,sep="\n\n")
     good<-FALSE
     for(attempt in seq_len(3L)) {
       parts<-character()
@@ -152,7 +152,7 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
       cat(as.character(jsonlite::toJSON(list(
         observation_id=id,attempt=attempt,error=conditionMessage(z),
         raw_model_output=if(length(parts))parts[[1L]] else NULL),
-        auto_unbox=TRUE,null="null")),"\\n",
+        auto_unbox=TRUE,null="null")),"\n",
         file=file.path(target,"invalid_fulltext_responses.jsonl"),
         append=TRUE,sep="")
       if(grepl("Unexpected case ID or criteria",conditionMessage(z),fixed=TRUE) ||
@@ -165,7 +165,7 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
             ". Keep the same case and substantive W10 v2 criteria, ",
             "but return the exact required fields and the specified ",
             "observation_id. Do not invent evidence."),
-          sep="\\n\\n")
+          sep="\n\n")
       }
       # A failed quote must not be silently accepted or normalised.
       # A correction request must name the faulty criterion and require exact
