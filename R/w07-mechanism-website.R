@@ -53,7 +53,7 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
   tcount<-tally(targeted);ecount<-tally(expanded)
   value<-function(x)if(is.null(x)||!length(x))"" else
     paste(as.character(unlist(x,use.names=FALSE)),collapse="; ")
-  category_field<-intersect(c("category_label","category_name","category_title","category_source_label"),names(onto))
+  category_field<-intersect(c("category","category_label","category_name","category_title","category_source_label"),names(onto))
   category_names<-setNames(vapply(unique(onto$category_id),function(id){
     z<-onto[onto$category_id==id,,drop=FALSE]
     if(length(category_field)){
@@ -109,6 +109,32 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
           "new_lower_level","new_higher_level"))
         stop("Invalid hierarchy action in row ",i)
       harmonised[[i]]<-lapply(row,as.character)
+    }
+    # Validate the complete original-source mapping, not only per-row links.
+    linked_all<-unlist(lapply(harmonised,function(row)
+      trimws(strsplit(row$source_candidate_ids,";",fixed=TRUE)[[1L]])),use.names=FALSE)
+    if(length(linked_all)!=length(ids)||anyDuplicated(linked_all)||
+       !setequal(linked_all,ids))
+      stop("Harmonised proposals must map all original W07 suggestions exactly once.")
+    if("parent_category_code"%in%names(review)) {
+      approved_categories<-unique(as.character(onto$category_id))
+      for(i in seq_len(nrow(review))) {
+        cat_code<-trimws(as.character(review$parent_category_code[[i]]))
+        new_parent<-if("proposed_new_parent_category"%in%names(review))
+          trimws(as.character(review$proposed_new_parent_category[[i]])) else ""
+        closest<-if("closest_existing_mechanism_code"%in%names(review))
+          trimws(as.character(review$closest_existing_mechanism_code[[i]])) else ""
+        action<-as.character(review$hierarchy_action[[i]])
+        if((nzchar(cat_code)==nzchar(new_parent))||
+           (nzchar(cat_code)&&!cat_code%in%approved_categories))
+          stop("Exactly one valid existing or proposed parent category required, row ",i)
+        if(nzchar(closest)&&!closest%in%known)
+          stop("Unknown approved mechanism code in row ",i)
+        if(action%in%c("existing_mechanism","refine_existing")&&!nzchar(closest))
+          stop("Existing/refined mechanism requires its approved code, row ",i)
+        if(action=="new_higher_level")
+          stop("A harmonised candidate must be a lower-level mechanism, row ",i)
+      }
     }
     harmonised_hash<-sha(harmonised_csv)
   }
