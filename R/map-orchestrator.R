@@ -197,7 +197,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         extraction_scope_saved="prepare_extraction",
         w09_prepared="retrieve_fulltexts",retrieving_fulltexts="retrieve_fulltexts",
         fulltexts_ready="assess_fulltexts",assessing_fulltexts="assess_fulltexts",
-        preextraction_verified="extract",extracting="extract",
+        preextraction_verified=NULL,extracting="extract",
         extracted=if(is.null(state$preextraction))"verify_cases" else NULL,
         w10_verifying="verify_cases",w10_verified="verify_fulltexts",w10_fulltext_verifying="verify_fulltexts",NULL)
       if(is.null(next_step))break
@@ -452,7 +452,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
        state$preextraction$eligible," eligible, ",
        state$preextraction$ineligible," ineligible, ",
        state$preextraction$uncertain,
-       " uncertain (held out pending adjudication).")
+       " uncertain (held out pending adjudication). ",
+       "Review candidate_case_eligibility.csv before step=\'extract\'.")
     return(invisible(state))
   }
   if(step=="extract") {
