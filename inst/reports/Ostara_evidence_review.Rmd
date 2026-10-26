@@ -52,7 +52,9 @@ read_csv <- function(path) if (file.exists(path)) utils::read.csv(path,stringsAs
 empty_message <- function(msg) cat("*",msg,"*\n\n",sep="")
 show_table <- function(df, digits=NULL) {
   if (is.null(df)||!nrow(df)) { empty_message("No verified data available yet."); return(invisible(NULL)) }
-  print(knitr::kable(df,format="html",digits=digits,escape=TRUE,table.attr='class="table table-striped table-condensed"'))
+  args <- list(x=df,format="html",escape=TRUE,table.attr='class="table table-striped table-condensed"')
+  if(!is.null(digits)) args$digits <- digits
+  print(do.call(knitr::kable,args))
 }
 str_or <- function(z, fallback="Not reported") {
   x<-unlist(z,use.names=FALSE)
