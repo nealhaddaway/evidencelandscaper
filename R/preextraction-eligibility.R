@@ -128,10 +128,79 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
       description=character(),decision=character(),source_sha256=character())
   utils::write.csv(tab,file.path(target,"candidate_case_eligibility.csv"),
                    row.names=FALSE)
+  review<-tab[tab$decision=="uncertain",
+               c("record_id","case_id","description"),drop=FALSE]
+  review$decision<-rep("",nrow(review))
+  review$rationale<-rep("",nrow(review))
+  review_path<-file.path(target,"manual_eligibility_review.csv")
+  if(!file.exists(review_path))
+    utils::write.csv(review,review_path,row.names=FALSE)
   jsonlite::write_json(list(schema="preextraction-eligibility-v1",
     w09=w09,prompt_sha256=rule_sha,model=model,
     records=length(all),cases=nrow(tab),
     ledger_sha256=digest::digest(file=ledger,algo="sha256",serialize=FALSE)),
     file.path(target,"manifest.json"),auto_unbox=TRUE,pretty=TRUE)
   invisible(target)
+}
+
+#' Finalise human adjudications of uncertain full-text candidate cases
+#'
+#' Review the generated manual_eligibility_review.csv, entering eligible or
+#' ineligible and a substantive rationale for EVERY uncertain candidate.
+#' Original model decisions are retained; a separate reviewed final registry
+#' is created without re-running any model calls.
+finalise_preextraction_eligibility <- function(gate) {
+  gate<-normalizePath(gate,mustWork=TRUE)
+  raw<-file.path(gate,"candidate_case_eligibility.csv")
+  review<-file.path(gate,"manual_eligibility_review.csv")
+  ledger<-file.path(gate,"candidate_case_decisions.jsonl")
+  if(!all(file.exists(c(raw,review,ledger))))
+    stop("Pre-extraction eligibility gate is incomplete.")
+  orig<-utils::read.csv(raw,stringsAsFactors=FALSE,check.names=FALSE)
+  correction<-utils::read.csv(review,stringsAsFactors=FALSE,check.names=FALSE,
+                                na.strings=NULL)
+  required<-c("record_id","case_id","description","decision","rationale")
+  if(!identical(names(correction),required))
+    stop("Unexpected manual review columns.")
+  key<-function(x)paste(x$record_id,x$case_id,sep="/")
+  uncertain<-orig[orig$decision=="uncertain",,drop=FALSE]
+  if(anyDuplicated(key(correction))||
+     !setequal(key(correction),key(uncertain)))
+    stop("Manual review must contain exactly the uncertain case IDs.")
+  correction<-correction[match(key(uncertain),key(correction)),,drop=FALSE]
+  if(nrow(correction)&&
+     (any(!correction$decision%in%c("eligible","ineligible"))||
+      any(!nzchar(trimws(correction$rationale)))))
+    stop("Resolve every uncertain case with eligible/ineligible and a rationale.")
+  if(nrow(correction)&&
+     !identical(as.character(correction$description),
+                as.character(uncertain$description)))
+    stop("Manual review changed the original candidate descriptions.")
+  final<-orig
+  final$initial_decision<-final$decision
+  final$decision_source<-rep("model",nrow(final))
+  final$adjudication_rationale<-rep("",nrow(final))
+  i<-match(key(uncertain),key(final))
+  if(length(i)) {
+    final$decision[i]<-correction$decision
+    final$decision_source[i]<-"human"
+    final$adjudication_rationale[i]<-correction$rationale
+  }
+  if(any(final$decision=="uncertain"))
+    stop("Final eligibility registry contains unresolved cases.")
+  destination<-file.path(gate,"final_case_eligibility.csv")
+  if(file.exists(destination))
+    stop("Final review is already sealed. Do not overwrite; retain provenance.")
+  utils::write.csv(final,destination,row.names=FALSE)
+  checksum<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
+  jsonlite::write_json(list(schema="preextraction-final-v1",
+    original_ledger_sha256=checksum(ledger),
+    original_audit_sha256=checksum(raw),
+    manual_review_sha256=checksum(review),
+    final_audit_sha256=checksum(destination),
+    adjudicated=nrow(correction),eligible=sum(final$decision=="eligible"),
+    ineligible=sum(final$decision=="ineligible")),
+    file.path(gate,"final_review_manifest.json"),
+    auto_unbox=TRUE,pretty=TRUE)
+  invisible(destination)
 }
