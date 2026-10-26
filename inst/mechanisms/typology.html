@@ -80,7 +80,7 @@ for(const x of originals)out+='<div class="field"><b>'+esc(x.id)+' · '+esc(x.so
 out+='</details></div>';
 }out+='</section>';
 }
-}}
+}
 $("body").innerHTML=out+'</div>';
 }
 function proposed(){let a=d.harmonised||[];if(!a.length){$("body").innerHTML='<div class="panel"><h2>Proposed revised ontology</h2><p class="note">The original candidates have been exported for independent harmonisation. This view will show the review-ready ontology after a harmonised dataset has been supplied. No unreviewed mechanism changes are invented or added automatically.</p></div>';return}
