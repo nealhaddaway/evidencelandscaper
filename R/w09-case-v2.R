@@ -200,7 +200,7 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
      "\nFor XML/JSON anchors are section or text block labels, not page numbers.")
    if(!is.null(eligible_by_record)) {
      instruction<-paste0(instruction,
-       "\\n\\nELIGIBILITY-FIRST EXTRACTION RESTRICTION: Extract ONLY ",
+       "\n\nELIGIBILITY-FIRST EXTRACTION RESTRICTION: Extract ONLY ",
        "the explicitly approved cases in eligible_cases below. ",
        "Each output case MUST include eligibility_case_id exactly matching ",
        "the candidate case_id. Do not extract any ineligible, uncertain, ",
@@ -251,7 +251,25 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
      issue<-tryCatch({validate(z,id,assigned,payload$text);NULL},
                      error=function(e)conditionMessage(e))
      if(is.null(issue))break
-     if(!identical(issue,"Subnational location has no matching operational country."))stop(issue)
+     case_mismatch<-grepl("W09 extraction did not preserve exact eligible candidate IDs.",
+                          issue,fixed=TRUE)
+     geography_mismatch<-identical(issue,"Subnational location has no matching operational country.")
+     if(!geography_mismatch && !case_mismatch)stop(issue)
+     if(case_mismatch) {
+       invalid_path<-file.path(target,"invalid_eligibility_case_responses.jsonl")
+       cat(jsonlite::toJSON(list(record_id=id,attempt=attempt,
+         validation_error=issue,response=z),auto_unbox=TRUE,null="null"),
+         "\n",file=invalid_path,append=TRUE,sep="")
+       if(attempt==3L)
+         stop("W09 pre-eligible extraction case-ID verification failed for ",
+              id,"; invalid response archived.")
+       body$input[[1L]]$content[[1L]]$text<-paste0(instruction,
+         "\n\nCASE-ID CORRECTION: Return exactly the eligible cases in ",
+         "eligible_cases in the input, no additional cases. For each extracted ",
+         "case, copy its case_id unchanged to eligibility_case_id. ",
+         "Preserve all normal W09 fields and full-text evidence.")
+       next
+     }
      invalid_path<-file.path(target,"invalid_geography_responses.jsonl")
      cat(jsonlite::toJSON(list(record_id=id,attempt=attempt,
        validation_error=issue,response=z),auto_unbox=TRUE,null="null"),
