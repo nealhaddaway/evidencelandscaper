@@ -96,6 +96,7 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
         if(!identical(z$observation_id,id)||!is.list(z$criteria)||
            !setequal(names(z$criteria),c("A","B","C","D")))
           stop("Unexpected case ID or criteria.")
+        invalid_quotes<-character()
         statuses<-vapply(c("A","B","C","D"),function(k) {
           a<-z$criteria[[k]]
           if(is.null(a$status)||!a$status%in%c("pass","fail","uncertain")||
@@ -104,8 +105,9 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
              !is.character(a$quote)||length(a$quote)!=1L||
              !is.character(a$anchor)||length(a$anchor)!=1L)
             stop("Invalid criterion fields.")
-          if(nzchar(a$quote)&&!grepl(a$quote,payload$text,fixed=TRUE))
-            stop("Nonverbatim full-text quotation.")
+          if(nzchar(a$quote)&&!grepl(a$quote,payload$text,fixed=TRUE)) {
+            invalid_quotes<<-c(invalid_quotes,k)
+          }
           if(nzchar(a$quote)&&!nzchar(a$anchor))
             stop("Missing quotation source anchor.")
           if(nzchar(a$anchor)&&!grepl(a$anchor,payload$text,fixed=TRUE))
@@ -115,11 +117,33 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
         expected<-if(any(statuses=="fail"))"ineligible" else
           if(all(statuses=="pass"))"eligible" else "uncertain"
         if(!identical(z$overall,expected))stop("Inconsistent overall result.")
+        if(length(invalid_quotes))
+          stop("Nonverbatim full-text quotation in criterion(s): ",
+               paste(invalid_quotes,collapse=", "))
         z
       },error=function(e)e)
       if(!inherits(z,"error")){good<-TRUE;break}
       message("[W10 full text] ",id," attempt ",attempt,
               "/3: ",conditionMessage(z))
+      # A failed quote must not be silently accepted or normalised.
+      # A correction request must name the faulty criterion and require exact
+      # substrings of the supplied document, without changing the case scope.
+      if(grepl("Nonverbatim full-text quotation",conditionMessage(z),fixed=TRUE)) {
+        cat(as.character(jsonlite::toJSON(list(observation_id=id,
+          attempt=attempt,error=conditionMessage(z)),
+          auto_unbox=TRUE,null="null")),"\\n",
+          file=file.path(target,"invalid_quote_attempts.jsonl"),
+          append=TRUE,sep="")
+        body$input[[1L]]$content[[1L]]$text<-paste0(
+          instruction,"\\n\\nCORRECTION: Your preceding answer failed ",
+          conditionMessage(z),". Quotations must be copied character-for-character ",
+          "from the supplied fulltext, with identical punctuation and spacing. ",
+          "Use a shorter exact continuous substring when necessary. ",
+          "If you cannot find an exact source quote, set quote and anchor ",
+          "to empty strings and classify the criterion uncertain unless ",
+          "other verified evidence conclusively supports the judgement. ",
+          "Do not invent source text.")
+      }
       if(attempt<3L)Sys.sleep(2^attempt)
     }
     if(!good)stop("W10 full-text pass interrupted; completed cases are checkpointed.")
