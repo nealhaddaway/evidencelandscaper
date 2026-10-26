@@ -163,6 +163,7 @@ export_w09_evidence_atlas <- function(w09, extraction_dir, coordinates_csv = NUL
   output_json <- file.path(output,"case_evidence.json")
   output_csv <- file.path(output,"case_index.csv")
   out_manifest <- file.path(output,"export_manifest.json")
+  if(!length(cases))stop("W10 verified zero eligible cases; refusing to publish an empty atlas.")
   index <- do.call(rbind,lapply(cases,function(x) {
     data.frame(observation_id=x$observation_id,record_id=x$publication$record_id,
       case_name=if(is.null(x$case$case_name)) "" else as.character(x$case$case_name),
