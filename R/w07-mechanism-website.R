@@ -82,7 +82,7 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
     for(z in run$records) {
       if(!isTRUE(z$ontology_gap))next
       candidates[[length(candidates)+1L]]<-list(
-        source=src,description=value(z$proposed_new_mechanism),
+        id=paste0("W07-",sprintf("%04d",length(candidates)+1L)),source=src,description=value(z$proposed_new_mechanism),
         reason=value(z$ontology_gap_reason),
         stage=value(z$initiative_stage),category="")
     }
@@ -112,6 +112,13 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
     }
     harmonised_hash<-sha(harmonised_csv)
   }
+  source_table<-data.frame(
+    candidate_id=vapply(candidates,function(z)z$id,character(1)),
+    source_search=vapply(candidates,function(z)z$source,character(1)),
+    original_description=vapply(candidates,function(z)z$description,character(1)),
+    original_gap_reason=vapply(candidates,function(z)z$reason,character(1)),
+    initiative_development_stage=vapply(candidates,function(z)z$stage,character(1)),
+    stringsAsFactors=FALSE)
   data<-list(schema="ostara-mechanism-meeting-v1",
     ontology=onto_rows,candidates=candidates,harmonised=harmonised,
     ontology_sha256=targeted$ont_hash,
@@ -134,6 +141,8 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
   } else {
     dir.create(dirname(output_file),recursive=TRUE,showWarnings=FALSE)
   }
+  source_file<-file.path(dirname(output_file),paste0("original_candidates_",substr(digest::digest(source_table),1,12),".csv"))
+  if(!file.exists(source_file))utils::write.csv(source_table,source_file,row.names=FALSE)
   if(file.exists(output_file)) {
     prev<-paste(readLines(output_file,warn=FALSE,encoding="UTF-8"),collapse="\n")
     if(!identical(prev,html))stop("Existing meeting webpage differs; refusing overwrite.")
