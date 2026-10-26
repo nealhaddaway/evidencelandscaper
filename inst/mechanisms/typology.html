@@ -47,29 +47,40 @@ const cats=[...new Set(a.map(x=>x.category))];let out='<div class="panel"><h2>St
 for(const cat of cats){out+='<div class="group"><header><h3>'+esc(catName(cat))+'</h3></header>';for(const m of a.filter(x=>x.category===cat)){
 const mx=Math.max(1,...d.ontology.map(sourceCount));out+='<details class="mechanism"><summary><span class="id">'+esc(m.id)+'</span>'+esc(m.label)+'</summary><div class="definition-fields">'+Object.entries(m.metadata||{}).filter(([k,v])=>v&&!["category","source_row_count"].includes(k)).map(([k,v])=>'<div class="field"><b>'+esc(fieldLabels[k]||({purpose_source:"Original purpose",category_label:"Category name"}[k])||k.replace(/_draft$/,"").replace(/_/g," ").replace(/\b\w/g,ch=>ch.toUpperCase()))+'</b><p class="description">'+esc(v)+'</p></div>').join("")+'</div></details><div class="numbers"><span>Targeted <span class="num">'+n(m.counts,"targeted")+'</span></span><span>Expanded <span class="num">'+n(m.counts,"expanded")+'</span></span></div><div class="bar"><span style="width:'+((sourceCount(m)/mx)*100).toFixed(1)+'%"></span></div>'; }out+='</div>';}out+='</div></div>';$("body").innerHTML=cats.length?out:'<div class="empty">No matching mechanisms</div>'}
 function candidates(){
-const proposals=d.harmonised||[],source=$("source").value,q=fs($("search").value.trim());
+const proposals=d.harmonised||[],source=$("source").value,q=fs($("search").value.trim()),selected=$("category").value;
 const lookup=new Map(d.candidates.map(x=>[x.id,x]));
-let out='<div class="panel"><h2>Candidate mechanisms for team review</h2><p class="note">Provisional ontology-ready proposals grouped under suggested parent categories. All 36 proposals are lower-level mechanism concepts; the parent category labels are provisional and have not yet been reconciled with existing coded categories. No new ontology codes are assigned. Expand to inspect the original W07 suggestions. Initiative development stage refers to the initiative’s maturity, not its supply-chain stage.</p>';
-if(!proposals.length){out+='<p class="note">Harmonised dataset not supplied; showing original suggestions.</p>';for(const x of d.candidates.filter(x=>(source==="all"||x.source===source)&&(!q||fs(x.description).includes(q))))out+='<div class="candidate"><strong>'+esc(x.description)+'</strong><p>'+esc(x.reason)+'</p></div>';}
-else {
-const groups=[...new Set(proposals.map(x=>x.parent_category||"Unassigned proposed category"))];
-for(const group of groups){
-const rows=proposals.filter(p=>{
-if((p.parent_category||"Unassigned proposed category")!==group)return false;
+let out='<div class="panel"><h2>Candidate mechanisms for team review</h2><p class="note">Provisional placements checked against the approved W07 ontology. Existing category codes and mechanism codes refer to the approved framework; proposals remain unapproved. Expand an item for its classification rationale, original wording and source suggestions. Initiatives are not estimates of mechanism prevalence.</p>';
+if(!proposals.length){
+out+='<p class="note">No harmonised review CSV supplied. Original W07 suggestions follow.</p>';
+for(const x of d.candidates.filter(x=>(source==="all"||x.source===source)&&(!q||fs([x.description,x.reason].join(" ")).includes(q))))out+='<div class="candidate"><strong>'+esc(x.description)+'</strong><p>'+esc(x.reason)+'</p></div>';
+}else{
+const parent=p=>p.parent_category_code?(catName(p.parent_category_code)):String(p.proposed_new_parent_category||p.parent_category||"Unassigned proposed category");
+const parentKey=p=>p.parent_category_code?"existing:"+p.parent_category_code:"proposed:"+String(p.proposed_new_parent_category||p.parent_category||"Unassigned");
+const groups=[...new Set(proposals.map(parentKey))];
+for(const key of groups){
+const grp=proposals.filter(p=>parentKey(p)===key);
+const rows=grp.filter(p=>{
 const ids=String(p.source_candidate_ids||"").split(";").map(x=>x.trim()),orig=ids.map(id=>lookup.get(id)).filter(Boolean);
-return (source==="all"||orig.some(x=>x.source===source))&&(!q||fs([group,p.proposed_label,p.working_definition,...orig.map(x=>x.description)].join(" ")).includes(q));
+return (!selected||p.parent_category_code===selected)&&(source==="all"||orig.some(x=>x.source===source))&&(!q||fs([parent(p),p.proposed_label,p.working_definition,p.closest_existing_mechanism_code,p.closest_existing_mechanism_label,p.classification_rationale,...orig.map(x=>x.description)].join(" ")).includes(q));
 });
 if(!rows.length)continue;
-out+='<section class="candidate-group"><h3>'+esc(group)+'</h3><p class="note">Proposed parent category · placement against the approved ontology requires review</p>';
+const existing=!!rows[0].parent_category_code;
+out+='<section class="candidate-group"><h3>'+esc(parent(rows[0]))+'</h3><p class="note">'+(existing?"Existing approved higher-level category":"Proposed new higher-level category · not approved")+'</p>';
 for(const p of rows){
 const ids=String(p.source_candidate_ids||"").split(";").map(x=>x.trim()),originals=ids.map(id=>lookup.get(id)).filter(Boolean);
-out+='<div class="candidate"><small>Proposed lower-level mechanism · '+esc(p.proposal_id||"")+'</small><strong>'+esc(p.proposed_label)+'</strong><p class="description">'+esc(p.working_definition)+'</p><details><summary>Original suggestions ('+originals.length+')</summary>';
-for(const x of originals)out+='<div class="field"><b>Original suggestion '+esc(x.id.replace("W07-",""))+' · '+esc(x.source==="targeted"?"Targeted search":"Expanded search")+'</b><p class="description">'+esc(x.description)+'</p><p class="note">'+esc(x.reason)+'</p>'+(x.stage?'<small>Initiative development stage: '+esc(x.stage)+'</small>':"")+'</div>';
+const act=p.hierarchy_action==="existing_mechanism"?"Covered by approved mechanism":p.hierarchy_action==="refine_existing"?"Proposed refinement of approved mechanism":"Proposed new lower-level mechanism";
+const code=p.closest_existing_mechanism_code||"",name=p.closest_existing_mechanism_label||"";
+out+='<div class="candidate"><small>'+esc(act)+' · '+esc(p.proposal_id||"")+'</small><strong>'+esc(p.proposed_label)+'</strong><p class="description">'+esc(p.working_definition)+'</p>';
+if(code)out+='<p class="parent-mechanism">Closest approved mechanism: '+esc(code)+' · '+esc(name)+'</p>';
+out+='<details><summary>Rationale and original suggestions ('+originals.length+')</summary>';
+if(p.classification_rationale)out+='<div class="field"><b>Classification rationale</b><p class="description">'+esc(p.classification_rationale)+'</p></div>';
+if(p.original_approved_wording)out+='<div class="field"><b>Existing approved definition (unchanged)</b><p class="description">'+esc(p.original_approved_wording)+'</p></div>';
+if(p.review_status)out+='<p class="note">Status: '+esc(p.review_status)+'</p>';
+for(const x of originals)out+='<div class="field"><b>'+esc(x.id)+' · '+esc(x.source==="targeted"?"Targeted search":"Expanded search")+'</b><p class="description">'+esc(x.description)+'</p><p class="note">'+esc(x.reason)+'</p>'+(x.stage?'<small>Initiative development stage: '+esc(x.stage)+'</small>':"")+'</div>';
 out+='</details></div>';
+}out+='</section>';
 }
-out+='</section>';
-}
-}
+}}
 $("body").innerHTML=out+'</div>';
 }
 function proposed(){let a=d.harmonised||[];if(!a.length){$("body").innerHTML='<div class="panel"><h2>Proposed revised ontology</h2><p class="note">The original candidates have been exported for independent harmonisation. This view will show the review-ready ontology after a harmonised dataset has been supplied. No unreviewed mechanism changes are invented or added automatically.</p></div>';return}
