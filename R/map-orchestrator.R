@@ -442,12 +442,16 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     return(invisible(state))
   }
   if(step=="verify_cases") {
-    if(!state$status %in% c("extracted","w10_verifying","w10_verified","published"))
+    if(!state$status %in% c("extracted","w10_verifying","w10_verified","w10_fulltext_verifying","w10_fulltext_verified","published"))
       stop("W09 full-text extraction must be complete before W10.")
     if(is.null(state$w09$extraction_dir) || !dir.exists(state$w09$extraction_dir))
       stop("W09 saved extraction directory missing.")
     archived<-file.path(state$w04$run,"screening_prompt.txt")
     if(!file.exists(archived))stop("W04 screening prompt archive missing.")
+    if(!is.null(state$w10$run) && dir.exists(state$w10$run)) {
+      state$w10_previous<-state$w10
+    }
+    state$w10<-NULL
     state$status<-"w10_verifying"
     .orchestrator_save(state)
     result<-run_w10_case_relevance(state$w09$extraction_dir,archived,model=model)
