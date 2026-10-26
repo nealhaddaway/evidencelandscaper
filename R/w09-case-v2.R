@@ -11,7 +11,7 @@
 #' @param prompt_version Versioned W09 prompt; defaults to v2_5. Use v2_3 or v2_4 to resume historical runs.
 #' @return W09 v2 directory.
 #' @export
-analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,w07_run=NULL,prompt_version="v2_5") {
+analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,w07_run=NULL,prompt_version="v2_5",eligibility_dir=NULL) {
  if(!requireNamespace("countrycode",quietly=TRUE))
    stop("Install countrycode: install.packages('countrycode')")
  if(!nzchar(Sys.getenv("OPENAI_API_KEY")))stop("OPENAI_API_KEY is required.")
@@ -25,6 +25,30 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
  if(length(max_pages)!=1L||is.na(max_pages)||max_pages!=as.integer(max_pages)||
     max_pages<0L)stop("max_pages must be a nonnegative integer.")
  sha<-function(x)digest::digest(file=x,algo="sha256",serialize=FALSE)
+ eligible_by_record<-NULL
+ gate_sha<-NULL
+ if(!is.null(eligibility_dir)) {
+   eligibility_dir<-normalizePath(eligibility_dir,mustWork=TRUE)
+   gate<-file.path(eligibility_dir,"candidate_case_decisions.jsonl")
+   manifest_gate<-file.path(eligibility_dir,"manifest.json")
+   if(!file.exists(gate)||!file.exists(manifest_gate))
+     stop("Eligibility gate must be complete and provenance-verified.")
+   gm<-jsonlite::fromJSON(manifest_gate,simplifyVector=FALSE)
+   if(!identical(gm$ledger_sha256,sha(gate)) ||
+      !identical(normalizePath(gm$w09,mustWork=TRUE),w09))
+     stop("Eligibility gate provenance mismatch.")
+   rows<-lapply(Filter(nzchar,readLines(gate,warn=FALSE)),
+                jsonlite::fromJSON,simplifyVector=FALSE)
+   gate_ids<-vapply(rows,function(z)z$record_id,character(1))
+   if(anyDuplicated(gate_ids)||any(!record_ids%in%gate_ids))
+     stop("Eligibility gate does not cover all requested publications.")
+   eligible_by_record<-setNames(lapply(rows,function(z)
+     Filter(function(ca)identical(ca$overall,"eligible"),z$cases)),gate_ids)
+   expected<-names(eligible_by_record)[vapply(eligible_by_record,length,integer(1))>0L]
+   if(!setequal(record_ids,expected))
+     stop("Extraction IDs must match exactly the publications with eligible cases.")
+   gate_sha<-sha(gate)
+ }
  readjl<-function(p) {
    l<-readLines(p,warn=FALSE,encoding="UTF-8")
    lapply(l[nzchar(trimws(l))],jsonlite::fromJSON,simplifyVector=FALSE)
@@ -71,11 +95,13 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
  target<-file.path(w09,"v2-",substr(sha(prompt_src),1L,12L),"-",
                     substr(sha(ontpath),1L,12L))
  if(!identical(model,"gpt-5.6")) target<-paste0(target,"-model-",gsub("[^A-Za-z0-9._-]","_",model))
+ if(!is.null(gate_sha)) target<-paste0(target,"-preeligible-",substr(gate_sha,1L,12L))
  mpath<-file.path(target,"manifest.json")
  out<-file.path(target,"fulltext_case_registry.jsonl")
  pm<-list(schema="w09-case-extraction-v2",model=model,
    prompt_sha256=sha(prompt_src),ontology_sha256=sha(ontpath),
-   coding_sha256=sha(codingpath),w07_run=w07)
+   coding_sha256=sha(codingpath),w07_run=w07,
+   eligibility_ledger_sha256=gate_sha)
  if(file.exists(mpath)) {
    old<-jsonlite::fromJSON(mpath,simplifyVector=FALSE)
    for(k in names(pm))if(!identical(pm[[k]],old[[k]]))
@@ -147,6 +173,14 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
                    character(1))
      if(any(!added%in%known))stop("W09 v2 invented a mechanism code.")
    }
+   if(!is.null(eligible_by_record)) {
+     expected_ids<-vapply(eligible_by_record[[id]],function(x)x$case_id,character(1))
+     produced_ids<-vapply(z$cases,function(x)
+       if(is.null(x$eligibility_case_id)) "" else x$eligibility_case_id,
+       character(1))
+     if(!setequal(produced_ids,expected_ids)||anyDuplicated(produced_ids))
+       stop("W09 extraction did not preserve exact eligible candidate IDs.")
+   }
    invisible(TRUE)
  }
  total_records<-length(record_ids)
@@ -164,8 +198,18 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
    instruction<-paste(prompt,"\n\nARCHIVED W07 ONTOLOGY CSV:\n",onto,
      "\n\nSOURCE ANCHORS:",payload$anchors,
      "\nFor XML/JSON anchors are section or text block labels, not page numbers.")
+   if(!is.null(eligible_by_record)) {
+     instruction<-paste0(instruction,
+       "\\n\\nELIGIBILITY-FIRST EXTRACTION RESTRICTION: Extract ONLY ",
+       "the explicitly approved cases in eligible_cases below. ",
+       "Each output case MUST include eligibility_case_id exactly matching ",
+       "the candidate case_id. Do not extract any ineligible, uncertain, ",
+       "additional or merely similar case. Return exactly one case object ",
+       "per eligible candidate. Preserve all standard extraction fields.")
+   }
    input<-list(record_id=id,w07_abstract_mechanism_ids=as.list(assigned),
      source_format=payload$format,source_sha256=payload$sha256,
+     eligible_cases=if(is.null(eligible_by_record))NULL else eligible_by_record[[id]],
      fulltext=payload$text)
    body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
       input=list(list(role="system",content=list(list(type="input_text",
