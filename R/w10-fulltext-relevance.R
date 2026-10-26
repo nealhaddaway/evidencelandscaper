@@ -46,25 +46,18 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
   if(!nzchar(Sys.getenv("OPENAI_API_KEY"))&&length(done)<length(selected))
     stop("OPENAI_API_KEY required for unfinished second-pass checks.")
   prompt<-paste(readLines(w04_prompt,warn=FALSE,encoding="UTF-8"),collapse="\n")
-  instruction<-paste0(
-    "You are verifying the relevance of ONE named case observation, not the ",
-    "overall publication. Read the provided full text and original W09 case ",
-    "description. For each of the four archived W04 mandatory criteria A ",
-    "(collectivity), B (environmental/social sustainability), C (scale), ",
-    "D (substantive system focus), return status pass/fail/uncertain with ",
-    "rationale, a verbatim exact SOURCE FULL-TEXT quote and its [PAGE n], ",
-    "[SECTION n], or [TEXT BLOCK n] anchor where supported. Leave quote ",
-    "and anchor empty if no supporting text exists. Never use general ",
-    "sustainability background or another case's purpose to establish this ",
-    "case's sustainability. An indirect environmental/social objective is ",
-    "acceptable if specifically supported for this arrangement. Absence of ",
-    "evidence is uncertain, not a demonstrated fail. Do not infer relevance ",
-    "solely from commercial partnership, technology, traceability, or growth. ",
-    "Return one JSON object containing observation_id; criteria object with ",
-    "A,B,C,D each with status, rationale, quote, anchor; and overall ",
-    "eligible/ineligible/uncertain. Overall eligible iff four pass, ",
-    "ineligible iff any fail, uncertain otherwise. ",
-    "\n\nARCHIVED W04 SCREENING PROMPT:\n",prompt)
+  rules_path<-system.file("w10","case_relevance_v2.txt",package="evidencelandscaper")
+  if(!nzchar(rules_path))stop("Installed W10 v2 prompt missing.")
+  rules_sha<-sha(rules_path)
+  if(!identical(first_manifest$w10_rules_sha256,rules_sha))
+    stop("First-pass W10 decisions use a different eligibility definition; run verify_cases with W10 v2 first.")
+  instruction<-paste(readLines(rules_path,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  instruction<-paste0(instruction,
+    "\n\nSECOND-PASS OUTPUT: JSON observation_id, criteria A/B/C/D ",
+    "each with status, rationale, quote, anchor, and overall. ",
+    "Read the case-specific original full text, not merely its summary. ",
+    "All nonempty quotations must be verbatim from that supplied source. ",
+    "\n\nARCHIVED W04 PROMPT (historical; W10 v2 B boundary governs):\n",prompt)
   lookup<-list()
   for(z in originals)for(j in seq_along(z$cases))
     lookup[[paste0(z$record_id,"-case-",sprintf("%03d",j))]]<-
@@ -203,6 +196,7 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
   utils::write.csv(audit,file.path(target,"decision_transitions.csv"),row.names=FALSE)
   jsonlite::write_json(list(first_pass_sha256=sha(previous),
     w09_registry_sha256=sha(src),w04_prompt_sha256=sha(w04_prompt),
+    w10_rules_sha256=rules_sha,
     second_pass_sha256=sha(ledger),model=model,
     assessed=length(final),source="verified W09 full texts"),
     file.path(target,"manifest.json"),auto_unbox=TRUE,pretty=TRUE)
