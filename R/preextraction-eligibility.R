@@ -68,7 +68,9 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
         caseids<-vapply(z$cases,function(x)x$case_id,character(1))
         if(!identical(caseids,sprintf("%03d",seq_along(caseids))))
           stop("Case IDs must be sequential and unique.")
-        for(ca in z$cases) {
+        corrections<-list()
+        for(ci in seq_along(z$cases)) {
+          ca<-z$cases[[ci]]
           if(!is.character(ca$description)||!nzchar(trimws(ca$description))||
              !is.list(ca$criteria)||
              !setequal(names(ca$criteria),c("A","B","C","D")))
@@ -88,17 +90,29 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
             if(xor(nzchar(a$quote),nzchar(a$anchor)))
               stop("Quote and source anchor must both be present or absent.")
             if(nzchar(a$anchor)) {
-              pos<-regexpr(a$anchor,payload$text,fixed=TRUE)[[1L]]
-              if(pos<0L)stop("Unknown source anchor.")
-              start<-pos+nchar(a$anchor)
-              remainder<-substring(payload$text,start)
-              next_anchor<-regexpr(
+              labels<-gregexpr(
                 "\\[(PAGE|SECTION|TEXT BLOCK) [0-9]+\\]",
-                remainder,perl=TRUE)[[1L]]
-              section<-if(next_anchor<0L)remainder else
-                substr(remainder,1L,next_anchor-1L)
-              if(!grepl(fold(a$quote),fold(section),fixed=TRUE))
-                stop("Quotation cannot be verified within its source anchor.")
+                payload$text,perl=TRUE)[[1L]]
+              if(length(labels)==1L && labels[[1L]]<0L)
+                stop("No source anchors in supplied full text.")
+              lens<-attr(labels,"match.length")
+              anchors<-substring(payload$text,labels,labels+lens-1L)
+              if(!a$anchor%in%anchors)
+                stop("Unknown source anchor: ",a$anchor)
+              ends<-c(labels[-1L]-1L,nchar(payload$text))
+              units<-mapply(function(b,e)substr(payload$text,b,e),
+                            labels+lens,ends,USE.NAMES=FALSE)
+              found<-which(vapply(units,function(u)
+                grepl(fold(a$quote),fold(u),fixed=TRUE),logical(1)))
+              if(length(found)!=1L)
+                stop("Quotation cannot be uniquely verified for criterion ",
+                     k,": matched ",length(found)," source units.")
+              verified_anchor<-anchors[[found]]
+              if(!identical(a$anchor,verified_anchor)) {
+                corrections[[length(corrections)+1L]]<<-list(
+                  case_index=ci,criterion=k,supplied_anchor=a$anchor,
+                  verified_anchor=verified_anchor,quote=a$quote)
+              }
             }
             a$status
           },character(1))
@@ -106,6 +120,13 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
             if(all(statuses=="pass"))"eligible" else "uncertain"
           if(!identical(ca$overall,expected))
             stop("Inconsistent eligibility outcome.")
+        }
+        if(length(corrections)) {
+          for(correction in corrections) {
+            z$cases[[correction$case_index]]$criteria[[
+              correction$criterion]]$anchor<-correction$verified_anchor
+          }
+          z$anchor_corrections<-corrections
         }
         z
       },error=function(e)e)
