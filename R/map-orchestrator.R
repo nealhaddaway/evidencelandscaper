@@ -145,7 +145,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
 #' @return Updated run state, invisibly.
 #' @export
 resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
-                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","prepare_w01_review","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","assess_fulltexts","extract","verify_cases","verify_fulltexts","publish","status"),
+                                step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","prepare_w01_review","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","assess_fulltexts","finalize_eligibility","extract","verify_cases","verify_fulltexts","publish","status"),
                                 screening=NULL,extraction=NULL,sources=NULL,
                                 screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
                                 w08_prompt=NULL,model="gpt-6-luna",
@@ -456,8 +456,22 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
        "Review candidate_case_eligibility.csv before step=\'extract\'.")
     return(invisible(state))
   }
+  if(step=="finalize_eligibility") {
+    if(!state$status %in% c("preextraction_verified","preextraction_final"))
+      stop("Run full-text candidate eligibility first.")
+    if(is.null(state$preextraction$run)||
+       !dir.exists(state$preextraction$run))
+      stop("Pre-extraction eligibility folder missing.")
+    path<-finalise_preextraction_eligibility(state$preextraction$run)
+    state$preextraction$final_path<-path
+    state$preextraction$final_sha256<-sha(path)
+    state$status<-"preextraction_final"
+    .orchestrator_save(state)
+    message("[",run_name,"] Human-reviewed eligibility sealed: ",path)
+    return(invisible(state))
+  }
   if(step=="extract") {
-    if(!state$status %in% c("preextraction_verified","extracting"))
+    if(!state$status %in% c("preextraction_final","extracting"))
       stop("Pre-extraction eligibility verification required before detailed extraction.")
     if(is.null(state$preextraction$run)||
        !file.exists(file.path(state$preextraction$run,"candidate_case_decisions.jsonl"))||
@@ -470,9 +484,10 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
       stop("Full-text inventory changed after validation.")
     df<-utils::read.csv(inv,stringsAsFactors=FALSE)
     if(anyDuplicated(df$record_id)||!nrow(df))stop("No unique extraction-ready IDs.")
-    audit_file<-file.path(state$preextraction$run,"candidate_case_eligibility.csv")
-    if(!identical(sha(audit_file),state$preextraction$audit_sha256))
-      stop("Pre-extraction eligibility audit has changed.")
+    audit_file<-state$preextraction$final_path
+    if(is.null(audit_file)||!file.exists(audit_file)||
+       !identical(sha(audit_file),state$preextraction$final_sha256))
+      stop("Final human-reviewed eligibility audit missing or changed.")
     audit<-utils::read.csv(audit_file,stringsAsFactors=FALSE)
     eligible_ids<-unique(as.character(audit$record_id[audit$decision=="eligible"]))
     if(!length(eligible_ids))
@@ -541,11 +556,13 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         stop("Pre-extraction case eligibility ledger changed.")
       if(!is.null(state$w10$run))
         stop("Mixed legacy W10 and eligibility-first publication is not supported.")
-      audit<-utils::read.csv(
-        file.path(state$preextraction$run,"candidate_case_eligibility.csv"),
-        stringsAsFactors=FALSE)
+      final_file<-state$preextraction$final_path
+      if(is.null(final_file)||!file.exists(final_file)||
+         !identical(sha(final_file),state$preextraction$final_sha256))
+        stop("Final human-reviewed case eligibility registry changed.")
+      audit<-utils::read.csv(final_file,stringsAsFactors=FALSE)
       if(any(audit$decision=="uncertain"))
-        stop("Eligibility-first publication blocked by unresolved candidate cases; adjudicate before publication.")
+        stop("Eligibility-first publication blocked by unresolved cases.")
     } else {
       if(!state$status %in% c("w10_fulltext_verified","published"))
         stop("Complete both legacy W10 relevance passes before publication.")
