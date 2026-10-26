@@ -255,9 +255,14 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
   if(length(all)!=n || !setequal(vapply(all,function(z)z$record_id,character(1)),
                                   selected)) {
     missing_ids<-setdiff(selected,vapply(all,function(z)z$record_id,character(1)))
+    partial<-c(info,list(status="PILOT_PARTIAL",
+      validated_records=length(all),unresolved_record_ids=as.list(missing_ids),
+      responses_sha256=sha(out)))
+    jsonlite::write_json(partial,file.path(dest,"summary.json"),
+                         auto_unbox=TRUE,pretty=TRUE)
     message("[W08] Partial run: ",length(all)," of ",n,
             " validated records. Unresolved IDs: ",paste(missing_ids,collapse=", "),
-            ". Invalid responses saved separately.")
+            ". Invalid responses preserved; checkpoint may proceed with explicit exclusions.")
     return(invisible(dest))
   }
   summary<-table(factor(vapply(all,function(z)z$case_evidence_status,character(1)),
