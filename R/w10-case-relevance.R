@@ -15,7 +15,9 @@ run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-6-luna")
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
   prompt<-paste(readLines(w04_prompt,warn=FALSE,encoding="UTF-8"),collapse="\n")
   marker<-sha(w04_prompt);source_hash<-sha(src)
-  run<-file.path(dirname(extraction_dir),"W10",paste0("relevance-",substr(source_hash,1,12),
+  rules_path_pre<-system.file("w10","case_relevance_v2.txt",package="evidencelandscaper")
+  if(!nzchar(rules_path_pre))stop("Installed W10 v2 prompt missing.")
+  run<-file.path(dirname(extraction_dir),"W10",paste0("relevance-v2-",substr(sha(rules_path_pre),1,10),"-",substr(source_hash,1,12),
       "-",substr(marker,1,10),"-",gsub("[^a-zA-Z0-9_-]","_",model)))
   dir.create(run,recursive=TRUE,showWarnings=FALSE)
   ledger<-file.path(run,"w10_decisions.jsonl")
@@ -32,20 +34,16 @@ run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-6-luna")
   if(anyDuplicated(done)||any(!done%in%ids))stop("W10 checkpoint contains invalid IDs.")
   if(!nzchar(Sys.getenv("OPENAI_API_KEY")) && length(done)<length(ids))
     stop("OPENAI_API_KEY required for unfinished W10 cases.")
-  instructions<-paste0("Assess the supplied SINGLE extracted case against the EXACT FOUR ",
-    "mandatory W04 inclusion criteria A (collectivity), B (sustainability), ",
-    "C (scale), D (substantive system focus). Follow the archived W04 text below. ",
-    "Do not infer sustainability from economic development, traceability, ",
-    "food safety, productivity, technology, partnership or certification alone. ",
-    "Only credit what is evidenced by the supplied extracted case. If evidence ",
-    "is insufficient, mark uncertain, not fail. For each criterion return ",
-    "status pass, fail or uncertain with a short rationale and a verbatim ",
-    "quotation from the supplied case fields when one supports the judgement; ",
-    "otherwise use an empty quote. Return strict JSON with observation_id, ",
-    "criteria object with keys A,B,C,D each with status, rationale, quote, ",
-    "and overall eligible/ineligible/uncertain. Overall must be eligible ",
-    "only if all pass; ineligible if any fail; uncertain otherwise. ",
-    "Do not invent quotations.\n\nARCHIVED W04 SCREENING CRITERIA:\n",prompt)
+  rules_path<-system.file("w10","case_relevance_v2.txt",package="evidencelandscaper")
+  if(!nzchar(rules_path))stop("Installed W10 v2 eligibility prompt missing.")
+  rules_sha<-sha(rules_path)
+  instructions<-paste(readLines(rules_path,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  instructions<-paste0(instructions,
+    "\n\nARCHIVED W04 SCREENING PROMPT (historical reference; ",
+    "apply the clarified W10 B boundary above):\n",prompt,
+    "\n\nFIRST-PASS OUTPUT: JSON observation_id, criteria A/B/C/D ",
+    "each with status, rationale, quote, and overall. ",
+    "Quotations must be exact substrings of the supplied extracted case.")
   validate<-function(z,item,case_text) {
     if(!identical(z$observation_id,item$observation_id)||!is.list(z$criteria)||
        !setequal(names(z$criteria),c("A","B","C","D")))
@@ -115,7 +113,7 @@ run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-6-luna")
     vapply(all,function(z)z$criteria[[k]]$status,character(1))
   report<-file.path(run,"w10_case_relevance_audit.csv")
   utils::write.csv(df,report,row.names=FALSE)
-  manifest<-list(w09_registry_sha256=source_hash,w04_prompt_sha256=marker,
+  manifest<-list(w09_registry_sha256=source_hash,w04_prompt_sha256=marker,w10_rules_sha256=rules_sha,
                  model=model,observations=length(ids),
                  decisions_sha256=sha(ledger),
                  counts=as.list(table(factor(df$decision,
