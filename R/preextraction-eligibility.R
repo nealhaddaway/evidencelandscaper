@@ -167,8 +167,29 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
   review$decision<-rep("",nrow(review))
   review$rationale<-rep("",nrow(review))
   review_path<-file.path(target,"manual_eligibility_review.csv")
-  if(!file.exists(review_path))
-    utils::write.csv(review,review_path,row.names=FALSE)
+  sealed<-file.path(target,"final_review_manifest.json")
+  if(file.exists(sealed)) {
+    prior<-jsonlite::fromJSON(sealed,simplifyVector=FALSE)
+    if(!identical(prior$original_ledger_sha256,
+                  digest::digest(file=ledger,algo="sha256",serialize=FALSE)))
+      stop("The previous human review was sealed; cannot expand its case population.")
+  }
+  if(file.exists(review_path)) {
+    old<-utils::read.csv(review_path,stringsAsFactors=FALSE,
+                         na.strings=NULL,colClasses=c(case_id="character"))
+    if(!identical(names(old),names(review)))
+      stop("Manual review worksheet columns do not match the current gate.")
+    rowkey<-function(x)paste(x$record_id,x$case_id,sep="/")
+    oldkeys<-rowkey(old);newkeys<-rowkey(review)
+    if(anyDuplicated(oldkeys)||any(!oldkeys%in%newkeys))
+      stop("Manual review contains duplicate or unexpected cases.")
+    immutable<-setdiff(names(review),c("decision","rationale"))
+    if(length(oldkeys)&&!identical(old[immutable],
+                                  review[match(oldkeys,newkeys),immutable,drop=FALSE]))
+      stop("Manual review changed source evidence or case identity.")
+    extra<-review[!newkeys%in%oldkeys,,drop=FALSE]
+    if(nrow(extra))utils::write.csv(rbind(old,extra),review_path,row.names=FALSE)
+  } else utils::write.csv(review,review_path,row.names=FALSE)
   jsonlite::write_json(list(schema="preextraction-eligibility-v1",
     w09=w09,prompt_sha256=rule_sha,model=model,
     records=length(all),cases=nrow(tab),
