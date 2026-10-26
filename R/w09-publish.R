@@ -61,8 +61,12 @@ publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_d
       message("[Ostara publication] Using bundled 31-point UNVERIFIED draft; review coordinates before definitive publication.")
     } else stop("No saved or bundled geocoding provenance available.")
   }
-  if(is.null(coordinates_csv) && !is.null(w09_run))
-    message("[Ostara publication] No approved coordinates for this expansion; case locations remain unplaced.")
+  if(is.null(coordinates_csv) && !is.null(w09_run)) {
+    coordinates_csv<-prepare_w09_atlas_coordinates(extraction_dir)
+    message("[Ostara publication] Using provisional, provenance-labelled operational geography: ",
+            coordinates_csv,
+            ". Country representative points are NOT precise initiative locations.")
+  }
   message("[Ostara publication] 0/3 resolving provenance-linked extraction")
   atlas <- republish_w09_atlas(w09,extraction_dir,coordinates_csv)
   message("[Ostara publication] 1/3 HTML atlas complete")
