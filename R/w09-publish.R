@@ -14,7 +14,7 @@
 #' @export
 publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_dir=NULL,w09_run=NULL,
                                  named_run=NULL,w00_run=NULL,w04_run=NULL,
-                                 w07_run=NULL,w08_run=NULL,w10_run=NULL) {
+                                 w07_run=NULL,w08_run=NULL,w10_run=NULL,w10_fulltext_run=NULL) {
   if(is.null(map_path)) map_path <- open_map("Ostara_collective_action_map")
   map_path <- normalizePath(map_path,winslash="/",mustWork=TRUE)
   root <- file.path(map_path,"runs","W09")
@@ -68,9 +68,9 @@ publish_w09_evidence <- function(map_path=NULL,coordinates_csv=NULL,extraction_d
             ". Country representative points are NOT precise initiative locations.")
   }
   message("[Ostara publication] 0/3 resolving provenance-linked extraction")
-  atlas <- republish_w09_atlas(w09,extraction_dir,coordinates_csv,w10_run=w10_run)
+  atlas <- republish_w09_atlas(w09,extraction_dir,coordinates_csv,w10_run=w10_run,w10_fulltext_run=w10_fulltext_run)
   message("[Ostara publication] 1/3 HTML atlas complete")
-  report <- republish_w09_report(w09,extraction_dir,coordinates_csv,w10_run=w10_run)
+  report <- republish_w09_report(w09,extraction_dir,coordinates_csv,w10_run=w10_run,w10_fulltext_run=w10_fulltext_run)
   message("[Ostara publication] 2/3 W09 PDF report complete")
   full_report <- NULL
   if(!is.null(named_run)) {
