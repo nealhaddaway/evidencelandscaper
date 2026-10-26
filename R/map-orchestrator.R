@@ -478,8 +478,13 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     return(invisible(state))
   }
   if(step=="publish") {
-    if(!state$status %in% c("w10_verified","published"))
-      stop("Complete W10 case relevance verification before definitive publication.")
+    if(!state$status %in% c("w10_fulltext_verified","published"))
+      stop("Complete both W10 relevance passes before definitive publication.")
+    if(is.null(state$w10$fulltext_run)||
+       !file.exists(file.path(state$w10$fulltext_run,"fulltext_decisions.jsonl"))||
+       !identical(sha(file.path(state$w10$fulltext_run,"fulltext_decisions.jsonl")),
+                  state$w10$fulltext_decisions_sha256))
+      stop("W10 full-text decision ledger missing or changed.")
     if(is.null(state$w10$run) || !file.exists(file.path(state$w10$run,"w10_decisions.jsonl")) ||
        !identical(sha(file.path(state$w10$run,"w10_decisions.jsonl")),state$w10$decisions_sha256))
       stop("W10 verified decision ledger missing or changed.")
@@ -506,7 +511,8 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
                extraction_dir=extraction_dir,coordinates_csv=coordinates_csv,
                named_run=run_name,w00_run=state$w00$run_dir,
                w04_run=state$w04$run,w07_run=state$w07$run,
-               w08_run=state$w08$run,w10_run=state$w10$run)
+               w08_run=state$w08$run,w10_run=state$w10$run,
+               w10_fulltext_run=state$w10$fulltext_run)
     state$published<-list(atlas=output$atlas,report=output$report,
           full_report=output$full_report,inventory_sha256=sha(inventory),
           extraction_manifest_sha256=sha(file.path(extraction_dir,"manifest.json")))
