@@ -397,9 +397,12 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     .orchestrator_save(state)
     message("[",run_name,"] W09: checking full-text availability for ",nrow(queue),
             " publications.")
-    check_w09_fulltext(w09)
-    retrieve_w09_from_availability(w09)
-    retrieve_w09_structured(w09,max_records=nrow(queue))
+    report<-file.path(w09,"w09_fulltext_retrieval_report.csv")
+    if(!file.exists(report)) {
+      # Resume the authoritative OpenAlex-hosted content stage. Its log is
+      # append-only and already downloaded files are preserved.
+      retrieve_w09_openalex_content(w09,retry_failed=FALSE)
+    }
     validated<-validate_w09_fulltexts(w09)
     v<-utils::read.csv(validated,stringsAsFactors=FALSE)
     if(!setequal(v$record_id,queue$record_id))
