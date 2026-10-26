@@ -176,7 +176,7 @@ run_preextraction_eligibility <- function(w09, record_ids, model="gpt-6-luna") {
   }
   if(file.exists(review_path)) {
     old<-utils::read.csv(review_path,stringsAsFactors=FALSE,
-                         na.strings=NULL,colClasses=c(case_id="character"))
+                         na.strings=NULL,colClasses="character")
     if(!identical(names(old),names(review)))
       stop("Manual review worksheet columns do not match the current gate.")
     rowkey<-function(x)paste(x$record_id,x$case_id,sep="/")
@@ -214,9 +214,9 @@ finalise_preextraction_eligibility <- function(gate) {
   if(!all(file.exists(c(raw,review,ledger))))
     stop("Pre-extraction eligibility gate is incomplete.")
   orig<-utils::read.csv(raw,stringsAsFactors=FALSE,check.names=FALSE,
-                        colClasses=c(case_id="character"))
+                        colClasses="character")
   correction<-utils::read.csv(review,stringsAsFactors=FALSE,check.names=FALSE,
-                                na.strings=NULL,colClasses=c(case_id="character"))
+                                na.strings=NULL,colClasses="character")
   required<-c(setdiff(names(orig),"decision"),"decision","rationale")
   if(!identical(names(correction),required))
     stop("Unexpected manual review columns.")
@@ -251,7 +251,7 @@ finalise_preextraction_eligibility <- function(gate) {
   checksum<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
   if(file.exists(destination)) {
     old<-utils::read.csv(destination,stringsAsFactors=FALSE,na.strings=NULL,
-                         colClasses=c(case_id="character"))
+                         colClasses="character")
     if(!identical(old,final))
       stop("An existing sealed eligibility registry differs. Never overwrite.")
   } else utils::write.csv(final,destination,row.names=FALSE)
