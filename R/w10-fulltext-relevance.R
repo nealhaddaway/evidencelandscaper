@@ -131,11 +131,11 @@ verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,mode
       if(grepl("Nonverbatim full-text quotation",conditionMessage(z),fixed=TRUE)) {
         cat(as.character(jsonlite::toJSON(list(observation_id=id,
           attempt=attempt,error=conditionMessage(z)),
-          auto_unbox=TRUE,null="null")),"\\n",
+          auto_unbox=TRUE,null="null")),"\n",
           file=file.path(target,"invalid_quote_attempts.jsonl"),
           append=TRUE,sep="")
         body$input[[1L]]$content[[1L]]$text<-paste0(
-          instruction,"\\n\\nCORRECTION: Your preceding answer failed ",
+          instruction,"\n\nCORRECTION: Your preceding answer failed ",
           conditionMessage(z),". Quotations must be copied character-for-character ",
           "from the supplied fulltext, with identical punctuation and spacing. ",
           "Use a shorter exact continuous substring when necessary. ",
