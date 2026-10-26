@@ -33,6 +33,8 @@ footer{max-width:1240px;margin:0 auto;padding:14px 24px 30px;font-size:12px;colo
 const d=JSON.parse(document.getElementById("data").textContent),$=x=>document.getElementById(x);
 const esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const h=(t,c)=>"<"+t+">"+c+"</"+t+">";
+const fieldLabels={definition_draft:"Working definition",abstract_indicators_draft:"Indicators in abstracts",not_sufficient_draft:"Insufficient evidence on its own",examples_draft:"Illustrative examples",exclusions_draft:"Exclusions",scope_draft:"Scope",notes_draft:"Draft notes"};
+const catName=id=>{const x=d.ontology.find(m=>m.category===id);return x?(id+" · "+(x.category_label||x.label)):id};
 let tab="ontology";
 const n=(o,k)=>Number((o||{})[k]||0),fs=(x)=>String(x||"").toLowerCase();
 const matching=(x)=>{const q=fs($("search").value.trim()),cat=$("category").value;
@@ -41,8 +43,8 @@ const sourceCount=x=>$("source").value==="all"?(n(x.counts,"targeted")+n(x.count
 function stat(v,l){return'<div class="stat"><strong>'+esc(v)+'</strong><small>'+esc(l)+'</small></div>'}
 function stats(){$("overview").innerHTML=stat(d.ontology.length,"Approved mechanisms")+stat(d.candidates.length,"Candidate suggestions")+stat(d.sources.targeted.records,"Targeted publications coded")+stat(d.sources.expanded.records,"Expanded publications coded")}
 function ontology(){let a=d.ontology.filter(matching);a=a.filter(x=>$("source").value==="all"||sourceCount(x)>0);
-const cats=[...new Set(a.map(x=>x.category))];let out='<div class="panel"><h2>Starting ontology</h2><p class="note">Approved framework shown by category. Search-level bars are publication coding counts, not case counts. Click a mechanism for its source definition and metadata.</p><div class="categories">';
-for(const cat of cats){out+='<div class="group"><header><h3>'+esc(cat)+'</h3></header>';for(const m of a.filter(x=>x.category===cat)){
+const cats=[...new Set(a.map(x=>x.category))];let out='<div class="panel"><h2>Starting ontology</h2><p class="note">Approved framework shown by category. Search-level bars are publication coding counts, not case counts. Click a mechanism to read its working definition, abstract-screening indicators and boundary conditions.</p><div class="categories">';
+for(const cat of cats){out+='<div class="group"><header><h3>'+esc(catName(cat))+'</h3></header>';for(const m of a.filter(x=>x.category===cat)){
 const mx=Math.max(1,...d.ontology.map(sourceCount));out+='<details class="mechanism"><summary><span class="id">'+esc(m.id)+'</span>'+esc(m.label)+'</summary><p class="description">'+esc(m.details||"No additional definition supplied.")+'</p><div class="tags">'+Object.entries(m.metadata||{}).filter(([k,v])=>v).map(([k,v])=>'<span class="tag">'+esc(k)+': '+esc(v)+'</span>').join("")+'</div></details><div class="numbers"><span>Targeted <span class="num">'+n(m.counts,"targeted")+'</span></span><span>Expanded <span class="num">'+n(m.counts,"expanded")+'</span></span></div><div class="bar"><span style="width:'+((sourceCount(m)/mx)*100).toFixed(1)+'%"></span></div>'; }out+='</div>';}out+='</div></div>';$("body").innerHTML=cats.length?out:'<div class="empty">No matching mechanisms</div>'}
 function candidates(){let a=d.candidates.filter(matching).filter(x=>$("source").value==="all"||x.source===$("source").value);
 let out='<div class="panel"><h2>Candidate mechanisms for team review</h2><p class="note">These are model-proposed gaps recorded during W07 coding. Repeated suggestions may represent the same conceptual mechanism; they have not been merged or approved.</p>';
@@ -53,5 +55,5 @@ function methods(){$("body").innerHTML='<div class="panel"><h2>Methods and limit
 function render(){stats();const views={ontology,candidates,comparison,methods};views[tab]()}
 for(const b of document.querySelectorAll("[data-tab]"))b.onclick=()=>{tab=b.dataset.tab;document.querySelectorAll("[data-tab]").forEach(t=>t.classList.toggle("active",t===b));render()};
 for(const id of ["search","source","category"])$(id).addEventListener(id==="search"?"input":"change",render);
-for(const x of [...new Set(d.ontology.map(x=>x.category))])$("category").add(new Option(x,x));
+for(const x of [...new Set(d.ontology.map(x=>x.category))])$("category").add(new Option(catName(x),x));
 render();})();</script></body></html>
