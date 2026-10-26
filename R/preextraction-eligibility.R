@@ -176,9 +176,10 @@ finalise_preextraction_eligibility <- function(gate) {
   ledger<-file.path(gate,"candidate_case_decisions.jsonl")
   if(!all(file.exists(c(raw,review,ledger))))
     stop("Pre-extraction eligibility gate is incomplete.")
-  orig<-utils::read.csv(raw,stringsAsFactors=FALSE,check.names=FALSE)
+  orig<-utils::read.csv(raw,stringsAsFactors=FALSE,check.names=FALSE,
+                        colClasses=c(case_id="character"))
   correction<-utils::read.csv(review,stringsAsFactors=FALSE,check.names=FALSE,
-                                na.strings=NULL)
+                                na.strings=NULL,colClasses=c(case_id="character"))
   required<-c("record_id","case_id","description","decision","rationale")
   if(!identical(names(correction),required))
     stop("Unexpected manual review columns.")
@@ -211,7 +212,8 @@ finalise_preextraction_eligibility <- function(gate) {
   destination<-file.path(gate,"final_case_eligibility.csv")
   checksum<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
   if(file.exists(destination)) {
-    old<-utils::read.csv(destination,stringsAsFactors=FALSE,na.strings=NULL)
+    old<-utils::read.csv(destination,stringsAsFactors=FALSE,na.strings=NULL,
+                         colClasses=c(case_id="character"))
     if(!identical(old,final))
       stop("An existing sealed eligibility registry differs. Never overwrite.")
   } else utils::write.csv(final,destination,row.names=FALSE)
