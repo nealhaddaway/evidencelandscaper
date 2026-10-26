@@ -209,18 +209,28 @@ finalise_preextraction_eligibility <- function(gate) {
   if(any(final$decision=="uncertain"))
     stop("Final eligibility registry contains unresolved cases.")
   destination<-file.path(gate,"final_case_eligibility.csv")
-  if(file.exists(destination))
-    stop("Final review is already sealed. Do not overwrite; retain provenance.")
-  utils::write.csv(final,destination,row.names=FALSE)
   checksum<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
-  jsonlite::write_json(list(schema="preextraction-final-v1",
+  if(file.exists(destination)) {
+    old<-utils::read.csv(destination,stringsAsFactors=FALSE,na.strings=NULL)
+    if(!identical(old,final))
+      stop("An existing sealed eligibility registry differs. Never overwrite.")
+  } else utils::write.csv(final,destination,row.names=FALSE)
+  manifestpath<-file.path(gate,"final_review_manifest.json")
+  provenance<-list(schema="preextraction-final-v1",
     original_ledger_sha256=checksum(ledger),
     original_audit_sha256=checksum(raw),
     manual_review_sha256=checksum(review),
     final_audit_sha256=checksum(destination),
     adjudicated=nrow(correction),eligible=sum(final$decision=="eligible"),
-    ineligible=sum(final$decision=="ineligible")),
-    file.path(gate,"final_review_manifest.json"),
-    auto_unbox=TRUE,pretty=TRUE)
+    ineligible=sum(final$decision=="ineligible"))
+  if(file.exists(manifestpath)) {
+    prior<-jsonlite::fromJSON(manifestpath,simplifyVector=FALSE)
+    for(k in names(provenance))
+      if(!identical(prior[[k]],provenance[[k]]))
+        stop("Existing final review provenance differs: ",k)
+  } else {
+    jsonlite::write_json(provenance,manifestpath,
+                        auto_unbox=TRUE,pretty=TRUE)
+  }
   invisible(destination)
 }
