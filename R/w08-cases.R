@@ -199,9 +199,9 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
         list(role="user",content=list(list(type="input_text",
           text=jsonlite::toJSON(input,auto_unbox=TRUE,null="null"))))),
       text=list(format=list(type="json_object")))
-    # Retry once only for source-quotation mismatches; never relax evidence
-    # validation. Previously completed records remain append-only.
-    for(attempt in seq_len(2L)) {
+    # Retry validation failures up to four times. Do not relax evidence
+    # validation or alter prior completed append-only responses.
+    for(attempt in seq_len(5L)) {
       resp<-httr2::request("https://api.openai.com/v1/responses") |>
         httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY")) |>
         httr2::req_body_json(body,auto_unbox=TRUE) |>
@@ -218,7 +218,7 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
       if(is.null(issue))break
       retryable<-startsWith(issue,"W08 evidence excerpt not in input:") ||
         startsWith(issue,"W08 status/case-count inconsistency:")
-      if(attempt==2L && retryable) {
+      if(attempt==5L && retryable) {
         failures<-c(failures,record_id)
         issue_path<-file.path(dest,"invalid_evidence_responses.jsonl")
         cat(jsonlite::toJSON(list(record_id=record_id,model=model,
@@ -232,7 +232,7 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
       if(!retryable)
         stop(issue)
       message("[W08] Invalid model response for ",record_id,
-              "; retrying once with explicit validation instruction.")
+              "; retrying with explicit validation instruction (attempt ",attempt,"/5).")
       body$input[[1L]]$content[[1L]]$text<-paste0(
         prompt,"\n\nRETRY VALIDATION: Ensure case_evidence_status and ",
         "number of cases agree: specific_case exactly 1, multiple_cases ",
