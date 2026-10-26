@@ -37,17 +37,40 @@ analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-6-luna",max_pages=0L,
    if(!identical(gm$ledger_sha256,sha(gate)) ||
       !identical(normalizePath(gm$w09,mustWork=TRUE),w09))
      stop("Eligibility gate provenance mismatch.")
+   finalpath<-file.path(eligibility_dir,"final_case_eligibility.csv")
+   finalmanifest<-file.path(eligibility_dir,"final_review_manifest.json")
+   if(!all(file.exists(c(finalpath,finalmanifest))))
+     stop("Human eligibility review must be finalised before extraction.")
+   fm<-jsonlite::fromJSON(finalmanifest,simplifyVector=FALSE)
+   if(!identical(fm$original_ledger_sha256,sha(gate))||
+      !identical(fm$final_audit_sha256,sha(finalpath)))
+     stop("Final human eligibility review checksum mismatch.")
+   final<-utils::read.csv(finalpath,stringsAsFactors=FALSE)
+   if(anyDuplicated(paste(final$record_id,final$case_id))||
+      any(!final$decision%in%c("eligible","ineligible")))
+     stop("Final eligibility review has invalid or uncertain decisions.")
    rows<-lapply(Filter(nzchar,readLines(gate,warn=FALSE)),
                 jsonlite::fromJSON,simplifyVector=FALSE)
    gate_ids<-vapply(rows,function(z)z$record_id,character(1))
    if(anyDuplicated(gate_ids)||any(!record_ids%in%gate_ids))
      stop("Eligibility gate does not cover all requested publications.")
-   eligible_by_record<-setNames(lapply(rows,function(z)
-     Filter(function(ca)identical(ca$overall,"eligible"),z$cases)),gate_ids)
+   eligible_by_record<-setNames(lapply(rows,function(z) {
+     cases<-lapply(z$cases,function(ca) {
+       idx<-which(final$record_id==z$record_id & final$case_id==ca$case_id)
+       if(length(idx)!=1L)stop("Final review missing candidate case.")
+       if(final$decision[idx]!="eligible")return(NULL)
+       ca$original_overall<-ca$overall
+       ca$overall<-"eligible"
+       ca$adjudication_source<-final$decision_source[idx]
+       ca$adjudication_rationale<-final$adjudication_rationale[idx]
+       ca
+     })
+     Filter(Negate(is.null),cases)
+   }),gate_ids)
    expected<-names(eligible_by_record)[vapply(eligible_by_record,length,integer(1))>0L]
    if(!setequal(record_ids,expected))
-     stop("Extraction IDs must match exactly the publications with eligible cases.")
-   gate_sha<-sha(gate)
+     stop("Extraction IDs must match exactly publications with approved cases.")
+   gate_sha<-sha(finalpath)
  }
  readjl<-function(p) {
    l<-readLines(p,warn=FALSE,encoding="UTF-8")
