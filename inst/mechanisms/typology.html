@@ -25,7 +25,7 @@ footer{max-width:1240px;margin:0 auto;padding:14px 24px 30px;font-size:12px;colo
 <h1>Collective-action mechanism typology</h1><p>Starting ontology, observed coding and proposed additions across two systematic searches. Explore the mechanisms themselves, not individual case records.</p></header>
 <main><div class="overview" id="overview"></div>
 <div class="controls"><div><label for="search">Find a mechanism</label><input id="search" placeholder="Name, definition, code or candidate…"></div><div><label for="source">Search dataset</label><select id="source"><option value="all">Both searches</option><option value="targeted">Targeted search</option><option value="expanded">Expanded search</option></select></div><div><label for="category">Ontology category</label><select id="category"><option value="">All categories</option></select></div></div>
-<div class="tabs"><button class="active" data-tab="ontology">Starting ontology</button><button data-tab="candidates">Candidate mechanisms</button><button data-tab="comparison">Across the searches</button><button data-tab="methods">Methodology and provenance</button></div>
+<div class="tabs"><button class="active" data-tab="ontology">Starting ontology</button><button data-tab="candidates">Candidate mechanisms (abstracts)</button><button data-tab="ftcandidates">Candidate mechanisms (case FTs)</button><button data-tab="comparison">Across the searches</button><button data-tab="methods">Methodology and provenance</button></div>
 <section id="body" aria-live="polite"></section></main>
 <footer>Counts refer to distinct publications assigned each mechanism in W07 title/abstract coding. Multiple assignments per publication are possible. Proposed mechanisms are unvalidated candidates, not additions to the approved ontology. No efficacy or prevalence claims are implied.</footer>
 <script type="application/json" id="data">__MECHANISM_DATA__</script>
@@ -46,13 +46,16 @@ function ontology(){let a=d.ontology.filter(matching);a=a.filter(x=>$("source").
 const cats=[...new Set(a.map(x=>x.category))];let out='<div class="panel"><h2>Starting ontology</h2><p class="note">Approved framework shown by category. Search-level bars are publication coding counts, not case counts. Click a mechanism to read its working definition, abstract-screening indicators and boundary conditions.</p><div class="categories">';
 for(const cat of cats){out+='<div class="group"><header><h3>'+esc(catName(cat))+'</h3></header>';for(const m of a.filter(x=>x.category===cat)){
 const mx=Math.max(1,...d.ontology.map(sourceCount));out+='<details class="mechanism"><summary><span class="id">'+esc(m.id)+'</span>'+esc(m.label)+'</summary><div class="definition-fields">'+Object.entries(m.metadata||{}).filter(([k,v])=>v&&!["category","source_row_count"].includes(k)).map(([k,v])=>'<div class="field"><b>'+esc(fieldLabels[k]||({purpose_source:"Original purpose",category_label:"Category name"}[k])||k.replace(/_draft$/,"").replace(/_/g," ").replace(/\b\w/g,ch=>ch.toUpperCase()))+'</b><p class="description">'+esc(v)+'</p></div>').join("")+'</div></details><div class="numbers"><span>Targeted <span class="num">'+n(m.counts,"targeted")+'</span></span><span>Expanded <span class="num">'+n(m.counts,"expanded")+'</span></span></div><div class="bar"><span style="width:'+((sourceCount(m)/mx)*100).toFixed(1)+'%"></span></div>'; }out+='</div>';}out+='</div></div>';$("body").innerHTML=cats.length?out:'<div class="empty">No matching mechanisms</div>'}
-function candidates(){
-const proposals=d.harmonised||[],source=$("source").value,q=fs($("search").value.trim()),selected=$("category").value;
-const lookup=new Map(d.candidates.map(x=>[x.id,x]));
-let out='<div class="panel"><h2>Candidate mechanisms for team review</h2><p class="note">Provisional placements checked against the approved W07 ontology. Existing category codes and mechanism codes refer to the approved framework; proposals remain unapproved. Expand an item for its classification rationale, original wording and source suggestions. Initiatives are not estimates of mechanism prevalence.</p>';
+function candidates(mode="abstract"){
+const proposals=(mode==="fulltext"?(d.fulltext_harmonised||[]):(d.harmonised||[])),source=$("source").value,q=fs($("search").value.trim()),selected=$("category").value;
+const candidatesSource=mode==="fulltext"?(d.fulltext_candidates||[]):d.candidates;
+const lookup=new Map(candidatesSource.map(x=>[x.id,x]));
+let out='<div class="panel"><h2>'+(mode==="fulltext"?"Candidate mechanisms (case FTs)":"Candidate mechanisms (abstracts)")+'</h2><p class="note">Provisional placements checked against the approved W07 ontology. Existing category codes and mechanism codes refer to the approved framework; proposals remain unapproved. Expand an item for its classification rationale, original wording and source suggestions. Initiatives are not estimates of mechanism prevalence.</p>';
 if(!proposals.length){
+if(mode==="fulltext"){out+='<p class="note">No verified and harmonised case full-text mechanism suggestions have been supplied yet.</p>';}else{
 out+='<p class="note">No harmonised review CSV supplied. Original W07 suggestions follow.</p>';
 for(const x of d.candidates.filter(x=>(source==="all"||x.source===source)&&(!q||fs([x.description,x.reason].join(" ")).includes(q))))out+='<div class="candidate"><strong>'+esc(x.description)+'</strong><p>'+esc(x.reason)+'</p></div>';
+}
 }else{
 const parent=p=>p.parent_category_code?(catName(p.parent_category_code)):String(p.proposed_new_parent_category||p.parent_category||"Unassigned proposed category");
 const parentKey=p=>p.parent_category_code?"existing:"+p.parent_category_code:"proposed:"+String(p.proposed_new_parent_category||p.parent_category||"Unassigned");
