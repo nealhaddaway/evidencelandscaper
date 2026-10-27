@@ -146,6 +146,7 @@ prepare_ostara_mechanism_review <- function(extraction_dir,w10_run,
     schema="ostara-mechanism-review-v1",
     w09_registry_sha256=hash(reg),w10_eligibility_sha256=hash(first),
     second_pass_dir=if(is.null(second_pass_dir))NULL else normalizePath(second_pass_dir),
+    w07_run=if(is.null(w07_run))NULL else normalizePath(w07_run),
     mechanism_review_sha256=hash(a),novelty_review_sha256=hash(b)),
     file.path(output_dir,"manifest.json"),auto_unbox=TRUE,pretty=TRUE)
   invisible(list(mechanisms=a,novelty=b))
