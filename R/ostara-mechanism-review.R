@@ -64,7 +64,7 @@ prepare_ostara_mechanism_review <- function(extraction_dir,w10_run,
       mechanism[[length(mechanism)+1L]]<-data.frame(
         record_id=id,mechanism_id=code,
         w09_assessment=scalar(v$status),abstract_assigned=TRUE,
-        human_decision="",review_complete=FALSE,eligible_case_verified=TRUE,
+        human_decision="",review_complete=FALSE,eligible_case_verified=FALSE,
         case_ids=paste(eligible,collapse="; "),
         evidence_quote=scalar(v$source_quote),source_anchor=scalar(v$source_anchor),
         reviewer="",review_timestamp="",stringsAsFactors=FALSE)
@@ -78,7 +78,7 @@ prepare_ostara_mechanism_review <- function(extraction_dir,w10_run,
         mechanism[[length(mechanism)+1L]]<-data.frame(
           record_id=id,mechanism_id=code,
           w09_assessment="additional",abstract_assigned=FALSE,
-          human_decision="",review_complete=FALSE,eligible_case_verified=TRUE,
+          human_decision="",review_complete=FALSE,eligible_case_verified=FALSE,
           case_ids=case_ids[[j]],
           evidence_quote=scalar(v$source_quote),source_anchor=scalar(v$source_anchor),
           reviewer="",review_timestamp="",stringsAsFactors=FALSE)
