@@ -164,6 +164,30 @@ extract_ostara_fulltext_mechanisms <- function(
         if(any(!vapply(z$mechanism_inventory,function(x)
           scalar(x$status)%in%valid,logical(1))))
           stop("Invalid mechanism inventory statuses")
+        candidate_case_ids<-function(x)
+          as.character(unlist(x$case_ids,use.names=FALSE))
+        for(entry in z$mechanism_inventory) {
+          status<-scalar(entry$status)
+          ids_for_entry<-candidate_case_ids(entry)
+          if(status=="implemented_case") {
+            if(!length(ids_for_entry)||any(!ids_for_entry%in%case_whitelist))
+              stop("Implemented mechanism has no W10-eligible case")
+          } else if(length(ids_for_entry))stop("Nonimplemented mechanism linked to cases")
+          if(status%in%c("implemented_case","mentioned_only","proposed_only")&&
+             (!nzchar(scalar(entry$source_quote))||
+              !nzchar(scalar(entry$source_anchor))))
+            stop("Positive mechanism assessment lacks text quotation and anchor")
+        }
+        for(entry in z$new_novelty) {
+          if(!length(candidate_case_ids(entry))||
+             any(!candidate_case_ids(entry)%in%case_whitelist)||
+             !nzchar(scalar(entry$source_quote))||
+             !nzchar(scalar(entry$source_anchor)))
+            stop("Novel case mechanism requires eligible case and source evidence")
+        }
+        if(isTRUE(original$ontology_gap)&&
+           !length(z$abstract_novelty_validation))
+          stop("W07 abstract novelty proposal was not reassessed")
         z
       },error=function(e)e)
       if(!inherits(candidate,"error")){result<-candidate;break}
