@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>W09 · Comprehensive mechanism inventory | Ostara prompt library</title><style>:root{--ink:#152837;--muted:#637586;--border:#e5e9ec;--accent:#227766;--paper:#fbfcfa}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}header{background:linear-gradient(125deg,#142f3b,#215c54);color:#fff;padding:55px max(28px,calc((100vw - 900px)/2)) 65px}.eyebrow{text-transform:uppercase;letter-spacing:.19em;font-size:12px;font-weight:700;color:#bde4d5}h1{font-size:clamp(30px,5vw,46px);line-height:1.12;font-weight:760;letter-spacing:-.035em;margin:18px 0}header p{color:#d9eee7;max-width:670px;font-size:17px}.meta{margin-top:23px;color:#c0ddd5;font-size:12px;letter-spacing:.03em}main{max-width:900px;padding:42px 28px 92px;margin:auto}.block{background:#fff;border:1px solid var(--border);border-radius:14px;padding:28px 30px;margin:18px 0;box-shadow:0 2px 9px #142f3b06}.section-label{color:var(--accent);text-transform:uppercase;letter-spacing:.14em;font-size:11px;font-weight:750}h2{font-size:21px;line-height:1.35;margin:7px 0 12px}pre{font:inherit;font-size:14.5px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}.text pre{color:#263b4a}nav{display:flex;justify-content:space-between;align-items:center;padding:12px max(28px,calc((100vw - 900px)/2));background:#102b35;color:#e2f2ed;font-size:13px}a{color:inherit}footer{max-width:900px;margin:0 auto 40px;padding:0 28px;color:#637586;font-size:13px} @media print{header{background:white!important;color:#152837;padding:30px}header p,.meta,.eyebrow{color:#555}.block{break-inside:avoid;box-shadow:none}nav{display:none}main{padding-top:0}}</style></head><body><nav><span>OSTARA / PROMPT LIBRARY</span><span>Verbatim source · Versioned</span></nav><header><div class="eyebrow">Evidence mapping · Model instruction archive</div><h1>W09 · Comprehensive mechanism inventory</h1><p>Assess 36 ontology mechanisms and novelty</p><div class="meta">SOURCE FILE: inst/w09/fulltext_mechanisms_supplement_v1.txt · BRANCH: ostara-fulltext-mechanism-feedback-20261027</div></header><main><section class="block text"><pre>OSTARA W09 SUPPLEMENTARY FULL-TEXT MECHANISM INVENTORY v1
+You are coding already retrieved scholarly full texts about collective action
+in commodity supply chains. Return one JSON object, no markdown.</pre></section>
+<section class="block text"><pre>Evaluate EVERY approved ontology mechanism in approved_ontology (not only
+abstract-assigned mechanisms). Use EXACT mechanism_id values from the table.
+Use the entire supplied fulltext, not solely its abstract. Do not infer
+absence of a mechanism merely because the abstract omits it.</pre></section>
+<section class="block text"><pre>For each approved mechanism classify status:
+- implemented_case: direct source support that at least one described
+  initiative/case actually uses this mechanism
+- mentioned_only: discussed as context/theory or comparative mechanism,
+  but not shown to operate in an extracted case
+- proposed_only: prospective, recommended or hypothetical application only
+- not_identified: no relevant description found in this full text
+- unclear: relevant text is ambiguous</pre></section>
+<section class="block text"><pre>Use at most one status per ontology ID. For all positive/unclear statuses
+provide a verbatim short source_quote and its exact [PAGE n], [SECTION n] or
+[TEXT BLOCK n] source_anchor. Never fabricate quotes or print page numbers
+for XML/JSON. Provide case_ids only for implemented_case. Match case_ids
+from eligible_case_ids ONLY. Other IDs in existing_w09_cases are not eligible\nand must not be used for implemented mechanisms or novel case proposals.\nDo not invent new IDs. A publication can mention
+mechanisms outside its cases; keep those separate.</pre></section>
+<section class="block text"><pre>For every original W07 novel proposal in w07_abstract_novelty explicitly
+assess full-text support: confirmed_novel, refined_novel,
+covered_by_existing, rejected or uncertain. Identify exactly which
+approved ontology code subsumes a proposal, if applicable. Give a quote and
+anchor for positive decisions. Do not silently turn a novel mechanism
+proposal into an approved code.</pre></section>
+<section class="block text"><pre>Independently propose truly NEW mechanisms in new_novelty only when they
+are not covered by ANY approved ontology mechanism and are demonstrated
+in a case. Explain the novelty in relation to closest existing codes.
+Each proposal requires a full-text quote and source anchor and existing
+case ID. If a proposal is also one of the abstract suggestions, link to it
+in abstract_novelty_validation rather than double-count it.</pre></section>
+<section class="block text"><pre>This is extraction, not final adjudication. Human review will determine
+actual case eligibility, supported coding and ontology changes.
+Do not extract effectiveness or impact conclusions.</pre></section>
+<section class="block text"><pre>JSON structure (all arrays mandatory):
+{
+ &quot;record_id&quot;:&quot;input record ID&quot;,
+ &quot;mechanism_inventory&quot;:[
+   {&quot;mechanism_id&quot;:&quot;approved code&quot;,&quot;status&quot;:&quot;implemented_case | mentioned_only | proposed_only | not_identified | unclear&quot;,
+    &quot;case_ids&quot;:[&quot;existing W09 case ID&quot;],&quot;source_quote&quot;:&quot;&quot;,&quot;source_anchor&quot;:&quot;&quot;,&quot;reason&quot;:&quot;&quot;}
+ ],
+ &quot;abstract_novelty_validation&quot;:[
+   {&quot;abstract_candidate_id&quot;:&quot;original W07 candidate ID or stable ordinal&quot;,
+    &quot;original_proposal&quot;:&quot;&quot;,&quot;status&quot;:&quot;confirmed_novel | refined_novel | covered_by_existing | rejected | uncertain&quot;,
+    &quot;closest_approved_mechanism_id&quot;:&quot;&quot;,&quot;revised_label&quot;:&quot;&quot;,&quot;revised_definition&quot;:&quot;&quot;,
+    &quot;case_ids&quot;:[],&quot;source_quote&quot;:&quot;&quot;,&quot;source_anchor&quot;:&quot;&quot;,&quot;reason&quot;:&quot;&quot;}
+ ],
+ &quot;new_novelty&quot;:[
+   {&quot;proposed_label&quot;:&quot;&quot;,&quot;working_definition&quot;:&quot;&quot;,&quot;closest_approved_mechanism_id&quot;:&quot;&quot;,
+    &quot;case_ids&quot;:[],&quot;source_quote&quot;:&quot;&quot;,&quot;source_anchor&quot;:&quot;&quot;,&quot;reason&quot;:&quot;&quot;}
+ ]
+}</pre></section></main><footer>Presentation-only conversion of the archived model instructions. Prompt wording and order preserved; no interpretation or amendment of selection criteria.</footer></body></html>
