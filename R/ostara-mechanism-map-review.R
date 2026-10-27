@@ -57,7 +57,20 @@ prepare_ostara_mechanism_review_for_map <- function(map,
   }
   if(is.null(output_dir))output_dir<-file.path(map,"reports","mechanism_review",
        paste0("review-",substr(sha(file.path(pair$w10,"w10_decisions.jsonl")),1,12)))
+  candidates<-list.dirs(pair$w10,recursive=FALSE,full.names=TRUE)
+  second<-Filter(function(p) {
+    ledger<-file.path(p,"fulltext_decisions.jsonl")
+    manifest<-file.path(p,"manifest.json")
+    if(!all(file.exists(c(ledger,manifest))))return(FALSE)
+    m<-tryCatch(jsonlite::fromJSON(manifest,simplifyVector=FALSE),
+                error=function(e)NULL)
+    !is.null(m)&&identical(m$first_pass_sha256,
+       sha(file.path(pair$w10,"w10_decisions.jsonl")))
+  },candidates)
+  if(length(second)>1L)
+    stop("Multiple second-pass W10 audits match the same first pass; explicit review needed")
   prepare_ostara_mechanism_review(
     extraction_dir=pair$extraction,w10_run=pair$w10,
+    second_pass_dir=if(length(second))second[[1L]] else NULL,
     output_dir=output_dir,w07_run=w07)
 }
