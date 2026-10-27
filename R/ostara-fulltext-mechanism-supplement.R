@@ -25,7 +25,6 @@ extract_ostara_fulltext_mechanisms <- function(
   if(length(roots)!=1L)stop("Cannot resolve exactly one original W09 registry by checksum")
   registry<-roots[[1L]]
   extract_dir<-dirname(registry)
-  w09<-dirname(dirname(dirname(dirname(extract_dir))))
   # The W09 pilot always contains retrieval_queue.csv; locate its ancestor.
   parent<-extract_dir
   while(!file.exists(file.path(parent,"retrieval_queue.csv"))) {
@@ -47,15 +46,31 @@ extract_ostara_fulltext_mechanisms <- function(
   coding<-readjl(coded_path)
   coded<-setNames(coding,vapply(coding,function(z)z$record_id,character(1)))
   records<-readjl(registry)
-  # Explicitly limit supplementary extraction to publications with cases that
-  # passed W10. The review worksheets are eligibility-filtered and source-linked.
-  review_files<-c(file.path(review_dir,"mechanism_review.csv"),
-                  file.path(review_dir,"novelty_review.csv"))
-  if(!all(file.exists(review_files)))stop("Review worksheets missing")
-  mechanism_rows<-utils::read.csv(review_files[[1]],stringsAsFactors=FALSE)
-  novelty_rows<-utils::read.csv(review_files[[2]],stringsAsFactors=FALSE)
-  ids<-unique(c(mechanism_rows$record_id,novelty_rows$record_id))
-  ids<-ids[nzchar(ids)&!is.na(ids)]
+  # Use the actual completed W10 eligibility ledger, not merely mechanism
+  # review rows: zero-mechanism publications must still be analysed.
+  w10files<-list.files(dirname(extract_dir),pattern="^w10_decisions\\.jsonl$",
+    recursive=TRUE,full.names=TRUE)
+  w10files<-w10files[vapply(w10files,function(f)
+    identical(sha(f),meta$w10_eligibility_sha256),logical(1))]
+  if(length(w10files)!=1L)
+    stop("Cannot locate the exact W10 eligibility ledger from review provenance")
+  first<-readjl(w10files[[1L]])
+  decision<-setNames(vapply(first,function(z)z$overall,character(1)),
+    vapply(first,function(z)z$observation_id,character(1)))
+  if(anyDuplicated(names(decision)))stop("Duplicate W10 observation decisions")
+  if(!is.null(meta$second_pass_dir)) {
+    second_path<-file.path(meta$second_pass_dir,"fulltext_decisions.jsonl")
+    if(!file.exists(second_path))stop("Missing archived W10 second-pass decisions")
+    for(z in readjl(second_path)) {
+      if(!z$observation_id%in%names(decision))
+        stop("Second-pass W10 assessment has unknown observation")
+      decision[[z$observation_id]]<-z$overall
+    }
+  }
+  eligible_observations<-names(decision)[decision=="eligible"]
+  ids<-unique(sub("-case-[0-9]{3}$","",eligible_observations))
+  if(any(!grepl("-case-[0-9]{3}$",eligible_observations)))
+    stop("Unexpected W10 case identifier format")
   if(any(!ids%in%vapply(records,function(z)z$record_id,character(1))))
     stop("Review records inconsistent with W09")
   records<-setNames(records,vapply(records,function(z)z$record_id,character(1)))
