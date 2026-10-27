@@ -46,10 +46,18 @@ export_ostara_ontology_html <- function(
     x <- gsub(">","&gt;",x,fixed=TRUE)
     gsub('"',"&quot;",x,fixed=TRUE)
   }
-  th <- paste0("<th scope=\"col\">",esc(names(df)),"</th>",collapse="")
+  # Display-only title case: leave CSV column names unchanged.
+  labels <- tools::toTitleCase(gsub("_"," ",names(df),fixed=TRUE))
+  th <- paste0("<th scope=\"col\">",esc(labels),"</th>",collapse="")
+  def_col <- match("definition_draft",names(df))
+  if(!is.na(def_col)) {
+    th <- sub(paste0('(<th scope="col">',esc(labels[[def_col]]),'</th>)'),
+              paste0('<th scope="col" class="definition-col">',esc(labels[[def_col]]),'</th>'),th,fixed=TRUE)
+  }
   trs <- vapply(seq_len(nrow(df)),function(i) {
-    cells <- paste0("<td>",esc(as.character(unlist(df[i,,drop=FALSE],
-                                               use.names=FALSE))),"</td>",collapse="")
+    vals <- esc(as.character(unlist(df[i,,drop=FALSE],use.names=FALSE)))
+    classes <- ifelse(seq_along(vals)==def_col,' class="definition-col"',"")
+    cells <- paste0("<td",classes,">",vals,"</td>",collapse="")
     paste0("<tr>",cells,"</tr>")
   },character(1))
   checksum <- sha(ontology_csv)
@@ -72,7 +80,8 @@ export_ostara_ontology_html <- function(
     ".count{font-size:13px;color:var(--muted)}",
     ".table-wrap{overflow:auto;background:white;border:1px solid var(--line);",
     "border-radius:14px;box-shadow:0 5px 22px #15364508}",
-    "table{width:100%;border-collapse:collapse;min-width:920px}",
+    "table{width:100%;border-collapse:collapse;min-width:1400px;table-layout:auto}",
+    "th.definition-col,td.definition-col{min-width:460px;width:38%;}",
     "th{text-align:left;background:#eaf4ef;color:#225e50;",
     "font-size:12px;text-transform:uppercase;letter-spacing:.06em;",
     "padding:15px;position:sticky;top:0;z-index:2}",
