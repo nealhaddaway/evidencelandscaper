@@ -103,3 +103,6 @@ export(prepare_ostara_mechanism_review_for_map)
 
 export(finalise_ostara_mechanism_review_for_map)
 export(publish_ostara_mechanism_feedback)
+
+export(extract_ostara_fulltext_mechanisms)
+export(prepare_ostara_supplement_review)
