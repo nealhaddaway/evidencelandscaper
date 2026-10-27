@@ -20,7 +20,7 @@ Use at most one status per ontology ID. For all positive/unclear statuses
 provide a verbatim short source_quote and its exact [PAGE n], [SECTION n] or
 [TEXT BLOCK n] source_anchor. Never fabricate quotes or print page numbers
 for XML/JSON. Provide case_ids only for implemented_case. Match case_ids
-from existing_w09_cases; do not invent new IDs. A publication can mention
+from eligible_case_ids ONLY. Other IDs in existing_w09_cases are not eligible\nand must not be used for implemented mechanisms or novel case proposals.\nDo not invent new IDs. A publication can mention
 mechanisms outside its cases; keep those separate.
 
 For every original W07 novel proposal in w07_abstract_novelty explicitly
