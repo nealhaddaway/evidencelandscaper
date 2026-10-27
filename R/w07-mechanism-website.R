@@ -184,6 +184,15 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
       if(nzchar(code)==nzchar(proposed)||
          (nzchar(code)&&!code%in%unique(onto$category_id)))
         stop("Invalid parent hierarchy in full-text proposal ",i)
+      closest<-if("closest_existing_mechanism_code"%in%names(ft))
+        trimws(z$closest_existing_mechanism_code) else ""
+      if(nzchar(closest)&&!closest%in%known)
+        stop("Unknown closest approved mechanism code in full-text proposal ",i)
+      if(z$hierarchy_action%in%c("existing_mechanism","refine_existing")&&
+         !nzchar(closest))
+        stop("Full-text proposal requires approved mechanism code in row ",i)
+      if(z$review_status=="pending_harmonisation")
+        stop("Full-text harmonisation must be reviewed before publication, row ",i)
       if(!z$hierarchy_action%in%c("existing_mechanism","refine_existing","new_lower_level"))
         stop("Invalid full-text hierarchy action in row ",i)
       fulltext_harmonised[[i]]<-lapply(z,as.character)
