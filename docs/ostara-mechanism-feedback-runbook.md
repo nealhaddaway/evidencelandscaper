@@ -31,6 +31,9 @@ For each eligible publication, a reviewer must check every assigned W07
 mechanism, each W09 additional case mechanism, and each W07/W09 novel proposal.
 Fill in `human_decision` with
 `confirmed_case`, `mentioned_only`, `rejected`, or `uncertain`.
+First confirm each W10-eligible case against the source and set
+`eligible_case_verified=TRUE` for the corresponding mechanism rows.
+W10 model eligibility is not, by itself, human verification.
 Set `review_complete=TRUE` for every mechanism of a completed publication.
 Add reviewer, timestamp, supporting source quotation, exact source anchor,
 and case IDs for confirmed mechanisms. Do not label a mechanism as implemented
