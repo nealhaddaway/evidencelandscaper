@@ -6,11 +6,12 @@
 #' @param extraction_dir Completed W09 v2 extraction directory.
 #' @param w10_run Completed first-pass W10 eligibility run directory.
 #' @param second_pass_dir Optional W10 full-text second-pass directory.
+#' @param w07_run Optional original completed W07 run to assess abstract novelty.
 #' @param output_dir New directory for review worksheets.
 #' @return Paths of the mechanism and novelty review worksheets.
 #' @export
 prepare_ostara_mechanism_review <- function(extraction_dir,w10_run,
-                                             second_pass_dir=NULL,output_dir) {
+                                             second_pass_dir=NULL,output_dir,w07_run=NULL) {
   reg<-file.path(extraction_dir,"fulltext_case_registry_normalised.jsonl")
   first<-file.path(w10_run,"w10_decisions.jsonl")
   if(!file.exists(reg)||!file.exists(first))
@@ -37,6 +38,13 @@ prepare_ostara_mechanism_review <- function(extraction_dir,w10_run,
         stop("Unknown W10 second-pass observation")
       eligibility[[x$observation_id]]<-x$overall
     }
+  }
+  w07_byid<-list()
+  if(!is.null(w07_run)) {
+    path<-file.path(w07_run,"coding.jsonl")
+    if(!file.exists(path))stop("Original W07 coding.jsonl not found")
+    archived<-readjl(path)
+    w07_byid<-setNames(archived,vapply(archived,function(x)x$record_id,character(1)))
   }
   scalar<-function(x)if(is.null(x)||!length(x))"" else as.character(x[[1L]])
   mechanism<-list();novelty<-list()
@@ -75,6 +83,21 @@ prepare_ostara_mechanism_review <- function(extraction_dir,w10_run,
           evidence_quote=scalar(v$source_quote),source_anchor=scalar(v$source_anchor),
           reviewer="",review_timestamp="",stringsAsFactors=FALSE)
       }
+    }
+    # Every original abstract novelty suggestion receives an explicit
+    # full-text review row, even when W09 proposed no new candidate.
+    previous<-w07_byid[[id]]
+    if(!is.null(previous)&&isTRUE(previous$ontology_gap)) {
+      label<-if(is.null(previous$proposed_new_mechanism))"" else
+        paste(unlist(previous$proposed_new_mechanism,use.names=FALSE),collapse="; ")
+      novelty[[length(novelty)+1L]]<-data.frame(
+        record_id=id,candidate_id=paste0("ABS-",id),
+        case_id=paste(eligible,collapse="; "),
+        w07_candidate_id=paste0("ABS-",id),
+        human_novelty_decision="uncertain",
+        closest_approved_mechanism_id="",proposed_label=label,
+        working_definition="",evidence_quote="",source_anchor="",
+        reviewer="",review_timestamp="",stringsAsFactors=FALSE)
     }
     for(j in seq_along(z$ontology_gaps)) {
       g<-z$ontology_gaps[[j]]
