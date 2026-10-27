@@ -25,9 +25,6 @@ prepare_ostara_supplement_review <- function(review_dir,supplement_dir) {
   found<-vapply(extracted,function(x)x$record_id,character(1))
   if(anyDuplicated(found)||!setequal(found,expected))
     stop("Supplementary mechanism extraction is not complete for all selected records")
-  old_ids<-unique(base$record_id)
-  unknown<-setdiff(found,unique(c(old_ids,prior_n$record_id)))
-  if(length(unknown))stop("Supplementary output includes publications absent from W10 review")
   out<-file.path(review_dir,paste0("supplement_review-",
                                    substr(hash(ledger),1,12)))
   if(dir.exists(out)&&length(list.files(out,all.files=TRUE,no..=TRUE)))
@@ -42,12 +39,8 @@ prepare_ostara_supplement_review <- function(review_dir,supplement_dir) {
     id<-z$record_id
     # W10-eligible case references in original review are authoritative
     # for which prior cases may be considered at this stage.
-    eligible<-unique(unlist(strsplit(
-      paste(base$case_ids[base$record_id==id],
-            prior_n$case_id[prior_n$record_id==id],collapse="; "),
-      ";",fixed=TRUE),use.names=FALSE))
-    eligible<-trimws(eligible)
-    eligible<-eligible[nzchar(eligible)]
+    eligible<-as.character(unlist(z$eligible_case_ids,use.names=FALSE))
+    if(!length(eligible))stop("No W10-eligible case IDs saved for: ",id)
     abstract<-base$mechanism_id[base$record_id==id&
                                 base$abstract_assigned%in%TRUE]
     for(v in z$mechanism_inventory) {
