@@ -59,6 +59,15 @@ export_ostara_ontology_html <- function(
     cells <- paste0("<td",classes,">",vals,"</td>",collapse="")
     paste0("<tr>",cells,"</tr>")
   },character(1))
+  # Explicit column widths prevent browsers squeezing long definitions.
+  widths <- rep("180px",ncol(df))
+  widths[names(df)=="category_id"] <- "110px"
+  widths[names(df)=="category"] <- "260px"
+  widths[names(df)=="mechanism_id"] <- "130px"
+  widths[names(df)=="mechanism_source_label"] <- "300px"
+  widths[names(df)=="definition_draft"] <- "650px"
+  widths[names(df)=="purpose_source"] <- "280px"
+  colgroup <- paste0("<colgroup>",paste0('<col style="width:',widths,'">',collapse=""),"</colgroup>")
   checksum <- sha(ontology_csv)
   css <- paste0(
     ":root{--ink:#17313d;--muted:#5f7680;--green:#1a6658;--line:#deebe6}",
@@ -79,10 +88,10 @@ export_ostara_ontology_html <- function(
     ".count{font-size:13px;color:var(--muted)}",
     ".table-wrap{overflow:auto;background:white;border:1px solid var(--line);",
     "border-radius:14px;box-shadow:0 5px 22px #15364508}",
-    "table{width:100%;border-collapse:collapse;min-width:1400px;table-layout:auto}",
-    "th.definition-col,td.definition-col{min-width:460px;width:38%;}",
+    "table{width:max-content;min-width:100%;border-collapse:collapse;table-layout:fixed}",
+    "th.definition-col,td.definition-col{min-width:650px;max-width:650px;}",
     "th{text-align:left;background:#eaf4ef;color:#225e50;",
-    "font-size:12px;text-transform:uppercase;letter-spacing:.06em;",
+    "font-size:13px;text-transform:none;letter-spacing:.01em;",
     "padding:15px;position:sticky;top:0;z-index:2}",
     "td{padding:16px 15px;border-bottom:1px solid #e6eeea;vertical-align:top;",
     "min-width:100px;white-space:pre-wrap;overflow-wrap:anywhere}",
@@ -104,7 +113,7 @@ export_ostara_ontology_html <- function(
     '<div class="bar"><input id="filter" type="search" ',
     'placeholder="Search codes, labels and definitions…" aria-label="Filter ontology">',
     '<span class="count" id="count">',nrow(df),' mechanisms</span></div>',
-    '<div class="table-wrap"><table id="ontology"><thead><tr>',th,
+    '<div class="table-wrap"><table id="ontology">',colgroup,'<thead><tr>',th,
     '</tr></thead><tbody>',paste(trs,collapse="\n"),
     '</tbody></table></div>',
     '<p class="foot">Source SHA-256: ',checksum,
