@@ -100,3 +100,6 @@ export(prepare_ostara_fulltext_candidates)
 export(finalise_ostara_mechanism_review)
 
 export(prepare_ostara_mechanism_review_for_map)
+
+export(finalise_ostara_mechanism_review_for_map)
+export(publish_ostara_mechanism_feedback)
