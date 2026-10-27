@@ -25,7 +25,7 @@ prepare_ostara_mechanism_review <- function(extraction_dir,w10_run,
   if(anyDuplicated(fids))stop("Duplicated W10 observation IDs")
   eligibility<-setNames(vapply(firstpass,function(x)x$overall,character(1)),fids)
   if(!is.null(second_pass_dir)){
-    second<-file.path(second_pass_dir,"w10_fulltext_decisions.jsonl")
+    second<-file.path(second_pass_dir,"fulltext_decisions.jsonl")
     if(!file.exists(second)){
       paths<-list.files(second_pass_dir,pattern="\\.jsonl$",full.names=TRUE)
       stop("Second-pass decision filename must be verified; available JSONL: ",
