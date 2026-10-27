@@ -5,13 +5,20 @@
 #' eligible case publication can supersede abstract assignments.
 #' @param w07_coding_jsonl Immutable W07 coding JSONL path.
 #' @param verification_csv Human-adjudicated publication-mechanism decisions CSV.
+#' @param ontology_csv Approved and immutable W07 ontology.csv.
 #' @param output_dir New, empty directory for reconciled outputs.
 #' @return Paths of written CSV files.
 #' @export
 reconcile_ostara_mechanisms <- function(w07_coding_jsonl, verification_csv,
-                                         output_dir) {
-  if(!file.exists(w07_coding_jsonl)||!file.exists(verification_csv))
-    stop("W07 coding and human verification input files must exist.")
+                                         ontology_csv, output_dir) {
+  if(!file.exists(w07_coding_jsonl)||!file.exists(verification_csv)||
+     !file.exists(ontology_csv))
+    stop("W07 coding, approved ontology and verification files must exist.")
+  ontology<-utils::read.csv(ontology_csv,stringsAsFactors=FALSE,check.names=FALSE,
+                            fileEncoding="UTF-8-BOM")
+  if(!"mechanism_id"%in%names(ontology)||anyDuplicated(ontology$mechanism_id))
+    stop("Invalid approved ontology mechanism identifiers")
+  approved_codes<-as.character(ontology$mechanism_id)
   if(dir.exists(output_dir)&&length(list.files(output_dir,all.files=TRUE,no..=TRUE)))
     stop("Refusing to overwrite nonempty reconciliation directory: ",output_dir)
   readjl<-function(p) {
@@ -30,6 +37,8 @@ reconcile_ostara_mechanisms <- function(w07_coding_jsonl, verification_csv,
   }))
   if(is.null(original))original<-data.frame(record_id=character(),
                                               mechanism_id=character())
+  if(any(!original$mechanism_id%in%approved_codes))
+    stop("W07 coding contains codes absent from approved ontology")
   decisions<-utils::read.csv(verification_csv,stringsAsFactors=FALSE,
                               check.names=FALSE,fileEncoding="UTF-8-BOM")
   required<-c("record_id","mechanism_id","human_decision","review_complete",
@@ -55,6 +64,8 @@ reconcile_ostara_mechanisms <- function(w07_coding_jsonl, verification_csv,
     stop("Cannot complete verification for a publication without an eligible verified case")
   if(any(!decisions$record_id%in%ids))
     stop("Verification contains records not in W07")
+  if(any(!decisions$mechanism_id%in%approved_codes))
+    stop("Verification contains codes not in approved ontology")
   keys<-paste(decisions$record_id,decisions$mechanism_id,sep="\u001f")
   if(anyDuplicated(keys))stop("Duplicate human decisions for a publication/mechanism")
   if(any(complete & decisions$human_decision=="confirmed_case" &
@@ -108,6 +119,7 @@ reconcile_ostara_mechanisms <- function(w07_coding_jsonl, verification_csv,
   jsonlite::write_json(list(
     schema="ostara-mechanism-reconciliation-v1",
     w07_sha256=hash(w07_coding_jsonl),
+    ontology_sha256=hash(ontology_csv),
     verification_sha256=hash(verification_csv),
     original_output_sha256=hash(paths[[1]]),
     human_output_sha256=hash(paths[[2]]),
