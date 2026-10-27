@@ -42,11 +42,21 @@ prepare_ostara_mechanism_review_for_map <- function(map,
   }
   if(!length(matches))
     stop("No complete, checksum-matched W09/W10 pair found. Review existing runs.")
+  if(length(matches)>1L) {
+    # W10 v1 and v2 can both assess the same W09 registry. Only v2 uses
+    # the clarified W10 case-relevance rules; never select by mtime.
+    is_v2<-vapply(matches,function(x)
+      startsWith(basename(x$w10),"relevance-v2-"),logical(1))
+    if(sum(is_v2)==1L) {
+      matches<-matches[is_v2]
+      message("[Ostara] Selected completed W10 relevance-v2 audit over legacy W10 audit.")
+    }
+  }
   if(length(matches)!=1L) {
     desc<-vapply(matches,function(x)paste(x$count,"cases:",x$extraction,
                                         "| W10:",x$w10),character(1))
-    stop("Multiple matching W09/W10 runs. Supply extraction_dir explicitly or ",
-         "identify one review run:\n",paste(desc,collapse="\n"))
+    stop("Multiple distinct complete W09/W10 runs remain; do not guess:\n",
+         paste(desc,collapse="\n"))
   }
   pair<-matches[[1L]]
   w09_manifest<-file.path(pair$extraction,"manifest.json")
