@@ -16,30 +16,20 @@ export_ostara_ontology_html <- function(
       !is.null(x) && identical(x$ontology_sha256,sha(p))
     },logical(1))]
     if(!length(paths))stop("No provenance-verified W07 ontology.csv found")
-    unique_hashes <- unique(vapply(paths,sha,character(1)))
-    if(length(unique_hashes)!=1L) {
-      # Prefer the exact W07 ontology referenced by the completed supplementary
-      # review, never the newest file by timestamp or an arbitrary W07 run.
-      review_root <- file.path(map,"reports","mechanism_review")
-      reviews <- if(dir.exists(review_root))
-        list.files(review_root,pattern="^manifest\\\\.json$",
-                   recursive=TRUE,full.names=TRUE) else character()
-      candidates <- character()
-      for(mpath in reviews) {
-        m <- tryCatch(jsonlite::fromJSON(mpath,simplifyVector=FALSE),
-                      error=function(e) NULL)
-        if(is.null(m) || is.null(m$w07_run))next
-        p <- file.path(m$w07_run,"ontology.csv")
-        if(file.exists(p) && p %in% paths)candidates <- c(candidates,p)
-      }
-      # Only proceed if all verified review manifests point to the same
-      # ontology checksum. Conflicting review provenance remains an error.
-      candidate_hashes <- unique(vapply(candidates,sha,character(1)))
-      if(length(candidate_hashes)!=1L)
-        stop("Conflicting W07 ontologies. Supply ontology_csv explicitly.")
-      paths <- candidates
-    }
-    ontology_csv <- paths[[1L]]
+    # User choice: latest W07 ontology. Prefer completed full W07 runs,
+    # then choose the latest run manifest modification time.
+    full <- grepl("^full-",basename(dirname(paths))) &
+      file.exists(file.path(dirname(paths),"coding.jsonl")) &
+      file.exists(file.path(dirname(paths),"summary.json"))
+    if(any(full))paths <- paths[full]
+    manifests <- file.path(dirname(paths),"manifest.json")
+    dates <- file.info(manifests)$mtime
+    if(anyNA(dates))stop("Unable to date verified W07 manifests")
+    latest <- which(dates==max(dates))
+    if(length(unique(vapply(paths[latest],sha,character(1))))>1L)
+      stop("Latest W07 runs have conflicting ontology checksums")
+    ontology_csv <- paths[[latest[[1L]]]]
+    message("Selected latest verified W07 ontology: ",ontology_csv)
   }
   ontology_csv <- normalizePath(ontology_csv,mustWork=TRUE)
   df <- utils::read.csv(ontology_csv,stringsAsFactors=FALSE,check.names=FALSE,
