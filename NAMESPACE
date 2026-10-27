@@ -96,3 +96,5 @@ export(reconcile_ostara_novelty)
 
 export(prepare_ostara_mechanism_review)
 export(prepare_ostara_fulltext_candidates)
+
+export(finalise_ostara_mechanism_review)
