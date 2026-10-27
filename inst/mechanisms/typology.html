@@ -79,7 +79,7 @@ out+='<details><summary>Rationale and original suggestions ('+originals.length+'
 if(p.classification_rationale)out+='<div class="field"><b>Classification rationale</b><p class="description">'+esc(p.classification_rationale)+'</p></div>';
 if(p.original_approved_wording)out+='<div class="field"><b>Existing approved definition (unchanged)</b><p class="description">'+esc(p.original_approved_wording)+'</p></div>';
 if(p.review_status)out+='<p class="note">Status: '+esc(p.review_status)+'</p>';
-for(const x of originals)out+='<div class="field"><b>'+esc(x.id)+' · '+esc(x.source==="targeted"?"Targeted search":"Expanded search")+'</b><p class="description">'+esc(x.description)+'</p><p class="note">'+esc(x.reason)+'</p>'+(x.stage?'<small>Initiative development stage: '+esc(x.stage)+'</small>':"")+'</div>';
+for(const x of originals)out+='<div class="field"><b>'+esc(x.id)+' · '+esc(x.source==="targeted"?"Targeted search":"Expanded search")+'</b>'+(x.case_id?'<p class="note">Case: '+esc(x.case_id)+'</p>':'')+'<p class="description">'+esc(x.description)+'</p><p class="note">'+esc(x.reason)+'</p>'+(x.stage?'<small>Initiative development stage: '+esc(x.stage)+'</small>':"")+'</div>';
 out+='</details></div>';
 }out+='</section>';
 }
