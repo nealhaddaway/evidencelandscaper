@@ -32,10 +32,10 @@ reconcile_ostara_novelty <- function(novelty_csv,ontology_csv,output_dir) {
   if(any(!nzchar(trimws(x$record_id)))||any(!nzchar(trimws(x$reviewer))))
     stop("Publication and reviewer are mandatory")
   accepted<-x$human_novelty_decision%in%c("confirmed_new","refined_new")
-  if(any(accepted & (!nzchar(trimws(x$case_id))||
-                      !nzchar(trimws(x$proposed_label))||
-                      !nzchar(trimws(x$working_definition))||
-                      !nzchar(trimws(x$evidence_quote))||
+  if(any(accepted & (!nzchar(trimws(x$case_id))|
+                      !nzchar(trimws(x$proposed_label))|
+                      !nzchar(trimws(x$working_definition))|
+                      !nzchar(trimws(x$evidence_quote))|
                       !nzchar(trimws(x$source_anchor)))))
     stop("Confirmed new mechanisms require cases, definitions and evidence")
   covered<-x$human_novelty_decision=="covered_by_existing"
