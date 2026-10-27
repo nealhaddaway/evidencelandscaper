@@ -64,7 +64,7 @@ for(const key of groups){
 const grp=proposals.filter(p=>parentKey(p)===key);
 const rows=grp.filter(p=>{
 const ids=String(p.source_candidate_ids||"").split(";").map(x=>x.trim()),orig=ids.map(id=>lookup.get(id)).filter(Boolean);
-return (!selected||p.parent_category_code===selected)&&(source==="all"||orig.some(x=>x.source===source))&&(!q||fs([parent(p),p.proposed_label,p.working_definition,p.closest_existing_mechanism_code,p.closest_existing_mechanism_label,p.classification_rationale,...orig.map(x=>x.description)].join(" ")).includes(q));
+return (!selected||p.parent_category_code===selected)&&(mode==="fulltext"||source==="all"||orig.some(x=>x.source===source))&&(!q||fs([parent(p),p.proposed_label,p.working_definition,p.closest_existing_mechanism_code,p.closest_existing_mechanism_label,p.classification_rationale,...orig.map(x=>x.description)].join(" ")).includes(q));
 });
 if(!rows.length)continue;
 const existing=!!rows[0].parent_category_code;
