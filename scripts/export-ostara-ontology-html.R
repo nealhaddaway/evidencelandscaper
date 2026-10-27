@@ -48,12 +48,11 @@ export_ostara_ontology_html <- function(
   }
   # Display-only title case: leave CSV column names unchanged.
   labels <- tools::toTitleCase(gsub("_"," ",names(df),fixed=TRUE))
-  th <- paste0("<th scope=\"col\">",esc(labels),"</th>",collapse="")
   def_col <- match("definition_draft",names(df))
-  if(!is.na(def_col)) {
-    th <- sub(paste0('(<th scope="col">',esc(labels[[def_col]]),'</th>)'),
-              paste0('<th scope="col" class="definition-col">',esc(labels[[def_col]]),'</th>'),th,fixed=TRUE)
-  }
+  header_classes <- ifelse(!is.na(def_col) & seq_along(labels)==def_col,
+                           ' class="definition-col"',"")
+  th <- paste0('<th scope="col"',header_classes,'>',esc(labels),'</th>',
+               collapse="")
   trs <- vapply(seq_len(nrow(df)),function(i) {
     vals <- esc(as.character(unlist(df[i,,drop=FALSE],use.names=FALSE)))
     classes <- ifelse(seq_along(vals)==def_col,' class="definition-col"',"")
