@@ -93,3 +93,6 @@ export(publish_ostara_mechanisms)
 export(reconcile_ostara_mechanisms)
 
 export(reconcile_ostara_novelty)
+
+export(prepare_ostara_mechanism_review)
+export(prepare_ostara_fulltext_candidates)
