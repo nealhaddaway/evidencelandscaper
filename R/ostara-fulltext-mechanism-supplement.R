@@ -120,7 +120,8 @@ extract_ostara_fulltext_mechanisms <- function(
     codes<-if(is.null(original$mechanisms))character() else
       vapply(original$mechanisms,function(m)m$mechanism_id,character(1))
     cases<-records[[id]]$cases
-    input<-list(record_id=id,
+    case_whitelist<-eligible_observations[startsWith(eligible_observations,paste0(id,"-case-"))]
+    input<-list(record_id=id,eligible_case_ids=as.list(case_whitelist),
       approved_ontology=utils::capture.output(utils::write.csv(onto,row.names=FALSE)),
       w07_abstract_mechanism_ids=as.list(codes),
       w07_abstract_novelty=original$proposed_new_mechanism,
@@ -156,7 +157,7 @@ extract_ostara_fulltext_mechanisms <- function(
           stop("Incorrect supplementary output contract")
         actual<-vapply(z$mechanism_inventory,function(x)scalar(x$mechanism_id),
                        character(1))
-        if(anyDuplicated(actual)||!setequal(actual,onto$mechanism_id))
+        if(anyDuplicated(actual)||!setequal(actual,as.character(onto$mechanism_id)))
           stop("Output must assess every approved ontology mechanism exactly once")
         valid<-c("implemented_case","mentioned_only","proposed_only",
                  "not_identified","unclear")
@@ -171,6 +172,7 @@ extract_ostara_fulltext_mechanisms <- function(
     }
     if(is.null(result))stop("Incomplete extraction for ",id,
                            "; completed records remain checkpointed")
+    result$eligible_case_ids<-as.list(case_whitelist)
     result$provenance<-list(source_path=source$path,
       source_sha256=source$sha256,source_format=source$format,
       w09_registry_sha256=sha(registry),w07_ontology_sha256=sha(onto_path),
