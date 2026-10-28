@@ -31,10 +31,29 @@ export_ostara_all_cases_candidates <- function(
  }
  atlas<-jsonlite::fromJSON(files[[1L]],simplifyVector=FALSE)
  cases<-atlas$cases
+ # Plain-text CSV cells only: never serialise nested values as JSON.
+ # Preserve repeated entries in stable order, separated by semicolons.
  stringify<-function(x){
-  if(is.null(x)||!length(x))return("")
-  if(is.atomic(x))return(paste(as.character(x),collapse="; "))
-  as.character(jsonlite::toJSON(x,auto_unbox=TRUE,null="null"))
+  flatten<-function(y){
+   if(is.null(y)||!length(y))return(character())
+   if(is.atomic(y))return(as.character(y[!is.na(y)]))
+   if(is.data.frame(y))y<-split(y,seq_len(nrow(y)))
+   if(!is.list(y))stop("Unsupported nested export value")
+   pieces<-vapply(y,function(item){
+    if(is.null(item)||!length(item))return("")
+    if(is.list(item)&&!is.null(names(item))&&any(nzchar(names(item)))){
+     named<-vapply(seq_along(item),function(j){
+      value<-paste(flatten(item[[j]]),collapse=", ")
+      if(!nzchar(value))return("")
+      paste0(names(item)[[j]],": ",value)
+     },character(1))
+     return(paste(named[nzchar(named)],collapse="; "))
+    }
+    paste(flatten(item),collapse=", ")
+   },character(1))
+   pieces[nzchar(pieces)]
+  }
+  paste(flatten(x),collapse="; ")
  }
  keys<-sort(unique(unlist(lapply(cases,names),use.names=FALSE)))
  case_rows<-lapply(cases,function(x){
@@ -158,7 +177,7 @@ export_ostara_all_cases_candidates <- function(
  utils::write.csv(cases_df,cases_path,row.names=FALSE,na="")
  utils::write.csv(candidates_df,candidates_path,row.names=FALSE,na="")
  message("Exported ",nrow(cases_df)," cases (combined atlas), and ",
-         nrow(candidates_df)," original W07 mechanism candidates.")
+         nrow(candidates_df)," source-level mechanism candidates (W07 and full text).")
  message("Cases: ",cases_path,"\nCandidates: ",candidates_path)
  invisible(list(cases=cases_path,candidates=candidates_path))
 }
