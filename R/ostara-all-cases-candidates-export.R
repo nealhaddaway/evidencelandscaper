@@ -55,13 +55,28 @@ export_ostara_all_cases_candidates <- function(
   }
   paste(flatten(x),collapse="; ")
  }
- keys<-sort(unique(unlist(lapply(cases,names),use.names=FALSE)))
+ # Combined atlas records contain the extracted case in x$case.
+ # Give case_name and case_description independent, first-class columns.
+ nested_keys<-sort(unique(unlist(lapply(cases,function(x)
+   if(is.list(x$case))names(x$case) else character()),use.names=FALSE)))
+ top_keys<-sort(setdiff(unique(unlist(lapply(cases,names),use.names=FALSE)),
+                        c("case","search_provenance")))
  case_rows<-lapply(cases,function(x){
-  v<-setNames(vapply(keys,function(k)stringify(x[[k]]),character(1)),keys)
+  if(!is.list(x$case))stop("Combined atlas observation has no structured case")
+  item<-x$case
+  v<-setNames(vapply(nested_keys,function(k)stringify(item[[k]]),character(1)),
+              paste0("case_",nested_keys))
+  names(v)[names(v)=="case_case_name"]<-"case_name"
+  names(v)[names(v)=="case_case_description"]<-"case_description"
+  remaining<-setNames(vapply(top_keys,function(k)stringify(x[[k]]),
+                        character(1)),top_keys)
   prov<-x$search_provenance
   c(source_search=stringify(prov$id),
     search_label=stringify(prov$label),
-    eligibility_basis=stringify(prov$eligibility_basis),v)
+    eligibility_basis=stringify(prov$eligibility_basis),
+    case_name=stringify(item$case_name),
+    case_description=stringify(item$case_description),
+    remaining,v[!names(v)%in%c("case_name","case_description")])
  })
  cases_df<-as.data.frame(do.call(rbind,case_rows),stringsAsFactors=FALSE,
                          check.names=FALSE)
@@ -174,8 +189,16 @@ export_ostara_all_cases_candidates <- function(
  dir.create(output_dir,recursive=TRUE,showWarnings=FALSE)
  cases_path<-file.path(output_dir,"all_cases_both_searches.csv")
  candidates_path<-file.path(output_dir,"all_candidate_mechanisms_both_searches.csv")
- utils::write.csv(cases_df,cases_path,row.names=FALSE,na="")
- utils::write.csv(candidates_df,candidates_path,row.names=FALSE,na="")
+ # UTF-8 with BOM makes Excel recognise accented names without mojibake.
+ write_excel_utf8_csv<-function(df,path){
+  con<-file(path,open="wb")
+  on.exit(close(con),add=TRUE)
+  writeBin(as.raw(c(0xEF,0xBB,0xBF)),con)
+  utils::write.table(df,con,sep=",",row.names=FALSE,col.names=TRUE,
+                     quote=TRUE,na="",qmethod="double",fileEncoding="")
+ }
+ write_excel_utf8_csv(cases_df,cases_path)
+ write_excel_utf8_csv(candidates_df,candidates_path)
  message("Exported ",nrow(cases_df)," cases (combined atlas), and ",
          nrow(candidates_df)," source-level mechanism candidates (W07 and full text).")
  message("Cases: ",cases_path,"\nCandidates: ",candidates_path)
