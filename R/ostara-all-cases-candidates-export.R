@@ -94,6 +94,41 @@ export_ostara_all_cases_candidates <- function(
  if(!length(candidate_rows))stop("No W07 candidate proposals found")
  candidates_df<-as.data.frame(do.call(rbind,candidate_rows),
                                stringsAsFactors=FALSE,check.names=FALSE)
+ # Include the separately detected novel FULL-TEXT proposals, retaining
+ # distinct provenance and evidence. Do not collapse into W07 suggestions.
+ supplement_root<-file.path(map,"reports","mechanism_review")
+ supplement_files<-list.files(supplement_root,
+   pattern="^mechanism_assessments\\\\.jsonl$",recursive=TRUE,full.names=TRUE)
+ if(length(supplement_files)>1L) {
+   timestamps<-file.info(supplement_files)$mtime
+   supplement_files<-supplement_files[which(timestamps==max(timestamps))]
+ }
+ if(length(supplement_files)==1L){
+  extra<-list()
+  for(z in readjl(supplement_files[[1L]])) {
+   for(j in seq_along(z$new_novelty)){
+    v<-z$new_novelty[[j]]
+    extra[[length(extra)+1L]]<-data.frame(
+      candidate_id=paste0("FT-",z$record_id,"-",sprintf("%03d",j)),
+      source_search="expanded_fulltext",
+      record_id=stringify(z$record_id),
+      original_description=stringify(v$proposed_label),
+      original_gap_reason=stringify(v$working_definition),
+      initiative_development_stage="",
+      w07_run="",w07_coding_sha256="",w07_ontology_sha256="",
+      case_ids=stringify(v$case_ids),
+      evidence_quote=stringify(v$source_quote),
+      source_anchor=stringify(v$source_anchor),
+      stringsAsFactors=FALSE)
+   }
+  }
+  if(length(extra)){
+   candidates_df$case_ids<-""
+   candidates_df$evidence_quote<-""
+   candidates_df$source_anchor<-""
+   candidates_df<-rbind(candidates_df,do.call(rbind,extra))
+  }
+ }
  dir.create(output_dir,recursive=TRUE,showWarnings=FALSE)
  cases_path<-file.path(output_dir,"all_cases_both_searches.csv")
  candidates_path<-file.path(output_dir,"all_candidate_mechanisms_both_searches.csv")
