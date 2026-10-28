@@ -98,7 +98,7 @@ export_ostara_all_cases_candidates <- function(
  # distinct provenance and evidence. Do not collapse into W07 suggestions.
  supplement_root<-file.path(map,"reports","mechanism_review")
  supplement_files<-list.files(supplement_root,
-   pattern="^mechanism_assessments\\\\.jsonl$",recursive=TRUE,full.names=TRUE)
+   pattern="^mechanism_assessments\\.jsonl$",recursive=TRUE,full.names=TRUE)
  if(length(supplement_files)>1L) {
    timestamps<-file.info(supplement_files)$mtime
    supplement_files<-supplement_files[which(timestamps==max(timestamps))]
