@@ -89,3 +89,22 @@ export(run_preextraction_eligibility)
 export(combine_ostara_search_atlases)
 
 export(publish_ostara_mechanisms)
+
+export(reconcile_ostara_mechanisms)
+
+export(reconcile_ostara_novelty)
+
+export(prepare_ostara_mechanism_review)
+export(prepare_ostara_fulltext_candidates)
+
+export(finalise_ostara_mechanism_review)
+
+export(prepare_ostara_mechanism_review_for_map)
+
+export(finalise_ostara_mechanism_review_for_map)
+export(publish_ostara_mechanism_feedback)
+
+export(extract_ostara_fulltext_mechanisms)
+export(prepare_ostara_supplement_review)
+
+export(export_ostara_all_cases_candidates)

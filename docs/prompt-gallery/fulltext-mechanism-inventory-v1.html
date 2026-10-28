@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>W09 · Comprehensive mechanism inventory · Ostara</title><style>*{box-sizing:border-box}body{margin:0;background:#f9fbfa;color:#17313d;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.72}header{background:linear-gradient(120deg,#153645,#216458);color:white;padding:55px max(24px,calc((100vw - 900px)/2)) 60px}.eyebrow{text-transform:uppercase;letter-spacing:.16em;color:#c4e8db;font-size:12px;font-weight:800}h1{font-size:clamp(29px,4vw,44px);letter-spacing:-.035em;line-height:1.16;margin:14px 0 12px}header p{font-size:14px;color:#cbe4dc}main{max-width:900px;padding:40px 24px 80px;margin:auto}.prompt{padding:12px 6px}h2{font-size:18px;line-height:1.45;font-weight:780;letter-spacing:.008em;margin:34px 0 10px;color:#1d5349}h2:first-child{margin-top:0}.prompt-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15.5px;line-height:1.8;margin:0 0 20px}.back{display:inline-flex;align-items:center;gap:8px;padding:10px 17px;border:1px solid #bbd6ce;background:white;color:#145f4f;border-radius:9px;text-decoration:none;font-weight:700;font-size:14px}.back:hover{background:#e4f3ed}.foot{margin-top:45px;padding-top:22px;border-top:1px solid #d9e6e1;color:#5c7270;font-size:13px}@media print{header{background:white;color:#17313d;padding:25px}.eyebrow,header p{color:#597}.back{display:none}}</style></head><body><header><a class="back" href="../index.html">← Back to prompt gallery</a><div class="eyebrow" style="margin-top:32px">OSTARA / ARCHIVED MODEL INSTRUCTIONS</div><h1>W09 · Comprehensive mechanism inventory</h1><p>Versioned prompt source: inst/w09/fulltext_mechanisms_supplement_v1.txt</p></header><main><article class="prompt"><p class="prompt-text">OSTARA W09 SUPPLEMENTARY FULL-TEXT MECHANISM INVENTORY v1
+You are coding already retrieved scholarly full texts about collective action
+in commodity supply chains. Return one JSON object, no markdown.</p>
+<p class="prompt-text">Evaluate EVERY approved ontology mechanism in approved_ontology (not only
+abstract-assigned mechanisms). Use EXACT mechanism_id values from the table.
+Use the entire supplied fulltext, not solely its abstract. Do not infer
+absence of a mechanism merely because the abstract omits it.</p>
+<p class="prompt-text">For each approved mechanism classify status:
+- implemented_case: direct source support that at least one described
+  initiative/case actually uses this mechanism
+- mentioned_only: discussed as context/theory or comparative mechanism,
+  but not shown to operate in an extracted case
+- proposed_only: prospective, recommended or hypothetical application only
+- not_identified: no relevant description found in this full text
+- unclear: relevant text is ambiguous</p>
+<p class="prompt-text">Use at most one status per ontology ID. For all positive/unclear statuses
+provide a verbatim short source_quote and its exact [PAGE n], [SECTION n] or
+[TEXT BLOCK n] source_anchor. Never fabricate quotes or print page numbers
+for XML/JSON. Provide case_ids only for implemented_case. Match case_ids
+from eligible_case_ids ONLY. Other IDs in existing_w09_cases are not eligible\nand must not be used for implemented mechanisms or novel case proposals.\nDo not invent new IDs. A publication can mention
+mechanisms outside its cases; keep those separate.</p>
+<p class="prompt-text">For every original W07 novel proposal in w07_abstract_novelty explicitly
+assess full-text support: confirmed_novel, refined_novel,
+covered_by_existing, rejected or uncertain. Identify exactly which
+approved ontology code subsumes a proposal, if applicable. Give a quote and
+anchor for positive decisions. Do not silently turn a novel mechanism
+proposal into an approved code.</p>
+<p class="prompt-text">Independently propose truly NEW mechanisms in new_novelty only when they
+are not covered by ANY approved ontology mechanism and are demonstrated
+in a case. Explain the novelty in relation to closest existing codes.
+Each proposal requires a full-text quote and source anchor and existing
+case ID. If a proposal is also one of the abstract suggestions, link to it
+in abstract_novelty_validation rather than double-count it.</p>
+<p class="prompt-text">This is extraction, not final adjudication. Human review will determine
+actual case eligibility, supported coding and ontology changes.
+Do not extract effectiveness or impact conclusions.</p>
+<p class="prompt-text">JSON structure (all arrays mandatory):
+{
+ &quot;record_id&quot;:&quot;input record ID&quot;,
+ &quot;mechanism_inventory&quot;:[
+   {&quot;mechanism_id&quot;:&quot;approved code&quot;,&quot;status&quot;:&quot;implemented_case | mentioned_only | proposed_only | not_identified | unclear&quot;,
+    &quot;case_ids&quot;:[&quot;existing W09 case ID&quot;],&quot;source_quote&quot;:&quot;&quot;,&quot;source_anchor&quot;:&quot;&quot;,&quot;reason&quot;:&quot;&quot;}
+ ],
+ &quot;abstract_novelty_validation&quot;:[
+   {&quot;abstract_candidate_id&quot;:&quot;original W07 candidate ID or stable ordinal&quot;,
+    &quot;original_proposal&quot;:&quot;&quot;,&quot;status&quot;:&quot;confirmed_novel | refined_novel | covered_by_existing | rejected | uncertain&quot;,
+    &quot;closest_approved_mechanism_id&quot;:&quot;&quot;,&quot;revised_label&quot;:&quot;&quot;,&quot;revised_definition&quot;:&quot;&quot;,
+    &quot;case_ids&quot;:[],&quot;source_quote&quot;:&quot;&quot;,&quot;source_anchor&quot;:&quot;&quot;,&quot;reason&quot;:&quot;&quot;}
+ ],
+ &quot;new_novelty&quot;:[
+   {&quot;proposed_label&quot;:&quot;&quot;,&quot;working_definition&quot;:&quot;&quot;,&quot;closest_approved_mechanism_id&quot;:&quot;&quot;,
+    &quot;case_ids&quot;:[],&quot;source_quote&quot;:&quot;&quot;,&quot;source_anchor&quot;:&quot;&quot;,&quot;reason&quot;:&quot;&quot;}
+ ]
+}</p></article><div class="foot"><a class="back" href="../index.html">← Back to prompt gallery</a><p>Verbatim wording; headings are presented typographically without section numbering.</p></div></main></body></html>

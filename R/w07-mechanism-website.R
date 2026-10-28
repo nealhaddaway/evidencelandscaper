@@ -7,9 +7,11 @@
 #' @param expanded_w07 Full W07 run directory for the expanded search.
 #' @param output_file Optional HTML destination.
 #' @param harmonised_csv Optional independently reviewed, harmonised mechanism dataset.
+#' @param fulltext_harmonised_csv Optional reviewed case-full-text proposals, in the same schema as harmonised_csv.
+#' @param fulltext_candidates_csv Optional source suggestions with candidate_id, source_search, original_description, original_gap_reason and case_id.
 #' @return Path to a standalone HTML page.
 #' @export
-publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL,harmonised_csv=NULL) {
+publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL,harmonised_csv=NULL,fulltext_harmonised_csv=NULL,fulltext_candidates_csv=NULL) {
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
   readjl<-function(p)lapply(Filter(nzchar,readLines(p,warn=FALSE,encoding="UTF-8")),
                             jsonlite::fromJSON,simplifyVector=FALSE)
@@ -53,7 +55,7 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
   tcount<-tally(targeted);ecount<-tally(expanded)
   value<-function(x)if(is.null(x)||!length(x))"" else
     paste(as.character(unlist(x,use.names=FALSE)),collapse="; ")
-  category_field<-intersect(c("category_label","category_name","category_title","category_source_label"),names(onto))
+  category_field<-intersect(c("category","category_label","category_name","category_title","category_source_label"),names(onto))
   category_names<-setNames(vapply(unique(onto$category_id),function(id){
     z<-onto[onto$category_id==id,,drop=FALSE]
     if(length(category_field)){
@@ -110,7 +112,94 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
         stop("Invalid hierarchy action in row ",i)
       harmonised[[i]]<-lapply(row,as.character)
     }
+    # Validate the complete original-source mapping, not only per-row links.
+    linked_all<-unlist(lapply(harmonised,function(row)
+      trimws(strsplit(row$source_candidate_ids,";",fixed=TRUE)[[1L]])),use.names=FALSE)
+    if(length(linked_all)!=length(ids)||anyDuplicated(linked_all)||
+       !setequal(linked_all,ids))
+      stop("Harmonised proposals must map all original W07 suggestions exactly once.")
+    if("parent_category_code"%in%names(review)) {
+      approved_categories<-unique(as.character(onto$category_id))
+      for(i in seq_len(nrow(review))) {
+        cat_code<-trimws(as.character(review$parent_category_code[[i]]))
+        new_parent<-if("proposed_new_parent_category"%in%names(review))
+          trimws(as.character(review$proposed_new_parent_category[[i]])) else ""
+        closest<-if("closest_existing_mechanism_code"%in%names(review))
+          trimws(as.character(review$closest_existing_mechanism_code[[i]])) else ""
+        action<-as.character(review$hierarchy_action[[i]])
+        if((nzchar(cat_code)==nzchar(new_parent))||
+           (nzchar(cat_code)&&!cat_code%in%approved_categories))
+          stop("Exactly one valid existing or proposed parent category required, row ",i)
+        if(nzchar(closest)&&!closest%in%known)
+          stop("Unknown approved mechanism code in row ",i)
+        if(action%in%c("existing_mechanism","refine_existing")&&!nzchar(closest))
+          stop("Existing/refined mechanism requires its approved code, row ",i)
+        if(action=="new_higher_level")
+          stop("A harmonised candidate must be a lower-level mechanism, row ",i)
+      }
+    }
     harmonised_hash<-sha(harmonised_csv)
+  }
+  fulltext_harmonised<-list()
+  fulltext_candidates<-list()
+  ft_hashes<-character()
+  if(!is.null(fulltext_candidates_csv)) {
+    p<-normalizePath(fulltext_candidates_csv,mustWork=TRUE)
+    ft<-utils::read.csv(p,stringsAsFactors=FALSE,check.names=FALSE)
+    req<-c("candidate_id","source_search","original_description","original_gap_reason","case_id")
+    if(!all(req%in%names(ft)))stop("Missing full-text candidate fields: ",
+      paste(setdiff(req,names(ft)),collapse=", "))
+    if(anyDuplicated(ft$candidate_id)||any(!nzchar(trimws(ft$candidate_id)))||
+       any(!nzchar(trimws(ft$case_id))))
+      stop("Full-text candidates require unique IDs and nonblank case links")
+    fulltext_candidates<-lapply(seq_len(nrow(ft)),function(i) {
+      z<-ft[i,,drop=FALSE]
+      list(id=z$candidate_id[[1]],source=z$source_search[[1]],
+           description=z$original_description[[1]],
+           reason=z$original_gap_reason[[1]],
+           case_id=z$case_id[[1]],stage="")
+    })
+    ft_hashes<-c(ft_hashes,sha(p))
+  }
+  if(!is.null(fulltext_harmonised_csv)) {
+    if(!length(fulltext_candidates))
+      stop("Full-text harmonised data requires its source-candidate CSV")
+    p<-normalizePath(fulltext_harmonised_csv,mustWork=TRUE)
+    ft<-utils::read.csv(p,stringsAsFactors=FALSE,check.names=FALSE)
+    req<-c("proposal_id","proposed_label","working_definition","hierarchy_action",
+           "source_candidate_ids","review_status","parent_category_code",
+           "proposed_new_parent_category")
+    if(!all(req%in%names(ft)))stop("Missing full-text harmonisation fields: ",
+      paste(setdiff(req,names(ft)),collapse=", "))
+    candidate_ids<-vapply(fulltext_candidates,function(x)x$id,character(1))
+    seen<-character()
+    for(i in seq_len(nrow(ft))) {
+      z<-as.list(ft[i,,drop=FALSE])
+      links<-trimws(strsplit(z$source_candidate_ids,";",fixed=TRUE)[[1]])
+      if(any(!links%in%candidate_ids)||anyDuplicated(links))
+        stop("Unknown or duplicate source candidate in full-text proposal ",i)
+      seen<-c(seen,links)
+      code<-trimws(z$parent_category_code)
+      proposed<-trimws(z$proposed_new_parent_category)
+      if(nzchar(code)==nzchar(proposed)||
+         (nzchar(code)&&!code%in%unique(onto$category_id)))
+        stop("Invalid parent hierarchy in full-text proposal ",i)
+      closest<-if("closest_existing_mechanism_code"%in%names(ft))
+        trimws(z$closest_existing_mechanism_code) else ""
+      if(nzchar(closest)&&!closest%in%known)
+        stop("Unknown closest approved mechanism code in full-text proposal ",i)
+      if(z$hierarchy_action%in%c("existing_mechanism","refine_existing")&&
+         !nzchar(closest))
+        stop("Full-text proposal requires approved mechanism code in row ",i)
+      if(z$review_status=="pending_harmonisation")
+        stop("Full-text harmonisation must be reviewed before publication, row ",i)
+      if(!z$hierarchy_action%in%c("existing_mechanism","refine_existing","new_lower_level"))
+        stop("Invalid full-text hierarchy action in row ",i)
+      fulltext_harmonised[[i]]<-lapply(z,as.character)
+    }
+    if(anyDuplicated(seen)||!setequal(seen,candidate_ids))
+      stop("Every full-text source candidate must map to exactly one proposal")
+    ft_hashes<-c(ft_hashes,sha(p))
   }
   source_table<-data.frame(
     candidate_id=vapply(candidates,function(z)z$id,character(1)),
@@ -121,6 +210,7 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
     stringsAsFactors=FALSE)
   data<-list(schema="ostara-mechanism-meeting-v1",
     ontology=onto_rows,candidates=candidates,harmonised=harmonised,
+    fulltext_candidates=fulltext_candidates,fulltext_harmonised=fulltext_harmonised,
     ontology_sha256=targeted$ont_hash,
     sources=list(targeted=list(path=targeted$folder,records=length(targeted$records),
                                coding_sha256=targeted$coding_hash),
@@ -136,7 +226,7 @@ publish_ostara_mechanisms <- function(targeted_w07,expanded_w07,output_file=NULL
     dir<-file.path(dirname(dirname(dirname(targeted$folder))),"reports","mechanism_typology")
     dir.create(dir,recursive=TRUE,showWarnings=FALSE)
     key<-substr(digest::digest(c(targeted$ont_hash,targeted$coding_hash,
-      expanded$coding_hash,harmonised_hash,sha(template)),algo="sha256"),1L,12L)
+      expanded$coding_hash,harmonised_hash,ft_hashes,sha(template)),algo="sha256"),1L,12L)
     output_file<-file.path(dir,paste0("ostara_mechanisms_",key,".html"))
   } else {
     dir.create(dirname(output_file),recursive=TRUE,showWarnings=FALSE)

@@ -1,0 +1,48 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>W08 · Abstract-level case detection · Ostara</title><style>*{box-sizing:border-box}body{margin:0;background:#f9fbfa;color:#17313d;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.72}header{background:linear-gradient(120deg,#153645,#216458);color:white;padding:55px max(24px,calc((100vw - 900px)/2)) 60px}.eyebrow{text-transform:uppercase;letter-spacing:.16em;color:#c4e8db;font-size:12px;font-weight:800}h1{font-size:clamp(29px,4vw,44px);letter-spacing:-.035em;line-height:1.16;margin:14px 0 12px}header p{font-size:14px;color:#cbe4dc}main{max-width:900px;padding:40px 24px 80px;margin:auto}.prompt{padding:12px 6px}h2{font-size:18px;line-height:1.45;font-weight:780;letter-spacing:.008em;margin:34px 0 10px;color:#1d5349}h2:first-child{margin-top:0}.prompt-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:15.5px;line-height:1.8;margin:0 0 20px}.back{display:inline-flex;align-items:center;gap:8px;padding:10px 17px;border:1px solid #bbd6ce;background:white;color:#145f4f;border-radius:9px;text-decoration:none;font-weight:700;font-size:14px}.back:hover{background:#e4f3ed}.foot{margin-top:45px;padding-top:22px;border-top:1px solid #d9e6e1;color:#5c7270;font-size:13px}@media print{header{background:white;color:#17313d;padding:25px}.eyebrow,header p{color:#597}.back{display:none}}</style></head><body><header><a class="back" href="../index.html">← Back to prompt gallery</a><div class="eyebrow" style="margin-top:32px">OSTARA / ARCHIVED MODEL INSTRUCTIONS</div><h1>W08 · Abstract-level case detection</h1><p>Versioned prompt source: inst/w08/case_identification_prompt_v2.txt</p></header><main><article class="prompt"><h2>W08 ABSTRACT-LEVEL CASE IDENTIFICATION — V2 (23 OCTOBER 2026)</h2>
+<h2>PURPOSE</h2><p class="prompt-text">Identify distinct, potentially relevant REAL-WORLD CASES of collective action for environmental or social sustainability from a publication's title, abstract and keywords. This is candidate detection for targeted full-text verification, not mechanism coding, outcome evaluation, or proof that a case exists.</p>
+<h2>DEFINITIONS</h2><p class="prompt-text">A specific collective-action case is a distinguishable real-world arrangement in which two or more actors, actor groups or organisations deliberately coordinate activities, commitments, decisions, governance or resources towards an environmental or social sustainability objective. An initiative can be unnamed where its actors, activity and setting distinguish it. Implementation is not essential: clearly described proposed arrangements can be candidates, but must be explicitly labelled proposed.</p>
+<h2>IMPORTANT BOUNDARIES</h2><p class="prompt-text">- A named organisation, business, cooperative, project, programme, research study, country or campaign is NOT automatically a collective-action case.
+- Distinguish the arrangement being studied from researchers' data collection, research partnerships, knowledge-transfer activities or the organisation carrying out the study.
+- A business selling services to customers is not automatically a collaborative arrangement: identify actual coordination among participating actors.
+- Generic social mobilisation, an aspiration to collaborate, or an unexplained named initiative is not sufficient without evidence relevant to the review's sustainability and coordination scope.
+- A project or programme is eligible only if the supplied text describes coordinated real-world collective action, rather than merely study activities, a technology, or a proposed recommendation.
+- A single study can describe multiple genuinely distinct cases. Do not split components of one initiative into separate cases without evidence of distinct arrangements.
+- Do not infer achievements or effectiveness from objectives, programme membership, or intentions.
+- Do not guess named actors, implementation, country, initiative name or claimed outcomes. Never treat authors' affiliations as a case location.
+- Cite a brief EXACT quotation from the supplied title/abstract as supporting evidence. Do not invent verbatim text.
+- Keep two confidence judgments separate: (1) confidence that a distinguishable case exists, and (2) confidence that it describes relevant coordinated sustainability action.
+- Where the case is distinguishable but collective action is insufficiently evidenced, classify it as unclear rather than confirmed; preserve a candidate for full-text checking if warranted.
+- This is publication-level screening with a repeatable array of case candidates, NOT cross-publication deduplication.</p>
+<h2>CLASSIFICATION</h2><p class="prompt-text">specific_case: Exactly one distinguishable arrangement with sufficiently supported collective sustainability action.
+multiple_cases: At least two distinguishable arrangements each with sufficiently supported collective sustainability action.
+no_identifiable_case: No sufficiently identifiable case or plausible distinguishable case to verify in full text.
+unclear: A distinguishable initiative may be present but its actual collective coordination, sustainability purpose, or identity cannot be established confidently from this abstract.</p>
+<h2>FULL TEXT PRIORITY</h2><p class="prompt-text">High: Specific relevant case(s), or particularly informative ambiguous case(s), with source detail likely useful for verification.
+Medium: Plausible but less clearly supported candidates.
+Low: No identifiable case evidence or insufficiently informative material.
+Priority reflects verification usefulness, NOT success, desirability or effectiveness.</p>
+<h2>RETURN ONLY VALID JSON</h2><p class="prompt-text">{
+  &quot;record_id&quot;: &quot;exact supplied ID&quot;,
+  &quot;case_evidence_status&quot;: &quot;specific_case | multiple_cases | no_identifiable_case | unclear&quot;,
+  &quot;cases&quot;: [
+    {
+      &quot;case_name&quot;: null,
+      &quot;case_description&quot;: &quot;short distinguishing description&quot;,
+      &quot;case_location&quot;: null,
+      &quot;case_sector&quot;: null,
+      &quot;implementation_status&quot;: &quot;implemented | proposed | historical | unclear&quot;,
+      &quot;supporting_evidence&quot;: &quot;short exact text from supplied title or abstract&quot;,
+      &quot;confidence&quot;: &quot;high | medium | low&quot;,
+      &quot;collective_action_confidence&quot;: &quot;high | medium | low&quot;,
+      &quot;collective_action_basis&quot;: &quot;what evidence supports or leaves unclear actor coordination and sustainability purpose&quot;,
+      &quot;case_kind&quot;: &quot;collective_arrangement | research_activity | commercial_service | social_mobilisation | other_unclear&quot;
+    }
+  ],
+  &quot;fulltext_priority&quot;: &quot;high | medium | low&quot;,
+  &quot;assessment_reason&quot;: &quot;short evidence-based reason&quot;
+}</p>
+<h2>CONSISTENCY RULES</h2><p class="prompt-text">- specific_case: exactly one case; multiple_cases: at least two cases; no_identifiable_case: zero cases; unclear: zero or one candidate case.
+- Only use specific_case or multiple_cases if collective action is supported by the supplied text.
+- For unclear cases, use an explicit reason for uncertainty, particularly a potential research-project/business/initiative confusion.
+- case_name, case_location, case_sector may be null. All other specified case fields must be present.
+- Do not consult external information, assign ontology codes, or judge causal impacts.</p></article><div class="foot"><a class="back" href="../index.html">← Back to prompt gallery</a><p>Verbatim wording; headings are presented typographically without section numbering.</p></div></main></body></html>
