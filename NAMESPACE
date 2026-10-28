@@ -106,3 +106,5 @@ export(publish_ostara_mechanism_feedback)
 
 export(extract_ostara_fulltext_mechanisms)
 export(prepare_ostara_supplement_review)
+
+export(export_ostara_all_cases_candidates)
