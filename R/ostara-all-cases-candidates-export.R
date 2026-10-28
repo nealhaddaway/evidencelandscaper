@@ -60,9 +60,32 @@ export_ostara_all_cases_candidates <- function(
  selected<-list()
  for(prefix in c("full-170-","full-631-")){
   matches<-runs[startsWith(basename(runs),prefix)]
-  if(length(matches)!=1L)stop("Expected exactly one completed W07 ",prefix,
-                                " archive; found ",length(matches))
-  selected[[prefix]]<-matches[[1L]]
+  if(!length(matches))stop("No completed W07 ",prefix," archive found")
+  # Require the archived coding and ontology to match their own manifests.
+  verified<-vapply(matches,function(d) {
+    m<-tryCatch(jsonlite::fromJSON(file.path(d,"manifest.json"),
+                                    simplifyVector=FALSE),error=function(e)NULL)
+    summary<-tryCatch(jsonlite::fromJSON(file.path(d,"summary.json"),
+                                          simplifyVector=FALSE),error=function(e)NULL)
+    ontology<-file.path(d,"ontology.csv")
+    !is.null(m)&&!is.null(summary)&&file.exists(ontology)&&
+      identical(m$ontology_sha256,sha(ontology))&&
+      identical(summary$coding_sha256,sha(file.path(d,"coding.jsonl")))
+  },logical(1))
+  matches<-matches[verified]
+  if(!length(matches))stop("No checksum-verified W07 ",prefix," archive found")
+  # Prefer the latest completed archive. This does not mix rows from runs.
+  stamp<-file.info(file.path(matches,"summary.json"))$mtime
+  if(anyNA(stamp))stop("Cannot date W07 archive summaries")
+  top<-matches[stamp==max(stamp)]
+  if(length(top)>1L){
+    signatures<-vapply(top,function(d)
+      sha(file.path(d,"coding.jsonl")),character(1))
+    if(length(unique(signatures))>1L)
+      stop("Tied latest W07 ",prefix," runs have conflicting coding")
+  }
+  selected[[prefix]]<-sort(top)[[1L]]
+  message("Selected ",prefix,": ",basename(selected[[prefix]]))
  }
  readjl<-function(p)lapply(Filter(nzchar,readLines(p,warn=FALSE,encoding="UTF-8")),
                       jsonlite::fromJSON,simplifyVector=FALSE)
