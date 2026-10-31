@@ -36,7 +36,7 @@ screening_prompt <- NULL
 w07_prompt <- NULL
 ontology_file <- NULL
 w08_prompt <- NULL
-# Legacy Ostara full-text mechanism review only (see stage 08).
+# Optional explicit review path. Stage 08 verifies it belongs to this named run.
 mechanism_review_dir <- NULL
 mechanism_supplement_dir <- NULL
 message("Map: ", map," | Search: ",run_name)
