@@ -10,9 +10,14 @@ if (!(s$status %in% c("extracted","published")))
 
 # Construct a provenance-verified review baseline with NO auto-approval.
 # Reuses an identical existing review, preserving edits.
-if (is.null(mechanism_review_dir))
-  mechanism_review_dir <- prepare_ostara_mechanism_review_from_run(
-    run_name=run_name,map=map)
+expected_review <- prepare_ostara_mechanism_review_from_run(
+  run_name=run_name,map=map)
+if (!is.null(mechanism_review_dir) &&
+    !identical(normalizePath(mechanism_review_dir,mustWork=TRUE),
+               normalizePath(expected_review,mustWork=TRUE)))
+  stop("Configured mechanism_review_dir belongs to a different dataset. ",
+       "Do not mix searches or legacy W10 reviews with this named run.")
+mechanism_review_dir <- expected_review
 
 message("Mechanism source review: ", mechanism_review_dir)
 if (!dir.exists(mechanism_review_dir))
