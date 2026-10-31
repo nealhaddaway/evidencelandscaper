@@ -15,24 +15,55 @@ extract_ostara_fulltext_mechanisms <- function(
   if(!file.exists(man))stop("Mechanism-review manifest not found")
   meta<-jsonlite::fromJSON(man,simplifyVector=FALSE)
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
-  # Resolve the original W09 source by checksum, never by most recent folder.
-  p<-dirname(dirname(dirname(review_dir)))
-  roots<-list.files(file.path(p,"runs","W09"),
-                    pattern="^fulltext_case_registry_normalised\\.jsonl$",
-                    recursive=TRUE,full.names=TRUE)
-  roots<-roots[vapply(roots,function(f)
-    identical(sha(f),meta$w09_registry_sha256),logical(1))]
-  if(length(roots)!=1L)stop("Cannot resolve exactly one original W09 registry by checksum")
-  registry<-roots[[1L]]
-  extract_dir<-dirname(registry)
-  # The W09 pilot always contains retrieval_queue.csv; locate its ancestor.
-  parent<-extract_dir
-  while(!file.exists(file.path(parent,"retrieval_queue.csv"))) {
-    next_parent<-dirname(parent)
-    if(identical(next_parent,parent))stop("W09 retrieval queue not found")
-    parent<-next_parent
+  eligibility_first<-identical(meta$mode,"eligibility_first")
+  if(eligibility_first) {
+    extract_dir<-normalizePath(meta$extraction_dir,mustWork=TRUE)
+    registry<-file.path(extract_dir,"fulltext_case_registry_normalised.jsonl")
+    w09<-normalizePath(meta$w09,mustWork=TRUE)
+    if(!file.exists(registry)||
+       !identical(sha(registry),meta$w09_registry_sha256)||
+       !file.exists(file.path(w09,"retrieval_queue.csv")))
+      stop("Original W09 source missing or checksum changed")
+    wm<-jsonlite::fromJSON(file.path(extract_dir,"manifest.json"),
+                            simplifyVector=FALSE)
+    if(!identical(wm$eligibility_ledger_sha256,
+                  meta$eligibility_final_sha256))
+      stop("W09 extraction not linked to approved eligibility")
+    map<-dirname(dirname(dirname(w09)))
+    state_file<-file.path(map,"runs","orchestrated",meta$run_name,"state.json")
+    if(!file.exists(state_file))stop("Named run state missing")
+    state<-jsonlite::fromJSON(state_file,simplifyVector=FALSE)
+    if(!identical(normalizePath(state$w09$extraction_dir,mustWork=TRUE),
+                  extract_dir))
+      stop("Named run extraction directory changed")
+    original_path<-file.path(state$preextraction$run,
+                              "candidate_case_decisions.jsonl")
+    final_path<-file.path(state$preextraction$run,
+                           "final_case_eligibility.csv")
+    if(!all(file.exists(c(original_path,final_path)))||
+       !identical(sha(original_path),meta$eligibility_ledger_sha256)||
+       !identical(sha(final_path),meta$eligibility_final_sha256))
+      stop("Approved eligibility records changed")
+  } else {
+    # Preserve the legacy W09/W10 provenance path unchanged.
+    p<-dirname(dirname(dirname(review_dir)))
+    roots<-list.files(file.path(p,"runs","W09"),
+                      pattern="^fulltext_case_registry_normalised\\.jsonl$",
+                      recursive=TRUE,full.names=TRUE)
+    roots<-roots[vapply(roots,function(f)
+      identical(sha(f),meta$w09_registry_sha256),logical(1))]
+    if(length(roots)!=1L)
+      stop("Cannot resolve exactly one original W09 registry by checksum")
+    registry<-roots[[1L]]
+    extract_dir<-dirname(registry)
+    parent<-extract_dir
+    while(!file.exists(file.path(parent,"retrieval_queue.csv"))) {
+      next_parent<-dirname(parent)
+      if(identical(next_parent,parent))stop("W09 retrieval queue not found")
+      parent<-next_parent
+    }
+    w09<-parent
   }
-  w09<-parent
   w07<-meta$w07_run
   if(is.null(w07)||!dir.exists(w07))stop("Reviewed W09 record has no archived W07 run")
   onto_path<-file.path(w07,"ontology.csv")
@@ -46,38 +77,60 @@ extract_ostara_fulltext_mechanisms <- function(
   coding<-readjl(coded_path)
   coded<-setNames(coding,vapply(coding,function(z)z$record_id,character(1)))
   records<-readjl(registry)
-  # Use the actual completed W10 eligibility ledger, not merely mechanism
-  # review rows: zero-mechanism publications must still be analysed.
-  w10files<-list.files(dirname(extract_dir),pattern="^w10_decisions\\.jsonl$",
-    recursive=TRUE,full.names=TRUE)
-  w10files<-w10files[vapply(w10files,function(f)
-    identical(sha(f),meta$w10_eligibility_sha256),logical(1))]
-  if(length(w10files)!=1L)
-    stop("Cannot locate the exact W10 eligibility ledger from review provenance")
-  first<-readjl(w10files[[1L]])
-  decision<-setNames(vapply(first,function(z)z$overall,character(1)),
-    vapply(first,function(z)z$observation_id,character(1)))
-  if(anyDuplicated(names(decision)))stop("Duplicate W10 observation decisions")
-  if(!is.null(meta$second_pass_dir)) {
-    second_path<-file.path(meta$second_pass_dir,"fulltext_decisions.jsonl")
-    if(!file.exists(second_path))stop("Missing archived W10 second-pass decisions")
-    for(z in readjl(second_path)) {
-      if(!z$observation_id%in%names(decision))
-        stop("Second-pass W10 assessment has unknown observation")
-      decision[[z$observation_id]]<-z$overall
+  records<-readjl(registry)
+  if(eligibility_first) {
+    audit<-utils::read.csv(final_path,colClasses="character",
+                           stringsAsFactors=FALSE)
+    approved<-audit[audit$decision=="eligible",
+                    c("record_id","case_id"),drop=FALSE]
+    eligible_observations<-as.character(approved$case_id)
+    ids<-unique(as.character(approved$record_id))
+    if(!length(ids)||anyDuplicated(eligible_observations)||
+       !setequal(ids,vapply(records,function(z)z$record_id,character(1))))
+      stop("Approved eligibility and W09 publication IDs differ")
+    for(z in records) {
+      actual<-vapply(z$cases,function(ca)
+        if(is.null(ca$eligibility_case_id))"" else
+          as.character(ca$eligibility_case_id),character(1))
+      expected<-eligible_observations[approved$record_id==z$record_id]
+      if(anyDuplicated(actual)||!setequal(actual,expected))
+        stop("Extracted case IDs differ from approved cases: ",z$record_id)
     }
+  } else {
+    w10files<-list.files(dirname(extract_dir),
+      pattern="^w10_decisions\\.jsonl$",recursive=TRUE,full.names=TRUE)
+    w10files<-w10files[vapply(w10files,function(f)
+      identical(sha(f),meta$w10_eligibility_sha256),logical(1))]
+    if(length(w10files)!=1L)
+      stop("Cannot locate exact W10 eligibility ledger from provenance")
+    first<-readjl(w10files[[1L]])
+    decision<-setNames(vapply(first,function(z)z$overall,character(1)),
+      vapply(first,function(z)z$observation_id,character(1)))
+    if(anyDuplicated(names(decision)))
+      stop("Duplicate W10 observation decisions")
+    if(!is.null(meta$second_pass_dir)) {
+      second_path<-file.path(meta$second_pass_dir,"fulltext_decisions.jsonl")
+      if(!file.exists(second_path))
+        stop("Missing archived W10 second-pass decisions")
+      for(z in readjl(second_path)) {
+        if(!z$observation_id%in%names(decision))
+          stop("Second-pass W10 assessment has unknown observation")
+        decision[[z$observation_id]]<-z$overall
+      }
+    }
+    eligible_observations<-names(decision)[decision=="eligible"]
+    ids<-unique(sub("-case-[0-9]{3}$","",eligible_observations))
+    if(any(!grepl("-case-[0-9]{3}$",eligible_observations)))
+      stop("Unexpected W10 case identifier format")
+    if(any(!ids%in%vapply(records,function(z)z$record_id,character(1))))
+      stop("Review records inconsistent with W09")
   }
-  eligible_observations<-names(decision)[decision=="eligible"]
-  ids<-unique(sub("-case-[0-9]{3}$","",eligible_observations))
-  if(any(!grepl("-case-[0-9]{3}$",eligible_observations)))
-    stop("Unexpected W10 case identifier format")
-  if(any(!ids%in%vapply(records,function(z)z$record_id,character(1))))
-    stop("Review records inconsistent with W09")
-  records<-setNames(records,vapply(records,function(z)z$record_id,character(1)))
+  records<-setNames(records,vapply(records,function(z)z$record_id,
+                                   character(1)))
   if(!is.numeric(max_records)||length(max_records)!=1L||
      is.na(max_records)||max_records<0||max_records!=as.integer(max_records))
     stop("max_records must be a nonnegative integer")
-  if(!length(ids))stop("No W10-eligible case publications in current review")
+  if(!length(ids))stop("No eligible case publications in current review")
   prompt_path<-system.file("w09","fulltext_mechanisms_supplement_v1.txt",
                             package="evidencelandscaper")
   if(!nzchar(prompt_path))stop("Supplemental extraction prompt missing")
@@ -90,6 +143,11 @@ extract_ostara_fulltext_mechanisms <- function(
     w09_registry_sha256=sha(registry),w07_ontology_sha256=sha(onto_path),
     w07_coding_sha256=sha(coded_path),prompt_sha256=sha(prompt_path),
     model=model,eligible_record_ids=as.list(ids))
+  if(eligibility_first) {
+    manifest$eligibility_mode<-"eligibility_first"
+    manifest$eligibility_ledger_sha256<-meta$eligibility_ledger_sha256
+    manifest$eligibility_final_sha256<-meta$eligibility_final_sha256
+  }
   if(file.exists(manifest_path)) {
     old<-jsonlite::fromJSON(manifest_path,simplifyVector=FALSE)
     for(k in names(manifest))if(!identical(manifest[[k]],old[[k]]))
@@ -120,14 +178,18 @@ extract_ostara_fulltext_mechanisms <- function(
     codes<-if(is.null(original$mechanisms))character() else
       vapply(original$mechanisms,function(m)m$mechanism_id,character(1))
     cases<-records[[id]]$cases
-    case_whitelist<-eligible_observations[startsWith(eligible_observations,paste0(id,"-case-"))]
+    case_whitelist<-if(eligibility_first)
+      eligible_observations[approved$record_id==id] else
+      eligible_observations[startsWith(eligible_observations,paste0(id,"-case-"))]
     input<-list(record_id=id,eligible_case_ids=as.list(case_whitelist),
       approved_ontology=utils::capture.output(utils::write.csv(onto,row.names=FALSE)),
       w07_abstract_mechanism_ids=as.list(codes),
       w07_abstract_novelty=original$proposed_new_mechanism,
       existing_w09_ontology_gaps=records[[id]]$ontology_gaps,
       existing_w09_cases=lapply(seq_along(cases),function(j)
-        list(case_id=paste0(id,"-case-",sprintf("%03d",j)),
+        list(case_id=if(eligibility_first)
+               cases[[j]]$eligibility_case_id else
+               paste0(id,"-case-",sprintf("%03d",j)),
              case_name=cases[[j]]$case_name,
              case_description=cases[[j]]$case_description)),
       fulltext=source$text)
@@ -171,7 +233,7 @@ extract_ostara_fulltext_mechanisms <- function(
           ids_for_entry<-candidate_case_ids(entry)
           if(status=="implemented_case") {
             if(!length(ids_for_entry)||any(!ids_for_entry%in%case_whitelist))
-              stop("Implemented mechanism has no W10-eligible case")
+              stop("Implemented mechanism has no approved eligible case")
           } else if(length(ids_for_entry))stop("Nonimplemented mechanism linked to cases")
           if(status%in%c("implemented_case","mentioned_only","proposed_only")&&
              (!nzchar(scalar(entry$source_quote))||
