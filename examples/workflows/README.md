@@ -76,10 +76,9 @@ algorithms, prompts, and archived search data.
 - For newly created named searches the W09 path applies full-text case
   eligibility **before** detailed extraction. Existing Ostara runs may use
   the earlier W09-extraction-then-W10-eligibility path.
-- Stage 08 does **not** automatically follow a new run. The mechanism extractor
-  expects a legacy review manifest linked to a completed W09/W10 pair.
-  The exporter does not yet construct that review from the newer eligibility
-  registry.
+- Stage 08 constructs a checksum-verified mechanism review from the
+  eligibility-first W09 data and approved case IDs. It refuses to mix
+  unrelated searches or substitute a legacy W10 decision ledger.
 - The scripts use your installed package, not the code of the repository
   checkout, so **pull the branch and install the same branch**.
 
@@ -102,8 +101,7 @@ publisher-side resolution.
 
 ## Validation and scope
 
-The wrappers were checked against the function names and orchestrator states
-on the development branch, but **have not been executed against your local
-map or API credentials**. They deliberately block at human decisions. The
-full-text mechanism integration gap is documented rather than silently
-worked around.
+The wrappers were checked against the functions and orchestrator states
+on main, but **have not been executed against your local map or API
+credentials**. They deliberately block at human decisions. A synthetic
+integration test exercises the new eligibility-first mechanism handover.
