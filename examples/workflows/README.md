@@ -6,9 +6,9 @@ algorithms, prompts, and archived search data.
 
 ## Quick start: exact steps
 
-1. **Pull this branch** in RStudio (Git pane > Pull), or clone
+1. **Pull main** in RStudio (Git pane > Pull), or clone
    `nealhaddaway/evidencelandscaper` at branch
-   `ostara-fulltext-mechanism-feedback-20261027`.
+   `main`.
 2. In the repository, open `examples/workflows/evidencelandscaper-workflows.Rproj`.
    Confirm `getwd()` ends in `examples/workflows`.
 3. Restart R, then install the **same branch** once:
@@ -16,7 +16,7 @@ algorithms, prompts, and archived search data.
    ```r
    if (!requireNamespace("remotes",quietly=TRUE)) install.packages("remotes")
    remotes::install_github(
-     "nealhaddaway/evidencelandscaper@ostara-fulltext-mechanism-feedback-20261027",
+     "nealhaddaway/evidencelandscaper@main",
      dependencies=FALSE,force=TRUE,upgrade="never")
    library(evidencelandscaper)
    ```
@@ -35,11 +35,10 @@ algorithms, prompts, and archived search data.
    retrieve records, followed by 03-07 in sequence. At a deliberate stop,
    inspect the named artifact, make the human decision in `00_settings.R`,
    and rerun the **same numbered script**. Read `CHECKPOINTS.md`.
-8. Stage 08 is Ostara-specific supplementary mechanism extraction. It
-   currently requires an older verified W09/W10 mechanism review; newly
-   created eligibility-first runs lack the expected W10-linked manifest.
-   **Do not use a fake W10 folder or bypass this check.** This is a known
-   package integration gap, rather than a failure of mechanism coding itself.
+8. Stage 08 now creates a checksum-verified mechanism review directly from the
+   eligibility-first named search and runs supplementary coding of all eligible
+   case publications. Human review of mechanism evidence and novel proposals
+   remains mandatory.
 9. Stage 09 publishes verified case outputs. Publishing and combining
    different searches are distinct operations.
 
@@ -55,7 +54,7 @@ algorithms, prompts, and archived search data.
 | 05_code_ontology_and_screen_cases.R | W07 ontology and W08 abstract cases | `code` runs both |
 | 06_retrieve_and_verify_fulltexts.R | Select case cohort, W09 retrieval | `prepare_extraction`, `retrieve_fulltexts` |
 | 07_screen_fulltexts_and_extract_cases.R | Full-text eligibility before detailed cases | `assess_fulltexts`, `finalize_eligibility`, `extract` |
-| 08_screen_fulltexts_for_mechanisms.R | Supplementary full-text mechanisms | `extract_ostara_fulltext_mechanisms()` for verified legacy review only |
+| 08_screen_fulltexts_for_mechanisms.R | Supplementary full-text mechanisms | `prepare_ostara_mechanism_review_from_run()` then `extract_ostara_fulltext_mechanisms()` |
 | 09_publish_outputs.R | Publish verified cases | `publish` |
 
 ## Essential safeguards

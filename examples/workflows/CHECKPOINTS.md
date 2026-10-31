@@ -13,7 +13,7 @@ Each approval in `00_settings.R` is a human methodological decision.
 | W07/W08 | Stage 05/06 | Ontology proposals and uncertain cases | Review before deciding full-text cohort; set `case_sample_approved=TRUE` |
 | W09 | Stage 06 | Download and identity-verification reports | Repair missing/mismatched files; never treat an HTML error page as a PDF/XML |
 | Full-text eligibility | Stage 07 | `candidate_case_eligibility.csv` and cited evidence | Finish required review, then set `fulltext_eligibility_review_complete=TRUE` |
-| Full-text mechanisms | Stage 08 | Mechanism review and candidate novelty worksheets | Existing legacy W09/W10 input only; requires human review; new named runs not yet integrated |
+| Full-text mechanisms | Stage 08 | Mechanism review and candidate novelty worksheets | Direct from approved eligibility-first W09 case IDs; inspect mechanism and novelty review worksheets; human review required |
 
 ## Status and recovery
 
