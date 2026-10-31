@@ -25,4 +25,4 @@ jobs:
           extra-packages: any::testthat
           needs: check
       - name: Test eligibility-first full-text mechanism handover
-        run: Rscript -e 'testthat::test_local(".", filter="ostara-eligibility-first-mechanisms")'
+        run: Rscript -e 'testthat::test_local(".", filter="ostara-(eligibility-first-mechanisms|supplement-review|mechanism-review)")'
