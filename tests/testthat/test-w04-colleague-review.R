@@ -1,0 +1,54 @@
+testthat::test_that("colleague W04 review bundle includes all consensus decisions", {
+  testthat::skip_if(Sys.which("zip")=="", "A ZIP utility is unavailable")
+  td<-tempfile("w04-colleague-")
+  dir.create(td)
+  root<-file.path(td,"runs","W01","narrow")
+  w04<-file.path(root,"W04_local","full-prompt")
+  dir.create(file.path(w04,"consensus"),recursive=TRUE)
+  dir.create(file.path(root,"W02_main","finalised"),recursive=TRUE)
+  writejl<-function(xs,path)writeLines(vapply(xs,function(z)
+      as.character(jsonlite::toJSON(z,auto_unbox=TRUE,null="null")),
+      character(1)),path)
+  ids<-c("pub-a","pub-b","pub-c")
+  labels<-c("retain","exclude","uncertain")
+  source<-lapply(seq_along(ids),function(i)
+    list(identity=list(record_id=ids[[i]]),
+         canonical=list(title=paste("Study",i),abstract=paste("Abstract",i),
+                        doi="",year="2026")))
+  writejl(source,file.path(root,"W02_main","finalised","canonical.jsonl"))
+  results<-lapply(seq_along(ids),function(i)
+    list(record_id=ids[[i]],
+         screening=list(decision=labels[[i]],agreement="2_of_2",
+           model="gpt-5.6",prompt_sha256=paste(rep("a",64),collapse=""),
+           requires_human_review=identical(labels[[i]],"uncertain"))))
+  writejl(results,file.path(w04,"consensus",
+                             "workflow04_consensus_layer.jsonl"))
+  jsonlite::write_json(list(status="HUMAN_REVIEW_REQUIRED",
+    records_screened=3,model="gpt-5.6",
+    prompt_sha256=paste(rep("a",64),collapse=""),
+    final_retain=1,final_exclude=1,final_unresolved=1),
+    file.path(w04,"consensus","summary.json"),auto_unbox=TRUE)
+  output<-file.path(td,"for-colleague.zip")
+  testthat::expect_identical(export_w04_colleague_review(w04,output),output)
+  testthat::expect_true(file.exists(output))
+  testthat::expect_error(export_w04_colleague_review(w04,output),
+                         "refusing to overwrite")
+  extract<-file.path(td,"unzipped")
+  dir.create(extract)
+  utils::unzip(output,exdir=extract)
+  target<-file.path(extract,"w04_review_bundle")
+  testthat::expect_true(file.exists(file.path(target,"app.R")))
+  testthat::expect_silent(parse(file.path(target,"app.R")))
+  manifest<-jsonlite::fromJSON(file.path(target,"manifest.json"),
+                               simplifyVector=FALSE)
+  datafile<-file.path(target,"data","review_queue.jsonl")
+  testthat::expect_identical(manifest$review_queue_sha256,
+    digest::digest(file=datafile,algo="sha256",serialize=FALSE))
+  records<-lapply(readLines(datafile),
+                   jsonlite::fromJSON,simplifyVector=FALSE)
+  testthat::expect_setequal(vapply(records,function(z)z$model$decision,
+                                   character(1)),labels)
+  testthat::expect_setequal(vapply(records,function(z)z$record_id,
+                                   character(1)),ids)
+  testthat::expect_false(file.exists(file.path(target,"decisions.jsonl")))
+})
