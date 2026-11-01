@@ -1,6 +1,8 @@
 # Full-text case eligibility gate, independent of W09 detailed extraction.
 # New future-run workflow only: existing W09 and W10 ledgers remain immutable.
 run_preextraction_eligibility <- function(w09, record_ids, model="gpt-5.6-luna") {
+  if(!is.character(model)||length(model)!=1L||is.na(model)||!grepl("-luna$",model))
+    stop("Only Luna models are permitted for new API calls.")
   w09<-normalizePath(w09,mustWork=TRUE)
   rules<-system.file("w10","case_relevance_v2.txt",package="evidencelandscaper")
   if(!nzchar(rules))stop("Approved W10 v2 rules missing.")
