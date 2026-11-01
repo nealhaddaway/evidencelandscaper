@@ -7,7 +7,7 @@
 #' @param model Responses API model
 #' @return Directory with W10 decisions, manifest and CSV audit.
 #' @export
-run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-6-luna") {
+run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-5.6-luna") {
   extraction_dir<-normalizePath(extraction_dir,mustWork=TRUE)
   w04_prompt<-normalizePath(w04_prompt,mustWork=TRUE)
   src<-file.path(extraction_dir,"fulltext_case_registry_normalised.jsonl")
