@@ -8,6 +8,8 @@
 #' @return Directory with W10 decisions, manifest and CSV audit.
 #' @export
 run_w10_case_relevance <- function(extraction_dir,w04_prompt,model="gpt-5.6-luna") {
+  if(!is.character(model)||length(model)!=1L||is.na(model)||!grepl("-luna$",model))
+    stop("Only Luna models are permitted for new model calls.")
   extraction_dir<-normalizePath(extraction_dir,mustWork=TRUE)
   w04_prompt<-normalizePath(w04_prompt,mustWork=TRUE)
   src<-file.path(extraction_dir,"fulltext_case_registry_normalised.jsonl")
