@@ -23,7 +23,7 @@ run_evidence_map <- function(map="Ostara_collective_action_map",run_name,
                              search_file,sources=NULL,execute_scoping=TRUE,
                              screening_prompt=NULL,w07_prompt=NULL,
                              ontology_file=NULL,w08_prompt=NULL,
-                             model="gpt-6-luna",
+                             model="gpt-5.6-luna",
                              w01_uncertain=c("quarantine","adjudicate"),
                              manual_ris=NULL,manual_search_strings=NULL) {
   w01_uncertain<-match.arg(w01_uncertain)
@@ -148,7 +148,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
                                 step=c("auto","scope","retrieve","import_manual","approve_partial_w00","deduplicate","prepare_w01_review","finish_w01","enrich","screen","finalize_screen","code","prepare_extraction","retrieve_fulltexts","assess_fulltexts","finalize_eligibility","extract","verify_cases","verify_fulltexts","publish","status"),
                                 screening=NULL,extraction=NULL,sources=NULL,
                                 screening_prompt=NULL,w07_prompt=NULL,ontology_file=NULL,
-                                w08_prompt=NULL,model="gpt-6-luna",
+                                w08_prompt=NULL,model="gpt-5.6-luna",
                                 extraction_dir=NULL,coordinates_csv=NULL,cab_import=NULL,
                                 execution=c("local","github"),allow_w01_llm=FALSE) {
   execution<-match.arg(execution)
@@ -172,7 +172,10 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
     if(nm=="ontology_file"&&is.null(ontology_file))ontology_file<-obj$path
     if(nm=="w08_prompt"&&is.null(w08_prompt))w08_prompt<-obj$path
   }
-  if(identical(model,"gpt-6-luna")&&!is.null(state$model))model<-state$model
+  if(identical(model,"gpt-5.6-luna")&&!is.null(state$model) &&
+     grepl("-luna$",state$model))model<-state$model
+  if(!grepl("-luna$",model))
+    stop("Orchestrated model must be a Luna variant; non-Luna calls are disabled.")
   if(step=="status") {
     .orchestrator_summary(state)
     return(invisible(state))
