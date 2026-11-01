@@ -142,24 +142,49 @@ screen_one <- function(r,pass){
 run_pass <- function(records,pass,path){
   existing<-if(file.exists(path))read_jsonl(path) else list()
   transition_file<-file.path(dirname(output_dir),"model_transition.json")
-  expected_model<-model
-  if(pass==1L && file.exists(transition_file)) {
-    transition<-fromJSON(transition_file,simplifyVector=FALSE)
+  transition<-if(file.exists(transition_file))
+    fromJSON(transition_file,simplifyVector=FALSE) else NULL
+  if(!is.null(transition)) {
     if(!identical(transition$schema,"w04-model-transition-v1") ||
        !identical(transition$from_model,"gpt-5.6") ||
-       !identical(transition$to_model,model) ||
-       !identical(transition$pass1_sha256,
-         digest(file=path,algo="sha256",serialize=FALSE)))
-      stop("W04 first-pass model transition integrity check failed",call.=FALSE)
-    expected_model<-transition$from_model
+       !identical(transition$to_model,model))
+      stop("Unexpected W04 model transition manifest",call.=FALSE)
   }
-  if(length(existing)&&any(!vapply(existing,function(x)
-      identical(scalar(x$model_requested),expected_model) &&
+  if(pass==1L && !is.null(transition)) {
+    if(!identical(transition$pass1_sha256,
+           digest(file=path,algo="sha256",serialize=FALSE)) ||
+       length(existing)!=as.integer(transition$pass1_records) ||
+       any(!vapply(existing,function(x)
+         identical(scalar(x$model_requested),transition$from_model) &&
+         identical(as.integer(x$pass),1L),logical(1))))
+      stop("Migrated first-pass integrity or provenance mismatch",call.=FALSE)
+  } else if(pass==2L && !is.null(transition)) {
+    seed_path<-file.path(output_dir,"pass2_seed.jsonl")
+    seed_n<-as.integer(transition$pass2_sol_records %||% 0L)
+    if(is.na(seed_n)||seed_n<0L)
+      stop("Invalid migrated pass-2 count",call.=FALSE)
+    if(seed_n>0L) {
+      if(!file.exists(seed_path) ||
+         !identical(digest(file=seed_path,algo="sha256",serialize=FALSE),
+                    scalar(transition$pass2_sol_sha256)))
+        stop("Migrated pass-2 seed checksum mismatch",call.=FALSE)
+      seed_lines<-readLines(seed_path,warn=FALSE,encoding="UTF-8")
+      current_lines<-readLines(path,warn=FALSE,encoding="UTF-8")
+      if(length(seed_lines)!=seed_n || length(current_lines)<seed_n ||
+         !identical(head(current_lines,seed_n),seed_lines))
+        stop("Migrated pass-2 seed changed or was truncated",call.=FALSE)
+    }
+    if(length(existing)<seed_n ||
+       any(!vapply(seq_along(existing),function(i)
+         identical(as.integer(existing[[i]]$pass),2L) &&
+         identical(scalar(existing[[i]]$model_requested),
+                   if(i<=seed_n)transition$from_model else model),
+         logical(1))))
+      stop("W04 pass 2 contains incompatible model provenance",call.=FALSE)
+  } else if(length(existing)&&any(!vapply(existing,function(x)
+      identical(scalar(x$model_requested),model) &&
       identical(as.integer(x$pass),as.integer(pass)),logical(1))))
     stop(sprintf("W04 pass %d checkpoint has incompatible model provenance",pass),call.=FALSE)
-  if(pass==1L && file.exists(transition_file) &&
-     length(existing)!=as.integer(transition$pass1_records))
-    stop("Migrated first pass is incomplete; refusing new model calls",call.=FALSE)
   done<-if(length(existing))vapply(existing,function(x)scalar(x$record_id),character(1)) else character()
   if(anyDuplicated(done))stop(sprintf("Duplicate record IDs in pass %d checkpoint",pass),call.=FALSE)
   ids<-vapply(records,record_id,character(1))
