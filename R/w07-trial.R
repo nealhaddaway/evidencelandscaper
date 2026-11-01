@@ -9,6 +9,8 @@
 #' @export
 trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6-luna",
                       map_path=NULL,w04_run=NULL) {
+  if(!is.character(model)||length(model)!=1L||is.na(model)||!grepl("-luna$",model))
+    stop("Only Luna models are permitted for new model calls.")
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   if(is.null(ontology_file) || is.null(prompt_file)) {
