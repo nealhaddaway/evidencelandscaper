@@ -1,0 +1,27 @@
+name: W08 multiple unclear candidates regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'R/w08-cases.R'
+      - 'R/w08-case-validation.R'
+      - 'inst/w08/case_identification_prompt_v3.txt'
+      - 'tests/testthat/test-w08-unclear-candidates.R'
+      - '.github/workflows/test-w08-unclear-candidates.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::testthat
+          needs: check
+      - name: Run W08 status validation tests
+        run: Rscript -e 'testthat::test_local(".", filter="w08-unclear-candidates")'
