@@ -62,6 +62,8 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", 
      !identical(w03m$w02_canonical_sha256,sha(canonical))||
      !identical(w03m$status_sha256,sha(w03)))
     stop("W03 final input integrity validation failed.")
+  if(!identical(model,"gpt-5.6-luna"))
+    stop("W04 model is locked to gpt-5.6-luna for new runs; do not send API requests with another model.")
   if(!nzchar(Sys.getenv("OPENAI_API_KEY")))
     stop("OPENAI_API_KEY must be configured.")
   normalized_prompt<-paste(lines,collapse="\n")
@@ -69,7 +71,8 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", 
   selection_hash<-if(is.null(record_ids_csv))NULL else sha(record_ids_csv)
   run_type<-if(!is.null(selection_hash))paste0("selected-",substr(selection_hash,1L,12L)) else
     if(max_records==0L)"full" else paste0("trial-",max_records)
-  dest<-file.path(root,"W04_local",paste0(run_type,"-",substr(prompt_hash,1L,12L)))
+  dest<-file.path(root,"W04_local",paste0(run_type,"-",substr(prompt_hash,1L,12L),
+             "-model-",gsub("[^A-Za-z0-9._-]","_",model)))
   config<-file.path(dest,"screening_config.json")
   copied_prompt<-file.path(dest,"screening_prompt.txt")
   manifest<-file.path(dest,"local_manifest.json")
