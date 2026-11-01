@@ -47,5 +47,5 @@ testthat::test_that("W07 legacy ontology contract remains supported", {
 
 testthat::test_that("W07 engine still parses after v4 output checking", {
   testthat::expect_silent(parse(
-    file=file.path("R","w07-trial.R")))
+    file=testthat::test_path("..","..","R","w07-trial.R")))
 })
