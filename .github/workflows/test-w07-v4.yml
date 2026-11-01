@@ -1,0 +1,26 @@
+name: W07 native ontology compatibility tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'R/w07-trial.R'
+      - 'R/w07-ontology-validation.R'
+      - 'tests/testthat/test-w07-ontology-v4.R'
+      - '.github/workflows/test-w07-v4.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::testthat
+          needs: check
+      - name: Run W07 ontology compatibility regression tests
+        run: Rscript -e 'testthat::test_local(".", filter="w07-ontology-v4")'
