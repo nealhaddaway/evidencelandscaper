@@ -10,7 +10,7 @@
 #' @param open_app NULL prompts in an interactive R console (default); TRUE opens without asking; FALSE never opens.
 #' @return New local W04 run directory, invisibly.
 #' @export
-run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6", open_app=NULL,record_ids_csv=NULL) {
+run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", open_app=NULL,record_ids_csv=NULL) {
   launch_review<-function(run_dir,status) {
     if(!identical(status,"HUMAN_REVIEW_REQUIRED"))return(invisible(NULL))
     if(identical(open_app,FALSE)) {
