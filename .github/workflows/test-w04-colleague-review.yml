@@ -1,0 +1,29 @@
+name: W04 portable colleague reviewer tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'R/w04-colleague-review.R'
+      - 'R/w04-review.R'
+      - 'inst/w04/validation_bundle_app.R'
+      - 'tests/testthat/test-w04-colleague-review.R'
+      - '.github/workflows/test-w04-colleague-review.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::testthat, any::shiny
+          needs: check
+      - name: Parse portable reviewer and run bundle tests
+        run: |
+          Rscript -e 'parse("inst/w04/validation_bundle_app.R")'
+          Rscript -e 'testthat::test_local(".", filter="w04-colleague-review")'
