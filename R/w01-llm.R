@@ -9,7 +9,7 @@
 #' @param batch_size Maximum cases per independent chunk.
 #' @return Path to local W01 LLM output directory, invisibly.
 #' @export
-run_w01_llm <- function(queue, model = Sys.getenv("OPENAI_DUPLICATE_MODEL","gpt-5.6"),
+run_w01_llm <- function(queue, model = Sys.getenv("OPENAI_DUPLICATE_MODEL","gpt-5.6-luna"),
                         auto_threshold=0.95, batch_size=20L) {
   if (!file.exists(queue)) stop("W01 case queue does not exist.")
   queue <- normalizePath(queue,winslash="/",mustWork=TRUE)
