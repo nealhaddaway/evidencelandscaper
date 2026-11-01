@@ -1,0 +1,53 @@
+# Urgent W04: resume after GPT-5.6 first pass using Luna
+
+All **new W04 calls** are locked to `gpt-5.6-luna`.
+The original running Rscript **does not change model automatically**: stop it
+after first pass finishes, before second pass begins. Pass 2 starts immediately
+after pass 1 in the legacy script. Stop the Rscript process, not just the
+interactive console if Rscript remains alive.
+
+**Do not modify or delete the original W04 run directory or its JSONL files.**
+
+After the original Rscript is stopped and GitHub `main` is reinstalled in a
+fresh R session:
+
+```r
+remotes::install_github("nealhaddaway/evidencelandscaper",
+  ref="main",dependencies=FALSE,upgrade="never",force=TRUE)
+library(evidencelandscaper)
+map <- open_map("Ostara_collective_action_map")
+state <- jsonlite::fromJSON(file.path(map,"runs","orchestrated",
+  "forestcommodities_sustainability","state.json"),simplifyVector=FALSE)
+broader_scored <- state$w01$scored
+broader_sample <- state$decision1$selected_ids_path
+
+old_root <- file.path(dirname(broader_scored),"W04_local")
+sample_tag <- substr(digest::digest(file=broader_sample,
+  algo="sha256",serialize=FALSE),1,12)
+candidates <- list.dirs(old_root,recursive=FALSE,full.names=TRUE)
+legacy <- candidates[grepl(paste0("^selected-",sample_tag,"-[0-9a-f]{12}$"),
+  basename(candidates))]
+stopifnot(length(legacy)==1L)
+old_run <- legacy[[1]]
+original_prompt <- file.path(old_run,"screening_prompt.txt")
+stopifnot(file.exists(original_prompt))
+
+luna_run <- continue_w04_with_luna(
+  source_w04=old_run,scored=broader_scored,
+  prompt_file=original_prompt,record_ids_csv=broader_sample)
+print(luna_run)
+```
+
+The helper checks that all selected W03-eligible publications have pass-1
+decisions, the original prompt and exact sample match, and no pass-2
+responses have been committed. It copies pass 1, with its original model
+provenance, to a new directory ending `-model-gpt-5.6-luna` and resumes
+passes 2 and 3 with **Luna only**. The old run remains unchanged.
+
+The new engine refuses non-Luna W04 API requests and checks model identity
+against saved checkpoints. The final W04 summary contains
+`pass_models` and a `model_transition` manifest for auditability.
+
+If pass 2 has already started, the helper stops rather than risking another
+unexpected bill or silently mixing checkpoints. Preserve that run and inspect
+its partial pass-2 ledger before proceeding.
