@@ -16,7 +16,7 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   if(is.null(prompt_file)) {
-    prompt_file<-system.file("w08","case_identification_prompt_v2.txt",
+    prompt_file<-system.file("w08","case_identification_prompt_v3.txt",
                              package="evidencelandscaper")
   } else {
     prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
