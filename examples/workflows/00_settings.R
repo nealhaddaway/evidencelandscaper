@@ -17,7 +17,7 @@ strategy_file <- file.path(map,"inputs","search",paste0(run_name,".json"))
 strategy_approved <- FALSE
 # Select databases. Some require API keys or subscriptions.
 sources <- c("openalex","lens","agricola","pubmed","ethos","epmc_preprints")
-model <- "gpt-6-luna"
+model <- "gpt-5.6-luna"
 # Supply both manual RIS sources at run creation, or leave both NULL.
 manual_ris <- NULL
 manual_search_strings <- NULL
