@@ -13,6 +13,7 @@ w03_path <- arg("--workflow03-status")
 screening_config_path <- arg("--screening-config","user_input/workflow04_screening_config.json")
 output_dir <- arg("--output-dir","outputs/workflow04_consensus")
 model <- arg("--model",Sys.getenv("OPENAI_RELEVANCE_MODEL","gpt-5.6-luna"))
+if(!identical(model,"gpt-5.6-luna")) stop("W04 API model is locked to gpt-5.6-luna",call.=FALSE)
 checkpoint_every <- as.integer(arg("--checkpoint-every","25"))
 max_records <- as.integer(arg("--max-records","0"))
 include_ids_path <- arg("--include-record-ids",NULL)
@@ -140,6 +141,25 @@ screen_one <- function(r,pass){
 }
 run_pass <- function(records,pass,path){
   existing<-if(file.exists(path))read_jsonl(path) else list()
+  transition_file<-file.path(dirname(output_dir),"model_transition.json")
+  expected_model<-model
+  if(pass==1L && file.exists(transition_file)) {
+    transition<-fromJSON(transition_file,simplifyVector=FALSE)
+    if(!identical(transition$schema,"w04-model-transition-v1") ||
+       !identical(transition$from_model,"gpt-5.6") ||
+       !identical(transition$to_model,model) ||
+       !identical(transition$pass1_sha256,
+         digest(file=path,algo="sha256",serialize=FALSE)))
+      stop("W04 first-pass model transition integrity check failed",call.=FALSE)
+    expected_model<-transition$from_model
+  }
+  if(length(existing)&&any(!vapply(existing,function(x)
+      identical(scalar(x$model_requested),expected_model) &&
+      identical(as.integer(x$pass),as.integer(pass)),logical(1))))
+    stop(sprintf("W04 pass %d checkpoint has incompatible model provenance",pass),call.=FALSE)
+  if(pass==1L && file.exists(transition_file) &&
+     length(existing)!=as.integer(transition$pass1_records))
+    stop("Migrated first pass is incomplete; refusing new model calls",call.=FALSE)
   done<-if(length(existing))vapply(existing,function(x)scalar(x$record_id),character(1)) else character()
   if(anyDuplicated(done))stop(sprintf("Duplicate record IDs in pass %d checkpoint",pass),call.=FALSE)
   ids<-vapply(records,record_id,character(1))
@@ -286,7 +306,13 @@ summary<-list(
   final_retain=sum(final_dec=="retain"),
   final_exclude=sum(final_dec=="exclude"),
   final_unresolved=sum(final_dec=="uncertain"),
-  model=model,prompt_version=PROMPT_VERSION,prompt_sha256=PROMPT_SHA256,
+  model=model,
+  pass_models=list(pass1=unique(vapply(p1,function(x)scalar(x$model_requested),character(1))),
+                   pass2=unique(vapply(p2,function(x)scalar(x$model_requested),character(1))),
+                   pass3=unique(vapply(p3,function(x)scalar(x$model_requested),character(1)))),
+  model_transition=if(file.exists(file.path(dirname(output_dir),"model_transition.json")))
+    fromJSON(file.path(dirname(output_dir),"model_transition.json"),simplifyVector=FALSE) else NULL,
+  prompt_version=PROMPT_VERSION,prompt_sha256=PROMPT_SHA256,
   prompt_immutable_check=TRUE,
   created_at_utc=now_utc()
 )
