@@ -794,7 +794,7 @@ resume_evidence_map <- function(run_name,map="Ostara_collective_action_map",
         state$status<-"w01_classifying"
         .orchestrator_save(state)
         classified<-continue_w01(scored,run_llm=TRUE,open_app=FALSE,
-                  model=Sys.getenv("OPENAI_DUPLICATE_MODEL","gpt-5.6"))
+                  model=Sys.getenv("OPENAI_DUPLICATE_MODEL","gpt-5.6-luna"))
         state$w01$llm_dir<-classified$llm_dir
         state$w01$human_cases<-classified$human_cases
         state$status<-"w01_scored"
