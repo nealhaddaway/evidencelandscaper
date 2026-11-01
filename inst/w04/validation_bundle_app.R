@@ -80,6 +80,8 @@ ui<-fluidPage(
    column(6,actionButton("previous","Previous in filtered list")),
    column(6,actionButton("next_record","Next in filtered list"))
  ),
+ checkboxInput("show_model","Reveal model decision and reasons (for unblinded review)",
+               value=FALSE),
  tags$hr(),
  fluidRow(
    column(8,
@@ -213,6 +215,10 @@ server<-function(input,output,session) {
  output$model_info<-renderUI({
    x<-current()
    if(is.null(x))return(NULL)
+   if(!isTRUE(input$show_model))
+     return(div(class="panel-review",
+       "Model assessment is hidden to support independent validation.",
+       "You may reveal it after deciding."))
    dec<-scalar(x$model$decision)
    div(class="panel-review",
        h4("Original model assessment (not a human decision)"),
