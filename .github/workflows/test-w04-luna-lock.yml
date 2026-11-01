@@ -8,6 +8,7 @@ on:
       - 'R/w04-full.R'
       - 'inst/w04/workflow_04_luna_consensus.R'
       - 'tests/testthat/test-w04-luna-lock.R'
+      - 'tests/testthat/test-w04-luna-mixed-pass.R'
       - '.github/workflows/test-w04-luna-lock.yml'
   workflow_dispatch:
 jobs:
@@ -25,4 +26,4 @@ jobs:
           extra-packages: any::testthat
           needs: check
       - name: Test Luna model lock and recovery
-        run: Rscript -e 'testthat::test_local(".", filter="w04-luna-lock")'
+        run: Rscript -e 'testthat::test_local(".", filter="w04-luna")'
