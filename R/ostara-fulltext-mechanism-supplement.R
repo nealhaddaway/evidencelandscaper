@@ -10,6 +10,8 @@
 #' @export
 extract_ostara_fulltext_mechanisms <- function(
     review_dir,max_records=0L,model="gpt-5.6-luna") {
+  if(!is.character(model)||length(model)!=1L||is.na(model)||!grepl("-luna$",model))
+    stop("Only Luna models are permitted for new API calls.")
   review_dir<-normalizePath(review_dir,mustWork=TRUE)
   man<-file.path(review_dir,"manifest.json")
   if(!file.exists(man))stop("Mechanism-review manifest not found")
