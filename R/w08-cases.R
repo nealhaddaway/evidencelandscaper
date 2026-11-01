@@ -11,7 +11,7 @@
 #' @param prompt_file Optional custom UTF-8 case-identification prompt.
 #' @return W08 pilot run directory, invisibly.
 #' @export
-trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
+trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
                             map_path=NULL,prompt_file=NULL,w04_run=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
@@ -102,7 +102,7 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
   if(!nzchar(trimws(prompt)))stop("Empty W08 prompt.")
   tag<-paste0("sample-",n,"-seed-",seed,"-",substr(sha(final_path),1,10),
               "-",substr(sha(prompt_file),1,10))
-  if(!identical(model,"gpt-5.6")) tag<-paste0(tag,"-model-",gsub("[^A-Za-z0-9._-]","_",model))
+  if(!identical(model,"gpt-5.6-luna")) tag<-paste0(tag,"-model-",gsub("[^A-Za-z0-9._-]","_",model))
   dest<-file.path(map_path,"runs","W08",tag)
   manifest_path<-file.path(dest,"manifest.json")
   out<-file.path(dest,"case_assessments.jsonl")
