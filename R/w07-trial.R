@@ -49,11 +49,29 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
   `%||%`<-function(x,y)if(is.null(x))y else x
   rows<-utils::read.csv(ontology_file,stringsAsFactors=FALSE,
                         fileEncoding="UTF-8-BOM",check.names=FALSE)
-  required<-c("category_id","mechanism_id","mechanism_source_label",
-              "definition_draft","abstract_indicators_draft","not_sufficient_draft")
-  if(!all(required %in% names(rows)))stop("Ontology missing required fields.")
-  codes<-trimws(rows$mechanism_id)
-  if(any(!nzchar(codes))||anyDuplicated(codes))stop("Ontology IDs missing or repeated.")
+  legacy_columns<-c("category_id","mechanism_id","mechanism_source_label",
+                    "definition_draft","abstract_indicators_draft",
+                    "not_sufficient_draft")
+  new_columns<-c("mechanism_id","collective_action_type",
+                 "high_level_mechanism","fine_level_mechanism","definition")
+  ontology_format<-if(all(new_columns %in% names(rows))) "hierarchical_v4"
+    else if(all(legacy_columns %in% names(rows))) "legacy"
+    else stop("Ontology must have either the five hierarchical v4 columns ",
+              "or the six original W07 columns.")
+  required<-if(identical(ontology_format,"hierarchical_v4"))
+    new_columns else legacy_columns
+  # Preserve the new ontology and definitions without fabricating indicators.
+  if(identical(ontology_format,"hierarchical_v4")) {
+    if(nrow(rows)!=28L)
+      stop("The supplied versioned ontology must have exactly 28 mechanisms.")
+    for(k in new_columns)
+      if(anyNA(rows[[k]])||
+         any(!nzchar(trimws(as.character(rows[[k]])))))
+        stop("Missing ontology value in ",k)
+  }
+  codes<-trimws(as.character(rows$mechanism_id))
+  if(any(!nzchar(codes))||anyDuplicated(codes))
+    stop("Ontology IDs missing or repeated.")
   prompt<-paste(readLines(prompt_file,warn=FALSE,encoding="UTF-8"),collapse="\n")
   if(!nzchar(trimws(prompt)))stop("Empty coding prompt.")
   roots<-list.dirs(file.path(map_path,"runs","W01"),recursive=FALSE,full.names=TRUE)
@@ -126,7 +144,10 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
     selected_record_ids=as.list(id),model=model)
   if(file.exists(mpath)) {
     m<-jsonlite::fromJSON(mpath,simplifyVector=FALSE)
-    if(!identical(m$source_w04_sha256,provenance$source_w04_sha256)||
+    if(!identical(m$source_w04,provenance$source_w04)||
+       !identical(m$source_w04_sha256,provenance$source_w04_sha256)||
+       !identical(m$canonical_w02_sha256,provenance$canonical_w02_sha256)||
+       !identical(m$selected_record_ids,provenance$selected_record_ids)||
        !identical(m$ontology_sha256,provenance$ontology_sha256)||
        !identical(m$prompt_sha256,provenance$prompt_sha256)||
        !identical(m$model,model))stop("W07 trial provenance conflict.")
@@ -174,6 +195,55 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
       stop("W07 invalid or duplicate mechanism ID for ",record_id)
     if(!result$coding_status%in%c("coded","insufficient_information","no_supported_mechanism"))
       stop("Invalid W07 coding status for ",record_id)
+    if(identical(ontology_format,"hierarchical_v4")) {
+      if(!is.list(result$mechanisms)||!is.logical(result$ontology_gap)||
+         length(result$ontology_gap)!=1L||is.na(result$ontology_gap))
+        stop("W07 hierarchical coding requires mechanisms and ontology_gap: ",record_id)
+      if(length(assigned) && result$coding_status!="coded")
+        stop("Mechanisms present but coding_status is not coded: ",record_id)
+      if(isTRUE(result$ontology_gap)) {
+        if(result$coding_status!="coded"||
+           is.null(result$proposed_new_mechanism)||
+           !nzchar(trimws(as.character(result$proposed_new_mechanism)))||
+           is.null(result$ontology_gap_reason)||
+           !nzchar(trimws(as.character(result$ontology_gap_reason))))
+          stop("W07 ontology gap lacks a supported proposal/reason: ",record_id)
+        closest<-result$closest_existing_mechanism_id
+        if(!is.null(closest)&&!identical(closest,"")&&
+           !as.character(closest)%in%codes)
+          stop("W07 ontology gap refers to unknown nearest code: ",record_id)
+      } else if(!is.null(result$proposed_new_mechanism)||
+                !is.null(result$ontology_gap_reason)||
+                !is.null(result$closest_existing_mechanism_id)) {
+        stop("W07 non-gap has non-null gap fields: ",record_id)
+      }
+      if(!length(assigned)&&!isTRUE(result$ontology_gap)&&
+         identical(result$coding_status,"coded"))
+        stop("W07 coded status without a mechanism or gap: ",record_id)
+      for(mech in result$mechanisms) {
+        if(is.null(mech$confidence)||
+           !mech$confidence%in%c("high","medium","low")||
+           is.null(mech$implementation_status)||
+           !mech$implementation_status%in%
+             c("implemented","proposed","mentioned_only","unclear")||
+           is.null(mech$evidence)||
+           !nzchar(trimws(as.character(mech$evidence))))
+          stop("Invalid mechanism confidence, status or evidence for ",record_id)
+        excerpt<-mech$evidence_excerpt
+        if(is.null(excerpt)||!is.character(excerpt)||
+           length(excerpt)!=1L||!nzchar(trimws(excerpt)))
+          stop("Mechanism lacks a supporting verbatim excerpt: ",record_id)
+        field<-mech$evidence_source
+        if(is.null(field)||length(field)!=1L||
+           !field%in%c("title","abstract","keywords"))
+          stop("Invalid mechanism evidence source: ",record_id)
+        raw<-if(identical(field,"title"))z$title else
+          if(identical(field,"abstract"))abstract else record$keywords
+        raw<-paste(unlist(raw,use.names=FALSE),collapse=" ")
+        if(!grepl(trimws(excerpt),raw,fixed=TRUE))
+          stop("Mechanism excerpt is not in the supplied ",field,": ",record_id)
+      }
+    }
     cat(jsonlite::toJSON(result,auto_unbox=TRUE,null="null"),"\n",
         file=outpath,append=TRUE,sep="")
     progress_index<-progress_index+1L
