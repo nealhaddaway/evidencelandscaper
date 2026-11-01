@@ -9,7 +9,7 @@
 #' @param model OpenAI Responses model.
 #' @return Second-pass audit directory.
 #' @export
-verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,model="gpt-6-luna") {
+verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,model="gpt-5.6-luna") {
   w09<-normalizePath(w09,mustWork=TRUE)
   extraction_dir<-normalizePath(extraction_dir,mustWork=TRUE)
   w10_run<-normalizePath(w10_run,mustWork=TRUE)
