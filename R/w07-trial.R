@@ -7,7 +7,7 @@
 #' @param model OpenAI Responses model.
 #' @return Local W07 trial directory.
 #' @export
-trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-luna",
+trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6-luna",
                       map_path=NULL,w04_run=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
@@ -111,7 +111,7 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
   organise_w07_trials(map_path)
   dest<-file.path(map_path,"runs","W07",paste0(if(n==0L)"full-" else "trial-",length(id),"-",
           substr(sha(ontology_file),1,10),"-",substr(sha(prompt_file),1,10)))
-  if(!identical(model,"gpt-5.6")) dest<-paste0(dest,"-model-",gsub("[^A-Za-z0-9._-]","_",model))
+  if(!identical(model,"gpt-5.6-luna")) dest<-paste0(dest,"-model-",gsub("[^A-Za-z0-9._-]","_",model))
   # v4 trials are also keyed to the exact final W04 input, allowing the
   # same ontology/prompt to be tested on narrow and broad cohorts independently.
   if(identical(ontology_format,"hierarchical_v4"))
