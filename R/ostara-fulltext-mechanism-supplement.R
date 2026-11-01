@@ -5,11 +5,11 @@
 #' One checkpointed model call per publication; max_records=0 processes all.
 #' @param review_dir Existing directory from prepare_ostara_mechanism_review_for_map().
 #' @param max_records Upper bound on NEW API calls (0 for all).
-#' @param model Model name; gpt-6-luna by default.
+#' @param model Model name; gpt-5.6-luna by default.
 #' @return Versioned output directory with append-only mechanism_assessments.jsonl.
 #' @export
 extract_ostara_fulltext_mechanisms <- function(
-    review_dir,max_records=0L,model="gpt-6-luna") {
+    review_dir,max_records=0L,model="gpt-5.6-luna") {
   review_dir<-normalizePath(review_dir,mustWork=TRUE)
   man<-file.path(review_dir,"manifest.json")
   if(!file.exists(man))stop("Mechanism-review manifest not found")
