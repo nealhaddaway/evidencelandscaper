@@ -139,16 +139,9 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
     if(!one(z$record_id)||!identical(z$record_id,record_id))
       stop("W08 returned mismatched record ID: ",record_id)
     st<-z$case_evidence_status
-    if(!one(st)||!st%in%c("specific_case","multiple_cases",
-                          "no_identifiable_case","unclear"))
-      stop("W08 invalid case status: ",record_id)
     cases<-z$cases
     if(is.null(cases))stop("W08 missing cases array: ",record_id)
-    if(!is.list(cases))stop("W08 cases must be an array: ",record_id)
-    k<-length(cases)
-    if((st=="specific_case"&&k!=1L)||(st=="multiple_cases"&&k<2L)||
-       (st=="no_identifiable_case"&&k!=0L)||(st=="unclear"&&k>1L))
-      stop("W08 status/case-count inconsistency: ",record_id)
+    .w08_validate_case_count(st,cases,record_id)
     if(!one(z$fulltext_priority)||
        !z$fulltext_priority%in%c("high","medium","low")||
        !one(z$assessment_reason)||!nzchar(trimws(z$assessment_reason)))
@@ -261,7 +254,8 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-6-luna",
       body$input[[1L]]$content[[1L]]$text<-paste0(
         prompt,"\n\nRETRY VALIDATION: Ensure case_evidence_status and ",
         "number of cases agree: specific_case exactly 1, multiple_cases ",
-        "at least 2, no_identifiable_case exactly 0, unclear at most 1. ",
+        "at least 2, no_identifiable_case exactly 0, unclear any number ",
+        "of potentially distinguishable candidates (including zero). ",
         "The previous response may also have given a ",
         "supporting_evidence quotation that was NOT a verbatim substring ",
         "of the supplied title or abstract. Return only exact continuous ",
