@@ -122,8 +122,8 @@ server<-function(input,output,session) {
    q<-trimws(if(is.null(input$search))"" else input$search)
    if(nzchar(q))
      idx<-idx[vapply(idx,function(i)
-       grepl(q,paste(ids[[i]],scalar(cases[[i]]$bibliographic$title)),
-             collapse=" "),fixed=TRUE,ignore.case=TRUE),logical(1))]
+       grepl(q,paste(ids[[i]],scalar(cases[[i]]$bibliographic$title),
+                          collapse=" "),fixed=TRUE,ignore.case=TRUE),logical(1))]
    ids[idx]
  })
  observeEvent(filtered(),{
@@ -183,6 +183,7 @@ server<-function(input,output,session) {
  })
  output$identity<-renderText(paste("Reviewer:",reviewer()))
  observeEvent(list(current_id(),saved()),{
+   if(is.null(current_id()))return()
    x<-current_reviews()[[current_id()]]
    updateRadioButtons(session,"decision",
                       selected=if(is.null(x))character(0) else scalar(x$decision))
