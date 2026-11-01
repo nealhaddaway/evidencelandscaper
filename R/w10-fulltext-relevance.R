@@ -10,6 +10,8 @@
 #' @return Second-pass audit directory.
 #' @export
 verify_w10_fulltext_cases <- function(w09,extraction_dir,w10_run,w04_prompt,model="gpt-5.6-luna") {
+  if(!is.character(model)||length(model)!=1L||is.na(model)||!grepl("-luna$",model))
+    stop("Only Luna models are permitted for new model calls.")
   w09<-normalizePath(w09,mustWork=TRUE)
   extraction_dir<-normalizePath(extraction_dir,mustWork=TRUE)
   w10_run<-normalizePath(w10_run,mustWork=TRUE)
