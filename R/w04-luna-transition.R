@@ -13,6 +13,7 @@ continue_w04_with_luna <- function(source_w04,scored,prompt_file,record_ids_csv)
   scored<-normalizePath(scored,winslash="/",mustWork=TRUE)
   prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
   record_ids_csv<-normalizePath(record_ids_csv,winslash="/",mustWork=TRUE)
+  `%||%`<-function(x,y)if(is.null(x))y else x
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
   pass1<-file.path(source_w04,"consensus","pass1.jsonl")
   old_config<-file.path(source_w04,"screening_config.json")
