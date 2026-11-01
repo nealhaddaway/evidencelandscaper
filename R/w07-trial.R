@@ -49,29 +49,10 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-6-l
   `%||%`<-function(x,y)if(is.null(x))y else x
   rows<-utils::read.csv(ontology_file,stringsAsFactors=FALSE,
                         fileEncoding="UTF-8-BOM",check.names=FALSE)
-  legacy_columns<-c("category_id","mechanism_id","mechanism_source_label",
-                    "definition_draft","abstract_indicators_draft",
-                    "not_sufficient_draft")
-  new_columns<-c("mechanism_id","collective_action_type",
-                 "high_level_mechanism","fine_level_mechanism","definition")
-  ontology_format<-if(all(new_columns %in% names(rows))) "hierarchical_v4"
-    else if(all(legacy_columns %in% names(rows))) "legacy"
-    else stop("Ontology must have either the five hierarchical v4 columns ",
-              "or the six original W07 columns.")
-  required<-if(identical(ontology_format,"hierarchical_v4"))
-    new_columns else legacy_columns
-  # Preserve the new ontology and definitions without fabricating indicators.
-  if(identical(ontology_format,"hierarchical_v4")) {
-    if(nrow(rows)!=28L)
-      stop("The supplied versioned ontology must have exactly 28 mechanisms.")
-    for(k in new_columns)
-      if(anyNA(rows[[k]])||
-         any(!nzchar(trimws(as.character(rows[[k]])))))
-        stop("Missing ontology value in ",k)
-  }
-  codes<-trimws(as.character(rows$mechanism_id))
-  if(any(!nzchar(codes))||anyDuplicated(codes))
-    stop("Ontology IDs missing or repeated.")
+  ontology_schema<-.w07_ontology_columns(rows)
+  ontology_format<-ontology_schema$format
+  required<-ontology_schema$required
+  codes<-ontology_schema$codes
   prompt<-paste(readLines(prompt_file,warn=FALSE,encoding="UTF-8"),collapse="\n")
   if(!nzchar(trimws(prompt)))stop("Empty coding prompt.")
   roots<-list.dirs(file.path(map_path,"runs","W01"),recursive=FALSE,full.names=TRUE)
