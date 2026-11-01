@@ -5,7 +5,7 @@
 #' @param open_app NULL asks in console (default), TRUE opens automatically, FALSE skips.
 #' @return W04 local run path, invisibly.
 #' @export
-run_w04_full <- function(prompt_file=NULL, map_path=NULL, model="gpt-5.6",open_app=NULL) {
+run_w04_full <- function(prompt_file=NULL, map_path=NULL, model="gpt-5.6-luna",open_app=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   if(is.null(prompt_file)) {
