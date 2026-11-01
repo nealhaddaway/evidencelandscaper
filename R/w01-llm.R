@@ -11,6 +11,8 @@
 #' @export
 run_w01_llm <- function(queue, model = Sys.getenv("OPENAI_DUPLICATE_MODEL","gpt-5.6-luna"),
                         auto_threshold=0.95, batch_size=20L) {
+  if(!is.character(model)||length(model)!=1L||is.na(model)||!grepl("-luna$",model))
+    stop("Only Luna models are permitted for new API calls.")
   if (!file.exists(queue)) stop("W01 case queue does not exist.")
   queue <- normalizePath(queue,winslash="/",mustWork=TRUE)
   if(!nzchar(Sys.getenv("OPENAI_API_KEY")))
