@@ -12,6 +12,8 @@
 #' @return W09 v2 directory.
 #' @export
 analyse_w09_cases_v2 <- function(w09,record_ids,model="gpt-5.6-luna",max_pages=0L,w07_run=NULL,prompt_version="v2_5",eligibility_dir=NULL) {
+  if(!is.character(model)||length(model)!=1L||is.na(model)||!grepl("-luna$",model))
+    stop("Only Luna models are permitted for new model calls.")
  if(!requireNamespace("countrycode",quietly=TRUE))
    stop("Install countrycode: install.packages('countrycode')")
  if(!nzchar(Sys.getenv("OPENAI_API_KEY")))stop("OPENAI_API_KEY is required.")
