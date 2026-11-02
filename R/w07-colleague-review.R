@@ -51,11 +51,26 @@ export_w07_colleague_review <- function(w07,destination_zip) {
   if(anyDuplicated(source_ids)||any(!ids%in%source_ids))
     stop("W07 record IDs not uniquely present in canonical bibliographic source.")
   source<-setNames(source,source_ids)
-  # Use amended abstracts where W04 was finalised after a documented rescreen.
-  w04_summary<-jsonlite::fromJSON(file.path(w04,"finalised","summary.json"),
+  # Provisional W07 runs use the pinned original W04 consensus, not a
+  # subsequently finalised screening layer.
+  provisional<-identical(source_manifest$source_type,
+                          "W04_UNFINALISED_CONSENSUS_RETAINS")
+  source_layer<-file.path(w04,if(provisional)"consensus" else "finalised",
+    if(provisional)"workflow04_consensus_layer.jsonl" else
+      "workflow04_final_screening_layer.jsonl")
+  if(!file.exists(source_layer)||
+     !identical(sha(source_layer),source_manifest$source_w04_sha256))
+    stop("W07 source W04 screening layer has changed.")
+  if(provisional) {
+    source_records<-readjl(source_layer)
+    retains<-vapply(Filter(function(z)identical(z$screening$decision,"retain"),
+                            source_records),function(z)as.character(z$record_id),character(1))
+    if(any(!ids%in%retains))stop("Provisional W07 includes non-retained W04 records.")
+  }
+  w04_summary<-jsonlite::fromJSON(file.path(w04,if(provisional)"consensus" else "finalised","summary.json"),
                                   simplifyVector=FALSE)
   amended<-list()
-  if(isTRUE(w04_summary$reconciled_abstracts)) {
+  if(!provisional && isTRUE(w04_summary$reconciled_abstracts)) {
     rescreens<-list.dirs(file.path(w04,"abstract_rescreens"),
                         recursive=FALSE,full.names=TRUE)
     rescreens<-rescreens[file.exists(file.path(rescreens,"manifest.json"))]
@@ -112,6 +127,7 @@ export_w07_colleague_review <- function(w07,destination_zip) {
     source_w07=basename(w07),records=length(cases),
     source_coding_sha256=sha(coding_path),
     source_w04_sha256=source_manifest$source_w04_sha256,
+    provisional_retains=provisional,
     prompt_sha256=source_manifest$prompt_sha256,
     ontology_sha256=sha(file.path(bundle,"data","ontology.csv")),
     queue_sha256=sha(queue))
