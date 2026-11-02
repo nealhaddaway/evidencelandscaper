@@ -3,11 +3,15 @@
 #' Includes the complete W08 model assessments, their originating abstracts,
 #' and the exact prompt, without modifying W04, W07 or W08 results.
 #' Human decisions are recorded separately by the offline Shiny application.
-#' @param w08 Completed directory returned by trial_w08_cases().
+#' @param w08 Directory returned by trial_w08_cases().
 #' @param destination_zip A new ZIP path, not an existing file.
+#' @param allow_partial Explicitly permit PILOT_PARTIAL runs. Only validated
+#'   responses enter the Shiny queue; missing IDs are reported separately.
 #' @return ZIP path, invisibly.
 #' @export
-export_w08_colleague_review <- function(w08, destination_zip) {
+export_w08_colleague_review <- function(w08, destination_zip, allow_partial=FALSE) {
+  if(!is.logical(allow_partial)||length(allow_partial)!=1L||is.na(allow_partial))
+    stop('allow_partial must be TRUE or FALSE.')
   w08 <- normalizePath(w08,winslash="/",mustWork=TRUE)
   required <- file.path(w08,c("manifest.json","summary.json",
                               "case_assessments.jsonl","prompt.txt","fields.csv"))
@@ -16,8 +20,10 @@ export_w08_colleague_review <- function(w08, destination_zip) {
   sha <- function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
   manifest <- jsonlite::fromJSON(file.path(w08,"manifest.json"),simplifyVector=FALSE)
   summary <- jsonlite::fromJSON(file.path(w08,"summary.json"),simplifyVector=FALSE)
-  if(!identical(summary$status,"PILOT_COMPLETE"))
-    stop("W08 is incomplete; finish case detection before exporting.")
+  partial<-identical(summary$status,"PILOT_PARTIAL")
+  if(!identical(summary$status,"PILOT_COMPLETE")&&
+     !(partial&&allow_partial))
+    stop("W08 is incomplete; to export validated responses only, set allow_partial=TRUE.")
   if(!identical(sha(file.path(w08,"case_assessments.jsonl")),
                 summary$responses_sha256)||
      !identical(sha(file.path(w08,"prompt.txt")),manifest$prompt_sha256)||
@@ -36,9 +42,19 @@ export_w08_colleague_review <- function(w08, destination_zip) {
   assessments<-readjl(file.path(w08,"case_assessments.jsonl"))
   ids<-vapply(assessments,function(x)as.character(x$record_id),character(1))
   chosen<-unlist(manifest$selected_record_ids,use.names=FALSE)
-  if(!length(ids)||anyDuplicated(ids)||length(ids)!=as.integer(manifest$sample_size)||
-     !setequal(ids,chosen))
-    stop("W08 responses do not cover the exact selected publications.")
+  missing<-setdiff(chosen,ids)
+  if(!length(ids)||anyDuplicated(ids)||anyDuplicated(chosen)||
+     any(!ids%in%chosen)||
+     (length(ids)!=length(chosen)-length(missing))||
+     (!partial&&length(missing)))
+    stop("W08 validated records do not match the exact selection.")
+  if(partial) {
+    unresolved<-unlist(summary$unresolved_record_ids,use.names=FALSE)
+    if(length(missing)<1L||!setequal(missing,unresolved)||
+       !identical(as.integer(summary$validated_records),as.integer(length(ids)))||
+       !identical(length(chosen),as.integer(manifest$sample_size)))
+      stop("W08 partial output and unresolved IDs mismatch; refusing export.")
+  }
   w04<-normalizePath(manifest$source_w04,mustWork=TRUE)
   provisional<-isTRUE(manifest$provisional_retains)
   layer_dir<-if(provisional)"consensus" else "finalised"
@@ -53,13 +69,13 @@ export_w08_colleague_review <- function(w08, destination_zip) {
   retained<-Filter(function(z)identical(z$screening$decision,"retain"),
                    readjl(source_layer))
   retained_ids<-vapply(retained,function(z)as.character(z$record_id),character(1))
-  if(any(!ids%in%retained_ids))stop("W08 contains a non-retained W04 publication.")
+  if(any(!chosen%in%retained_ids))stop("W08 selected non-retained W04 publications.")
   canonical<-file.path(dirname(dirname(w04)),"W02_main","finalised","canonical.jsonl")
   if(!file.exists(canonical)||!identical(sha(canonical),manifest$canonical_w02_sha256))
     stop("Canonical W02 source does not match W08 provenance.")
   original<-readjl(canonical)
   original_ids<-vapply(original,function(z)as.character(z$identity$record_id),character(1))
-  if(anyDuplicated(original_ids)||any(!ids%in%original_ids))
+  if(anyDuplicated(original_ids)||any(!chosen%in%original_ids))
     stop("Could not match W08 publication IDs uniquely to source abstracts.")
   source<-setNames(original,original_ids)
   w04_summary<-jsonlite::fromJSON(file.path(w04,layer_dir,"summary.json"),
@@ -104,6 +120,17 @@ export_w08_colleague_review <- function(w08, destination_zip) {
   queue<-file.path(root,"data","review_queue.jsonl")
   writeLines(vapply(rows,function(z)as.character(jsonlite::toJSON(
     z,auto_unbox=TRUE,null="null")),character(1)),queue,useBytes=TRUE)
+  if(partial) {
+    # Report missing publication separately, without manufacturing a model
+    # assessment or changing the immutable 249-record validation queue.
+    excluded<-data.frame(record_id=missing,
+      title=vapply(missing,function(id)scalar(source[[id]]$canonical$title),
+                   character(1)),
+      abstract=vapply(missing,function(id)scalar(source[[id]]$canonical$abstract),
+                      character(1)),stringsAsFactors=FALSE)
+    utils::write.csv(excluded,file.path(root,"data","unresolved_publications.csv"),
+                     row.names=FALSE,na="")
+  }
   if(!file.copy(app,file.path(root,"app.R"))||
      !file.copy(file.path(w08,"prompt.txt"),file.path(root,"data","prompt.txt")))
     stop("Could not stage the portable review app and prompt.")
@@ -114,6 +141,8 @@ export_w08_colleague_review <- function(w08, destination_zip) {
     source_w08_sha256=sha(file.path(w08,"case_assessments.jsonl")),
     prompt_sha256=sha(file.path(root,"data","prompt.txt")),
     queue_sha256=sha(queue),records=length(rows),
+    partial_run=partial,selected_records=length(chosen),
+    unresolved_record_ids=as.list(missing),
     candidate_cases=sum(vapply(assessments,function(x)length(x$cases),integer(1))))
   jsonlite::write_json(metadata,file.path(root,"manifest.json"),
                        pretty=TRUE,auto_unbox=TRUE)
@@ -130,6 +159,11 @@ export_w08_colleague_review <- function(w08, destination_zip) {
     "6. Save before navigating. Saved judgments append to decisions.jsonl.",
     "7. Export complete CSV and JSONL audit history and return both.",
     "",
+    if(partial)paste0("IMPORTANT: PARTIAL RUN. Shiny contains ",length(ids),
+      " validated publications of ",length(chosen),
+      ". Missing ID(s): ",paste(missing,collapse=", "),
+      ". See data/unresolved_publications.csv. No model assessment was fabricated.")
+    else "COMPLETE RUN: All selected publications have validated assessments.",
     "A rejection does not edit the model's assessment.",
     "The review ZIP is offline and requires no API key, map folder or GitHub access.",
     "For multiple reviewers, give each a separate extracted ZIP."
@@ -141,10 +175,13 @@ export_w08_colleague_review <- function(w08, destination_zip) {
     c("w08_review_bundle/app.R","w08_review_bundle/README.txt",
       "w08_review_bundle/manifest.json",
       "w08_review_bundle/data/prompt.txt",
-      "w08_review_bundle/data/review_queue.jsonl"),flags="-q")
+      "w08_review_bundle/data/review_queue.jsonl",
+      if(partial)"w08_review_bundle/data/unresolved_publications.csv"),flags="-q")
   if(!file.exists(destination_zip)||file.info(destination_zip)$size<=0)
     stop("W08 review ZIP not created.")
-  message("[W08] Exported ",length(rows)," publications and ",
+  message("[W08] Exported ",length(rows),
+          if(partial)paste0(" of ",length(chosen)," (partial)") else "",
+          " publications and ",
           metadata$candidate_cases," candidate cases: ",destination_zip)
   invisible(destination_zip)
 }
