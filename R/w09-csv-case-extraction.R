@@ -266,8 +266,10 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
     # Schema and field-value rules remain strict. Evidence exceptions are
     # explicitly audited and mean the checkpoint requires human review.
     candidates<-list()
+    archived_issues<-character()
     for(k in seq_along(history)) {
       flags<-character()
+      issue<-NULL
       old_obj<-tryCatch({
         candidate<-jsonlite::fromJSON(history[[k]]$raw,simplifyVector=FALSE)
         withCallingHandlers(check_result(candidate,id,payload$text),
@@ -276,7 +278,13 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
             invokeRestart("muffleWarning")
           })
         candidate
-      },error=function(e)NULL)
+      },error=function(e) {
+        issue<<-conditionMessage(e)
+        NULL
+      })
+      if(!is.null(issue))
+        archived_issues<-c(archived_issues,
+          paste0("archived_response_",k,": ",issue))
       if(!is.null(old_obj))
         candidates[[length(candidates)+1L]]<-list(
           index=k,obj=old_obj,flags=flags)
@@ -300,9 +308,20 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
               length(best$flags)," evidence review flags)")
       next
     }
-    if(revalidate_only)
-      stop("[W09 case data] No archived response passed revalidation for ",
-           id,". No API request was made.")
+    if(revalidate_only) {
+      cat(jsonlite::toJSON(list(record_id=id,
+          status="no_archived_response_valid",
+          issues=as.list(archived_issues)),
+          auto_unbox=TRUE,null="null"),"\n",
+          file=file.path(dest,"offline_revalidation_failures.jsonl"),
+          append=TRUE,sep="")
+      message("[W09 case data] No archived response passed revalidation for ",
+              id,"; no API request made. ",
+              if(length(archived_issues))
+                paste(archived_issues,collapse=" | ")
+              else "No archived responses.")
+      next
+    }
     body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
       input=list(
         list(role="system",content=list(list(type="input_text",
