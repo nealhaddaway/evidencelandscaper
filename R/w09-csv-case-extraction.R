@@ -168,14 +168,14 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
              !grepl(e$anchor,source_text,fixed=TRUE))
             stop("Evidence quote/anchor missing from supplied text: ",key)
           # Verify the quotation within the cited PAGE/SECTION/TEXT BLOCK,
-          # tolerating only layout-related whitespace changes in PDF text.
+          # tolerating layout-related whitespace and capitalisation changes only.
           at<-regexpr(e$anchor,source_text,fixed=TRUE)[[1L]]
           after<-substring(source_text,at+nchar(e$anchor))
           next_anchor<-regexpr("\\[(?:PAGE|SECTION|TEXT BLOCK) [0-9]+\\]",
                                after,perl=TRUE)[[1L]]
           segment<-if(next_anchor>0L)substr(after,1L,next_anchor-1L) else after
           compact<-function(z)trimws(gsub("[[:space:]]+"," ",z))
-          if(!grepl(compact(e$quote),compact(segment),fixed=TRUE))
+          if(!grepl(tolower(compact(e$quote)),tolower(compact(segment)),fixed=TRUE))
             stop("Evidence quote does not occur in its cited source anchor: ",key)
         }
       }
