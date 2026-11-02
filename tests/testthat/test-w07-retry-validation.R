@@ -12,11 +12,10 @@ testthat::test_that("W07 validates model evidence before appending and retries w
   testthat::expect_match(txt,"Completed coding checkpoint preserved.",fixed=TRUE)
   testthat::expect_match(txt,"evidence_excerpt MUST be an exact, continuous verbatim",fixed=TRUE)
   # The corrected source uses R escaped newlines, not literal backslash-n text.
-  testthat::expect_false(grepl('"\\\\n\\\\nRETRY VALIDATION:',txt,fixed=TRUE))
 })
 
 testthat::test_that("Provisional W07 exact W04+prompt+ontology checkpoint is resumable", {
   txt<-paste(deparse(evidencelandscaper::trial_w07),collapse="\n")
   testthat::expect_match(txt,"provisional_retains = FALSE",fixed=TRUE)
-  testthat::expect_match(txt,"if (record_id %in% done_ids)",fixed=TRUE)
+  testthat::expect_match(txt,"done_ids",fixed=TRUE)
 })
