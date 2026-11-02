@@ -117,3 +117,5 @@ export(export_w04_adjudication_bundle)
 export(prepare_w09_w08_case_fulltexts)
 export(run_w09_case_data_extraction)
 export(rerun_w09_case_data_batch)
+
+export(export_w09_cases_wide_evidence)
