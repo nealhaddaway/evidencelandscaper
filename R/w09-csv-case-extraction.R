@@ -310,10 +310,11 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
         out<-tryCatch(httr2::request("https://api.openai.com/v1/responses")|>
           httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY"))|>
           httr2::req_body_json(body,auto_unbox=TRUE)|>
+          httr2::req_options(http_version=2L)|> # libcurl HTTP/1.1, avoid HTTP/2 framing errors
           httr2::req_timeout(300)|>httr2::req_perform(),error=function(e)e)
         if(!inherits(out,"error")){resp<-out;break}
         msg<-conditionMessage(out)
-        if(!grepl("timed? ?out|timeout|connection reset|failed to connect",
+        if(!grepl("timed? ?out|timeout|connection reset|failed to connect|HTTP2 framing|HTTP/2|curl_fetch_memory|stream.*reset|SSL.*read",
                   msg,ignore.case=TRUE)||transport==3L)
           stop("[W09 case data] API transport failure; checkpoint preserved: ",msg)
         message("[W09 case data] ",id,": transient request failure, retry ",
