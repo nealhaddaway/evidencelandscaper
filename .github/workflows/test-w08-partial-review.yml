@@ -1,0 +1,25 @@
+name: W08 partial review export
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'R/w08-colleague-review.R'
+      - 'tests/testthat/test-w08-partial-review.R'
+      - '.github/workflows/test-w08-partial-review.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::testthat
+          needs: check
+      - name: Test partial W08 review export
+        run: Rscript -e 'testthat::test_local(".", filter="w08-partial-review")'
