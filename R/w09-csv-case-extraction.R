@@ -32,8 +32,9 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
     stop("Remove the outdated CSV row-11 reference from your prompt.")
   spec<-utils::read.csv(schema_file,stringsAsFactors=FALSE,check.names=FALSE,
                          fileEncoding="UTF-8-BOM")
-  required<-c("Question","Definition","Examples","Answer_form","Response_compulsory")
-  if(!all(required%in%names(spec)))stop("Case-analysis CSV missing required columns.")
+  required<-c("Question","Definition","Topics of interest","Answer_form","Response_compulsory")
+  if(!all(required%in%names(spec)))stop("Case-analysis CSV missing required columns: ",
+       paste(setdiff(required,names(spec)),collapse=", "))
   # Older CSVs may still contain the retired mechanism ontology row. Never
   # submit it to this separate case extraction workflow.
   obsolete<-grepl("mechanisms of the collective action",spec$Question,
