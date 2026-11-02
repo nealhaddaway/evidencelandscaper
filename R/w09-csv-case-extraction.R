@@ -262,6 +262,35 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
     history<-readjl(file.path(dest,"invalid_responses.jsonl"))
     history<-Filter(function(z)identical(z$record_id,id)&&
       is.character(z$raw)&&length(z$raw)==1L,history)
+    # Repair only mechanically inferable missing status values in archived
+    # responses. Preserve raw JSONL and record every change in the audit.
+    repair_missing_status<-function(candidate) {
+      changes<-list()
+      for(j in seq_along(candidate$cases)) {
+        fields<-candidate$cases[[j]]$fields
+        if(!is.list(fields))next
+        for(key in intersect(names(fields),spec$field_id)) {
+          f<-fields[[key]]
+          if(!is.list(f))next
+          status<-f$reporting_status
+          if(!is.null(status)&&length(status))next
+          has_value<-(!is.null(f$value)&&is.character(f$value)&&
+            length(f$value)==1L&&!is.na(f$value)&&nzchar(trimws(f$value)))||
+            (!is.null(f$values)&&length(unlist(f$values,use.names=FALSE))>0L)
+          if(!has_value)next
+          if(!is.list(f$evidence)||!length(f$evidence))next
+          f$reporting_status<-"reported"
+          candidate$cases[[j]]$fields[[key]]<-f
+          changes[[length(changes)+1L]]<-list(
+            case_id=candidate$cases[[j]]$case_id,
+            field_id=key,
+            previous_status=NULL,
+            assigned_status="reported",
+            reason="substantive answer and supporting evidence supplied")
+        }
+      }
+      list(object=candidate,changes=changes)
+    }
     # Evaluate all archived responses and prefer the fewest evidence flags.
     # Schema and field-value rules remain strict. Evidence exceptions are
     # explicitly audited and mean the checkpoint requires human review.
@@ -270,8 +299,12 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
     for(k in seq_along(history)) {
       flags<-character()
       issue<-NULL
+      repairs<-list()
       old_obj<-tryCatch({
         candidate<-jsonlite::fromJSON(history[[k]]$raw,simplifyVector=FALSE)
+        fixed<-repair_missing_status(candidate)
+        candidate<-fixed$object
+        repairs<-fixed$changes
         withCallingHandlers(check_result(candidate,id,payload$text),
           warning=function(w) {
             flags<<-c(flags,conditionMessage(w))
@@ -287,7 +320,7 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
           paste0("archived_response_",k,": ",issue))
       if(!is.null(old_obj))
         candidates[[length(candidates)+1L]]<-list(
-          index=k,obj=old_obj,flags=flags)
+          index=k,obj=old_obj,flags=flags,repairs=repairs)
     }
     if(length(candidates)) {
       best<-candidates[[which.min(vapply(candidates,
@@ -297,8 +330,10 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
       cat(jsonlite::toJSON(list(record_id=id,
           archived_response_index=best$index,
           recovery="offline_revalidation",
-          evidence_review_required=length(best$flags)>0L,
+          evidence_review_required=length(best$flags)>0L||
+            length(best$repairs)>0L,
           evidence_flags=as.list(best$flags),
+          deterministic_status_repairs=best$repairs,
           validation_rule="relaxed_evidence_with_manual_review_flags"),
           auto_unbox=TRUE,null="null"),"\n",
           file=file.path(dest,"revalidation_audit.jsonl"),
