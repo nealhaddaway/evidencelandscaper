@@ -261,11 +261,39 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
     # Retry validation failures up to four times. Do not relax evidence
     # validation or alter prior completed append-only responses.
     for(attempt in seq_len(5L)) {
-      resp<-httr2::request("https://api.openai.com/v1/responses") |>
-        httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY")) |>
-        httr2::req_body_json(body,auto_unbox=TRUE) |>
-        httr2::req_timeout(180) |> httr2::req_perform() |>
-        httr2::resp_body_json(simplifyVector=FALSE)
+      # Retry transient transport failures separately from invalid model JSON.
+      # A timed-out request may still have been processed/billed remotely.
+      transport_log<-file.path(dest,"transport_errors.jsonl")
+      resp<-NULL
+      for(network_attempt in seq_len(3L)) {
+        request<-httr2::request("https://api.openai.com/v1/responses") |>
+          httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY")) |>
+          httr2::req_body_json(body,auto_unbox=TRUE) |>
+          httr2::req_timeout(180)
+        response<-tryCatch(httr2::req_perform(request),
+                           error=function(e)e)
+        if(!inherits(response,"error")) {
+          resp<-httr2::resp_body_json(response,simplifyVector=FALSE)
+          break
+        }
+        msg<-conditionMessage(response)
+        retryable<-inherits(response,"curl_error") ||
+          grepl("timeout|timed out|connection reset|could not resolve host|failed to connect|operation timed out",
+                msg,ignore.case=TRUE)
+        cat(jsonlite::toJSON(list(schema="w08-transport-error-v1",
+          record_id=record_id,model=model,validation_attempt=attempt,
+          transport_attempt=network_attempt,message=msg,
+          timestamp_utc=format(Sys.time(),tz="UTC",format="%Y-%m-%dT%H:%M:%SZ"),
+          remote_completion_unknown=TRUE),auto_unbox=TRUE,null="null"),
+          "\n",file=transport_log,append=TRUE,sep="")
+        if(!retryable || network_attempt==3L)
+          stop("[W08] Transport failure for ",record_id,
+            " (",network_attempt," attempt(s)); saved checkpoint preserved. ",
+            "Remote execution/charges cannot be determined: ",msg)
+        message("[W08] Transient HTTP transport failure on ",record_id,
+          ", retry ",network_attempt," of 2. Previous request's remote status unknown.")
+        Sys.sleep(c(5,15)[[network_attempt]])
+      }
       pieces<-unlist(lapply(resp$output,function(item)
         unlist(lapply(item$content,function(x)
           if(identical(x$type,"output_text"))x$text else NULL),
