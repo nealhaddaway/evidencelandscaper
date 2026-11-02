@@ -132,6 +132,27 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
             vals<-f$value
           }
         }
+        # Validate finite fixed vocabularies from the CSV, without inventing
+        # a closed vocabulary for countries or commodities.
+        q<-tolower(trimws(spec$Question[[i]]))
+        allowed<-NULL
+        if(grepl("^what is the status",q))
+          allowed<-c("active","paused","completed","abandoned")
+        if(grepl("^what is the level at which",q))
+          allowed<-c("private sector","place- or landscape-based","national",
+            "inter-governmental or multinational","systemic or other")
+        if(grepl("^what is/are the shared interest",q,fixed=TRUE))
+          allowed<-c("shared risks","shared costs","shared benefits",
+                     "shared value creation")
+        if(identical(q,"supply chain stages"))
+          allowed<-c("production","aggregation","processing","transport",
+                     "wholesale","retail")
+        if(!is.null(allowed)&&any(!vals%in%allowed))
+          stop("Unrecognised fixed-choice value for ",key,": ",
+               paste(setdiff(vals,allowed),collapse=", "))
+        if(grepl("^where did the case take place \\(country\\)",q)&&
+           any(!grepl("^[A-Z]{3}$",vals)))
+          stop("Country identifiers must be ISO3 upper-case codes: ",key)
         if(identical(f$reporting_status,"not_reported")&&length(vals))
           stop("Missing response must not contain invented values: ",key)
         if(identical(f$reporting_status,"reported")&&!length(vals))
@@ -144,9 +165,18 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
              !nzchar(trimws(e$quote))||
              !is.character(e$anchor)||length(e$anchor)!=1L||
              !grepl("^\\[(PAGE|SECTION|TEXT BLOCK) [0-9]+\\]$",e$anchor)||
-             !grepl(e$anchor,source_text,fixed=TRUE)||
-             !grepl(trimws(e$quote),source_text,fixed=TRUE))
+             !grepl(e$anchor,source_text,fixed=TRUE))
             stop("Evidence quote/anchor missing from supplied text: ",key)
+          # Verify the quotation within the cited PAGE/SECTION/TEXT BLOCK,
+          # tolerating only layout-related whitespace changes in PDF text.
+          at<-regexpr(e$anchor,source_text,fixed=TRUE)[[1L]]
+          after<-substring(source_text,at+nchar(e$anchor))
+          next_anchor<-regexpr("\\[(?:PAGE|SECTION|TEXT BLOCK) [0-9]+\\]",
+                               after,perl=TRUE)[[1L]]
+          segment<-if(next_anchor>0L)substr(after,1L,next_anchor-1L) else after
+          compact<-function(z)trimws(gsub("[[:space:]]+"," ",z))
+          if(!grepl(compact(e$quote),compact(segment),fixed=TRUE))
+            stop("Evidence quote does not occur in its cited source anchor: ",key)
         }
       }
     }
