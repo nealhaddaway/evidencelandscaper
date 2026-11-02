@@ -40,10 +40,18 @@ export_w08_colleague_review <- function(w08, destination_zip) {
      !setequal(ids,chosen))
     stop("W08 responses do not cover the exact selected publications.")
   w04<-normalizePath(manifest$source_w04,mustWork=TRUE)
-  final<-file.path(w04,"finalised","workflow04_final_screening_layer.jsonl")
-  if(!file.exists(final)||!identical(sha(final),manifest$source_w04_sha256))
-    stop("Source W04 finalised screening has changed.")
-  retained<-Filter(function(z)identical(z$screening$decision,"retain"),readjl(final))
+  provisional<-isTRUE(manifest$provisional_retains)
+  layer_dir<-if(provisional)"consensus" else "finalised"
+  source_layer<-file.path(w04,layer_dir,
+    if(provisional)"workflow04_consensus_layer.jsonl"
+    else "workflow04_final_screening_layer.jsonl")
+  if(!file.exists(source_layer)||
+     !identical(sha(source_layer),manifest$source_w04_sha256))
+    stop("Source W04 screening layer changed or is missing.")
+  if(provisional&&!identical(manifest$source_w04_layer,"consensus"))
+    stop("Provisional W08 manifest has incorrect W04 layer provenance.")
+  retained<-Filter(function(z)identical(z$screening$decision,"retain"),
+                   readjl(source_layer))
   retained_ids<-vapply(retained,function(z)as.character(z$record_id),character(1))
   if(any(!ids%in%retained_ids))stop("W08 contains a non-retained W04 publication.")
   canonical<-file.path(dirname(dirname(w04)),"W02_main","finalised","canonical.jsonl")
@@ -54,10 +62,10 @@ export_w08_colleague_review <- function(w08, destination_zip) {
   if(anyDuplicated(original_ids)||any(!ids%in%original_ids))
     stop("Could not match W08 publication IDs uniquely to source abstracts.")
   source<-setNames(original,original_ids)
-  w04_summary<-jsonlite::fromJSON(file.path(w04,"finalised","summary.json"),
+  w04_summary<-jsonlite::fromJSON(file.path(w04,layer_dir,"summary.json"),
                                    simplifyVector=FALSE)
   corrections<-list()
-  if(isTRUE(w04_summary$reconciled_abstracts)) {
+  if(!provisional&&isTRUE(w04_summary$reconciled_abstracts)) {
     dirs<-list.dirs(file.path(w04,"abstract_rescreens"),
                     recursive=FALSE,full.names=TRUE)
     dirs<-dirs[file.exists(file.path(dirs,"manifest.json"))]
@@ -102,6 +110,7 @@ export_w08_colleague_review <- function(w08, destination_zip) {
   metadata<-list(schema="ostara-w08-colleague-review-v1",
     source_w08=basename(w08),source_w04=basename(w04),
     source_w04_sha256=manifest$source_w04_sha256,
+    provisional_retains=provisional,
     source_w08_sha256=sha(file.path(w08,"case_assessments.jsonl")),
     prompt_sha256=sha(file.path(root,"data","prompt.txt")),
     queue_sha256=sha(queue),records=length(rows),
