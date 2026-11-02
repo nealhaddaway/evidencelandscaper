@@ -104,6 +104,9 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
   # Each field has the same record-independent evidence object shape.
   check_result<-function(x,id,source_text){
     if(!identical(x$record_id,id)||!is.list(x$cases)||
+       !is.character(x$publication_extraction_status)||
+       length(x$publication_extraction_status)!=1L||
+       is.na(x$publication_extraction_status)||
        !x$publication_extraction_status%in%c("cases_identified","no_qualifying_case"))
       stop("Invalid publication-level W09 case extraction result.")
     if((length(x$cases)>0L)!=identical(x$publication_extraction_status,"cases_identified"))
@@ -124,8 +127,12 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
         key<-spec$field_id[[i]]
         f<-case$fields[[key]]
         form<-spec$Answer_form[[i]]
-        if(!f$reporting_status%in%c("reported","not_reported","explicitly_none"))
-          stop("Invalid reporting status for ",key)
+        if(!is.list(f)||
+           !is.character(f$reporting_status)||
+           length(f$reporting_status)!=1L||
+           is.na(f$reporting_status)||
+           !f$reporting_status%in%c("reported","not_reported","explicitly_none"))
+          stop("Case ",j," ",key,": missing or invalid reporting_status.")
         multi<-grepl("multiple",form,fixed=TRUE)
         if(multi) {
           if(!is.list(f$values)&&!is.character(f$values))
@@ -163,7 +170,8 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
           stop("Missing response must not contain invented values: ",key)
         if(identical(f$reporting_status,"reported")&&!length(vals))
           stop("Reported response requires substantive values: ",key)
-        if(!is.list(f$evidence))stop("Evidence must be an array: ",key)
+        if(!is.list(f$evidence))stop("Case ",j," ",key,
+                                      ": evidence must be an array.")
         if(identical(f$reporting_status,"reported")&&!length(f$evidence))
           stop("Reported field lacks supporting evidence: ",key)
         for(e in f$evidence){
@@ -350,8 +358,18 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
           "Correct field shapes and quote/anchor fidelity. Do not invent data.")
       }
     }
-    if(!success)stop("[W09 case data] Invalid model output after three Luna ",
-                     "attempts for ",id,". Previous records saved.")
+    if(!success) {
+      cat(jsonlite::toJSON(list(record_id=id,
+          status="failed_after_three_attempts",
+          reason="model_validation",
+          input_sha256=payload$sha256),
+          auto_unbox=TRUE,null="null"),"\n",
+          file=file.path(dest,"batch_failures.jsonl"),
+          append=TRUE,sep="")
+      warning("[W09 case data] Invalid model output after three Luna ",
+              "attempts for ",id,". Recorded in batch_failures.jsonl; ",
+              "continuing to next publication.",call.=FALSE)
+    }
   }
   invisible(dest)
 }
