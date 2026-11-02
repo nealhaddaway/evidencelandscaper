@@ -1,0 +1,25 @@
+name: W09 CSV case extraction regression
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'R/w09-csv-case-extraction.R'
+      - 'tests/testthat/test-w09-csv-case-extraction.R'
+      - '.github/workflows/test-w09-csv-case-extraction.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::testthat
+          needs: check
+      - name: Validate CSV case extractor
+        run: Rscript -e 'testthat::test_local(".", filter="w09-csv-case-extraction")'
