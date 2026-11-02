@@ -3,12 +3,19 @@
 #' @param ontology_file Path to mechanism ontology CSV; omitted reuses the latest archived W07 trial ontology.
 #' @param prompt_file Path to W07 coding prompt TXT; omitted reuses the corresponding archived W07 prompt.
 #' @param n Number of retained records to code; 0 codes all from finalised full W04.
-#' @param w04_run Optional explicit finalised W04 run, including a selected-record run.
+#' @param w04_run Explicit W04 run for an exact selected-record cohort.
+#' @param provisional_retains Explicit opt-in to use model-consensus retains from
+#'   an unfinalised W04 run. Uncertain cases remain untouched; results are
+#'   labelled provisional and are not a final W04 handover.
 #' @param model OpenAI Responses model.
 #' @return Local W07 trial directory.
 #' @export
 trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6-luna",
-                      map_path=NULL,w04_run=NULL) {
+                      map_path=NULL,w04_run=NULL,provisional_retains=FALSE) {
+  if(!is.logical(provisional_retains)||length(provisional_retains)!=1L||
+     is.na(provisional_retains))stop("provisional_retains must be TRUE or FALSE.")
+  if(isTRUE(provisional_retains)&&is.null(w04_run))
+    stop("provisional_retains=TRUE requires an explicit w04_run.")
   if(!is.character(model)||length(model)!=1L||is.na(model)||!grepl("-luna$",model))
     stop("Only Luna models are permitted for new model calls.")
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
@@ -63,34 +70,67 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
     if(!dir.exists(path))return(character())
     list.dirs(path,recursive=FALSE,full.names=TRUE)
   }),use.names=FALSE)
-  options<-options[file.exists(file.path(options,"finalised","summary.json"))]
+  options<-options[file.exists(file.path(options,
+    if(provisional_retains)"consensus" else "finalised","summary.json"))]
   if(!is.null(w04_run)) {
     w04_run<-normalizePath(w04_run,winslash="/",mustWork=TRUE)
     options<-options[options==w04_run]
   } else {
     options<-options[if(n==0L)grepl("^full-",basename(options)) else grepl("^trial-",basename(options))]
   }
-  if(!length(options))stop("No appropriate finalised W04 screening run: full W04 required when n=0.")
-  options<-options[order(file.info(file.path(options,"finalised","summary.json"))$mtime,
-                         decreasing=TRUE)]
+  if(!length(options))
+    stop(if(provisional_retains)"No completed W04 consensus for specified run."
+         else "No appropriate finalised W04 screening run: full W04 required when n=0.")
+  options<-options[order(file.info(file.path(options,
+        if(provisional_retains)"consensus" else "finalised",
+        "summary.json"))$mtime,decreasing=TRUE)]
   w04<-options[[1L]]
-  summary_path<-file.path(w04,"finalised","summary.json")
-  final_path<-file.path(w04,"finalised","workflow04_final_screening_layer.jsonl")
+  consensus_path<-file.path(w04,"consensus","workflow04_consensus_layer.jsonl")
+  summary_path<-file.path(w04,if(provisional_retains)"consensus" else "finalised","summary.json")
+  input_path<-file.path(w04,if(provisional_retains)"consensus" else "finalised",
+     if(provisional_retains)"workflow04_consensus_layer.jsonl"
+     else "workflow04_final_screening_layer.jsonl")
   summary<-jsonlite::fromJSON(summary_path)
-  if(!identical(summary$status,"final")||
-     (n==0L && is.null(w04_run) && !identical(summary$run_type,"full"))||
-     !identical(summary$final_layer_sha256,sha(final_path))||
-     !identical(summary$original_consensus_sha256 %||% summary$source_layer_sha256,
-                sha(file.path(w04,"consensus","workflow04_consensus_layer.jsonl"))))
-    stop("W04 trial finalisation checksum validation failed.")
+  if(provisional_retains) {
+    w04_manifest_path<-file.path(w04,"local_manifest.json")
+    if(!file.exists(w04_manifest_path)||!file.exists(consensus_path))
+      stop("Provisional W04 requires completed local manifest and consensus.")
+    w04_manifest<-jsonlite::fromJSON(w04_manifest_path,simplifyVector=FALSE)
+    if(!summary$status%in%c("PASS","HUMAN_REVIEW_REQUIRED")||
+       !identical(w04_manifest$status,"screened")||
+       !identical(w04_manifest$consensus_sha256,sha(consensus_path))||
+       !identical(w04_manifest$screening_summary_status,summary$status)||
+       !identical(as.character(w04_manifest$model),"gpt-5.6-luna"))
+      stop("Provisional W04 consensus integrity or model provenance failed.")
+    if(file.exists(file.path(w04,"finalised","summary.json")))
+      stop("W04 is already finalised. Run W07 with provisional_retains=FALSE.")
+  } else {
+    if(!identical(summary$status,"final")||
+       (n==0L && is.null(w04_run) && !identical(summary$run_type,"full"))||
+       !identical(summary$final_layer_sha256,sha(input_path))||
+       !identical(summary$original_consensus_sha256 %||% summary$source_layer_sha256,
+                  sha(consensus_path)))
+      stop("W04 trial finalisation checksum validation failed.")
+  }
   readjl<-function(p) {
     lines<-readLines(p,warn=FALSE,encoding="UTF-8")
     lapply(lines[nzchar(trimws(lines))],jsonlite::fromJSON,simplifyVector=FALSE)
   }
-  screened<-readjl(final_path)
+  screened<-readjl(input_path)
   retained<-Filter(function(x)identical(x$screening$decision,"retain"),screened)
-  if(!length(retained))stop("No retained W04 trial records found.")
-  if(n==0L && (length(screened)!=summary$records || length(retained)!=summary$retain))
+  if(!length(retained))stop("No W04 model-consensus retained records found.")
+  if(provisional_retains) {
+    decision<-vapply(screened,function(x)as.character(x$screening$decision),character(1))
+    if(any(!decision%in%c("retain","exclude","uncertain"))||
+       length(screened)!=as.integer(summary$records_screened)||
+       length(retained)!=as.integer(summary$final_retain)||
+       sum(decision=="uncertain")!=as.integer(summary$final_unresolved))
+      stop("Provisional W04 population/decision counts do not match its consensus summary.")
+    message("[W07] PROVISIONAL: ",length(retained),
+      " retained consensus records only; ",sum(decision=="uncertain"),
+      " uncertainties remain unadjudicated and are NOT W07 inputs.")
+  } else if(n==0L && (length(screened)!=summary$records ||
+                        length(retained)!=summary$retain))
     stop("W07 input counts do not match finalised W04 summary.")
   selected<-if(n==0L)retained else head(retained,n)
   root<-dirname(dirname(w04))
@@ -99,7 +139,7 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
   source<-setNames(canonical,vapply(canonical,function(x)x$identity$record_id,character(1)))
   id<-vapply(selected,function(x)x$record_id,character(1))
   amended<-list()
-  if(isTRUE(summary$reconciled_abstracts)) {
+  if(!provisional_retains && isTRUE(summary$reconciled_abstracts)) {
     rescreens<-list.dirs(file.path(w04,"abstract_rescreens"),recursive=FALSE,full.names=TRUE)
     rescreens<-rescreens[file.exists(file.path(rescreens,"manifest.json"))]
     if(length(rescreens)!=1L)stop("Cannot uniquely locate corrected W04 abstracts.")
@@ -111,27 +151,32 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
   }
   if(any(!id %in% names(source)))stop("Selected W04 IDs missing from canonical W02.")
   organise_w07_trials(map_path)
-  dest<-file.path(map_path,"runs","W07",paste0(if(n==0L)"full-" else "trial-",length(id),"-",
+  dest<-file.path(map_path,"runs","W07",paste0(if(provisional_retains)"provisional-" else if(n==0L)"full-" else "trial-",length(id),"-",
           substr(sha(ontology_file),1,10),"-",substr(sha(prompt_file),1,10)))
   dest<-paste0(dest,"-model-",gsub("[^A-Za-z0-9._-]","_",model))
   # v4 trials are also keyed to the exact final W04 input, allowing the
   # same ontology/prompt to be tested on narrow and broad cohorts independently.
-  if(identical(ontology_format,"hierarchical_v4"))
-    dest<-paste0(dest,"-w04-",substr(sha(final_path),1L,12L))
+  if(identical(ontology_format,"hierarchical_v4")||provisional_retains)
+    dest<-paste0(dest,"-w04-",substr(sha(input_path),1L,12L))
   dir.create(dest,recursive=TRUE,showWarnings=FALSE)
   mpath<-file.path(dest,"manifest.json")
   outpath<-file.path(dest,"coding.jsonl")
   provenance<-list(schema="local-w07-abstract-trial-v1",
-    source_type=if(n==0L && !identical(summary$run_type,"full"))
+    source_type=if(provisional_retains)"W04_UNFINALISED_CONSENSUS_RETAINS" else
+      if(n==0L && !identical(summary$run_type,"full"))
       "W04_FINALISED_SELECTED" else if(n==0L) "W04_FINALISED_FULL" else
       "W04_FINALISED_TRIAL_ONLY",source_w04=w04,
-    source_w04_sha256=sha(final_path),
+    source_w04_sha256=sha(input_path),
+    source_w04_layer=if(provisional_retains)"consensus" else "finalised",
+    provisional_retains=provisional_retains,
     canonical_w02_sha256=sha(canonical_file),
     ontology_sha256=sha(ontology_file),prompt_sha256=sha(prompt_file),
     selected_record_ids=as.list(id),model=model)
   if(file.exists(mpath)) {
     m<-jsonlite::fromJSON(mpath,simplifyVector=FALSE)
-    if(!identical(m$source_w04,provenance$source_w04)||
+    if(!identical(isTRUE(m$provisional_retains),provisional_retains)||
+       !identical(m$source_type,provenance$source_type)||
+       !identical(m$source_w04,provenance$source_w04)||
        !identical(m$source_w04_sha256,provenance$source_w04_sha256)||
        !identical(m$canonical_w02_sha256,provenance$canonical_w02_sha256)||
        !identical(m$selected_record_ids,provenance$selected_record_ids)||
