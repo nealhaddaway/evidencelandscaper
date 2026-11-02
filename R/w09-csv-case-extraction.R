@@ -141,7 +141,7 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
         if(grepl("^what is the level at which",q))
           allowed<-c("private sector","place- or landscape-based","national",
             "inter-governmental or multinational","systemic or other")
-        if(grepl("^what is/are the shared interest",q,fixed=TRUE))
+        if(startsWith(q,"what is/are the shared interest"))
           allowed<-c("shared risks","shared costs","shared benefits",
                      "shared value creation")
         if(identical(q,"supply chain stages"))
