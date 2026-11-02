@@ -5,17 +5,31 @@
 #' run_w09_case_data_extraction(). The revised CSV is authoritative,
 #' including its 'Topics of interest' column (not the obsolete 'Examples').
 #'
-#' @param prompt_file Path to the revised prompt TXT.
-#' @param schema_file Path to the revised case-data CSV.
+#' @param prompt_file Path to the revised prompt TXT, or NULL to choose interactively.
+#' @param schema_file Path to the revised case-data CSV, or NULL to choose interactively.
 #' @param w09 Existing W09 run folder; defaults to the Ostara 190-record run.
 #' @param selection_file Existing batch_10_selected.csv; discovered if unique.
 #' @param max_records Number of remaining publications to run (default 10).
 #' @param revalidate_only Revalidate archived responses without API usage.
 #' @return Extraction directory, invisibly.
 #' @export
-rerun_w09_case_data_batch <- function(prompt_file, schema_file, w09=NULL,
+rerun_w09_case_data_batch <- function(prompt_file=NULL, schema_file=NULL, w09=NULL,
                                       selection_file=NULL, max_records=10L,
                                       revalidate_only=FALSE) {
+  if(is.null(prompt_file)) {
+    message("[W09 case data] Select your REVISED PROMPT (.txt) in the file chooser.")
+    if(!interactive())stop("Supply prompt_file in non-interactive sessions.")
+    prompt_file<-file.choose()
+  }
+  prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
+  message("[W09 case data] Prompt selected: ",basename(prompt_file))
+  if(is.null(schema_file)) {
+    message("[W09 case data] Select your REVISED CASE SCHEMA (.csv) in the file chooser.")
+    if(!interactive())stop("Supply schema_file in non-interactive sessions.")
+    schema_file<-file.choose()
+  }
+  schema_file<-normalizePath(schema_file,winslash="/",mustWork=TRUE)
+  message("[W09 case data] Schema selected: ",basename(schema_file))
   if(is.null(w09)) {
     root<-open_map("Ostara_collective_action_map")
     w09<-file.path(root,"runs","W09",
