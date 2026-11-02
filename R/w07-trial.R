@@ -298,7 +298,7 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
                   model=model,attempt=attempt,validation_error=error,
                   response_id=resp$id,usage=resp$usage,
                   raw_output=if(length(texts))texts[[1L]] else NULL)
-      cat(jsonlite::toJSON(event,auto_unbox=TRUE,null="null"),"\\n",
+      cat(jsonlite::toJSON(event,auto_unbox=TRUE,null="null"),"\n",
           file=retry_log,append=TRUE,sep="")
       if(attempt==5L)
         stop("W07 ",record_id," failed strict validation after ",attempt,
@@ -307,7 +307,7 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
               " (attempt ",attempt,"/5): ",error,
               ". Retrying with exact-source evidence instruction.")
       body$input[[1L]]$content[[1L]]$text<-paste0(instructions,
-        "\\n\\nRETRY VALIDATION: Your previous answer failed the following check: ",
+        "\n\nRETRY VALIDATION: Your previous answer failed the following check: ",
         error,". Correct the error and preserve the record_id. For every ",
         "mechanism, evidence_excerpt MUST be an exact, continuous verbatim ",
         "substring of the specified evidence_source (title, abstract or ",
