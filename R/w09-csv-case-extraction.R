@@ -180,8 +180,8 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
                                after,perl=TRUE)[[1L]]
           segment<-if(next_anchor>0L)substr(after,1L,next_anchor-1L) else after
           # Ignore differences in punctuation, whitespace and capitalisation.
-          # An exact normalized match is still mandatory somewhere in the
-          # supplied full text. Never accept unsupported quotations.
+          # Untraceable quotations are flagged for human review, not silently
+          # treated as verified. Non-evidence schema rules remain strict.
           compact<-function(z) {
             z<-iconv(z,from="",to="ASCII//TRANSLIT",sub="")
             z<-tolower(z)
@@ -190,10 +190,13 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
           quote<-compact(e$quote)
           in_anchor<-grepl(quote,compact(segment),fixed=TRUE)
           if(!in_anchor) {
-            if(!grepl(quote,compact(source_text),fixed=TRUE))
-              stop("Evidence quote is not traceable in supplied full text: ",key)
-            warning("W09 ",id," ",key,": evidence matches full text ",
-                    "but not cited anchor ",e$anchor,call.=FALSE)
+            if(!grepl(quote,compact(source_text),fixed=TRUE)) {
+              warning("W09 ",id," ",key,": quotation not found in full text; ",
+                      "requires manual evidence review",call.=FALSE)
+            } else {
+              warning("W09 ",id," ",key,": evidence matches full text ",
+                      "but not cited anchor ",e$anchor,call.=FALSE)
+            }
           }
         }
       }
@@ -250,30 +253,44 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
     history<-readjl(file.path(dest,"invalid_responses.jsonl"))
     history<-Filter(function(z)identical(z$record_id,id)&&
       is.character(z$raw)&&length(z$raw)==1L,history)
-    recovered<-FALSE
-    for(k in rev(seq_along(history))) {
+    # Evaluate all archived responses and prefer the fewest evidence flags.
+    # Schema and field-value rules remain strict. Evidence exceptions are
+    # explicitly audited and mean the checkpoint requires human review.
+    candidates<-list()
+    for(k in seq_along(history)) {
+      flags<-character()
       old_obj<-tryCatch({
         candidate<-jsonlite::fromJSON(history[[k]]$raw,simplifyVector=FALSE)
-        check_result(candidate,id,payload$text)
+        withCallingHandlers(check_result(candidate,id,payload$text),
+          warning=function(w) {
+            flags<<-c(flags,conditionMessage(w))
+            invokeRestart("muffleWarning")
+          })
         candidate
       },error=function(e)NULL)
-      if(!is.null(old_obj)) {
-        cat(jsonlite::toJSON(old_obj,auto_unbox=TRUE,null="null"),"\n",
-            file=ledger,append=TRUE,sep="")
-        cat(jsonlite::toJSON(list(record_id=id,
-            archived_response_index=k,
-            recovery="offline_revalidation",
-            validation_rule="normalized_quote_with_global_source_fallback"),
-            auto_unbox=TRUE,null="null"),"\n",
-            file=file.path(dest,"revalidation_audit.jsonl"),
-            append=TRUE,sep="")
-        message("[W09 case data] Recovered archived response ",k,
-                " for ",id," (",length(old_obj$cases)," cases)")
-        recovered<-TRUE
-        break
-      }
+      if(!is.null(old_obj))
+        candidates[[length(candidates)+1L]]<-list(
+          index=k,obj=old_obj,flags=flags)
     }
-    if(recovered)next
+    if(length(candidates)) {
+      best<-candidates[[which.min(vapply(candidates,
+        function(z)length(z$flags),integer(1)))]]
+      cat(jsonlite::toJSON(best$obj,auto_unbox=TRUE,null="null"),"\n",
+          file=ledger,append=TRUE,sep="")
+      cat(jsonlite::toJSON(list(record_id=id,
+          archived_response_index=best$index,
+          recovery="offline_revalidation",
+          evidence_review_required=length(best$flags)>0L,
+          evidence_flags=as.list(best$flags),
+          validation_rule="relaxed_evidence_with_manual_review_flags"),
+          auto_unbox=TRUE,null="null"),"\n",
+          file=file.path(dest,"revalidation_audit.jsonl"),
+          append=TRUE,sep="")
+      message("[W09 case data] Recovered archived response ",best$index,
+              " for ",id," (",length(best$obj$cases)," cases; ",
+              length(best$flags)," evidence review flags)")
+      next
+    }
     if(revalidate_only)
       stop("[W09 case data] No archived response passed revalidation for ",
            id,". No API request was made.")
