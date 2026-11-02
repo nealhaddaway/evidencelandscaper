@@ -104,10 +104,28 @@ prepare_w09_w08_case_fulltexts <- function(w08,include_unclear=TRUE) {
     for(k in names(provenance))
       if(!identical(old[[k]],provenance[[k]]))
         stop("W09 handover provenance conflict: ",k)
-    if(!file.exists(file.path(dest,"retrieval_queue.csv"))||
-       !identical(utils::read.csv(file.path(dest,"retrieval_queue.csv"),
-          stringsAsFactors=FALSE),queue))
-      stop("Existing W09 retrieval queue changed.")
+    queue_file<-file.path(dest,"retrieval_queue.csv")
+    if(!file.exists(queue_file))
+      stop("Existing W09 retrieval queue missing.")
+    current<-utils::read.csv(queue_file,stringsAsFactors=FALSE)
+    # Compare bibliographic identity, not mutable retrieval-status columns.
+    # Normalise the expected values using the same CSV round-trip as the
+    # original queue creation, avoiding irrelevant R type/row-name differences.
+    tmp<-tempfile(fileext=".csv")
+    on.exit(unlink(tmp),add=TRUE)
+    utils::write.csv(queue,tmp,row.names=FALSE)
+    expected<-utils::read.csv(tmp,stringsAsFactors=FALSE)
+    identity_cols<-c("record_id","title","doi")
+    if(!all(identity_cols%in%names(current))||
+       !identical(as.character(current$record_id),
+                  as.character(expected$record_id))||
+       !identical(current[,identity_cols,drop=FALSE],
+                  expected[,identity_cols,drop=FALSE]))
+      stop("Existing W09 retrieval queue bibliographic identities changed; ",
+           "refusing to reuse it. No files modified.")
+    # Preserve any legitimate work recorded in pdf_path,
+    # retrieval_status, notes, and additional columns.
+
     message("[W09] Verified existing case-positive retrieval queue: ",dest)
     return(invisible(dest))
   }
