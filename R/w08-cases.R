@@ -4,7 +4,9 @@
 #' separate CSVs make the candidate cases and all publication assessments
 #' reviewable. Existing W04/W07 files are read-only.
 #' @param n Randomly sampled retained publications (default 20); 0 selects all.
-#' @param w04_run Optional explicit finalised W04 run, including sampled runs.
+#' @param w04_run Explicit W04 run for a selected cohort.
+#' @param provisional_retains Opt in to unfinalised W04 consensus retains; all
+#'   uncertain records are excluded from W08 inputs without adjudication.
 #' @param seed Sampling seed, recorded in the manifest.
 #' @param model OpenAI Responses model.
 #' @param map_path Local map root folder (defaults to the Ostara map).
@@ -12,7 +14,12 @@
 #' @return W08 pilot run directory, invisibly.
 #' @export
 trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
-                            map_path=NULL,prompt_file=NULL,w04_run=NULL) {
+                            map_path=NULL,prompt_file=NULL,w04_run=NULL,
+                            provisional_retains=FALSE) {
+  if(!is.logical(provisional_retains)||length(provisional_retains)!=1L||
+     is.na(provisional_retains))stop("provisional_retains must be TRUE or FALSE.")
+  if(provisional_retains&&is.null(w04_run))
+    stop("Provisional W08 requires an explicit w04_run.")
   if(!is.character(model)||length(model)!=1L||is.na(model)||!grepl("-luna$",model))
     stop("Only Luna models are permitted for new model calls.")
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
@@ -51,19 +58,48 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
     w04_run<-normalizePath(w04_run,winslash="/",mustWork=TRUE)
     runs<-runs[runs==w04_run]
   } else runs<-runs[grepl("^full-",basename(runs))]
-  runs<-runs[file.exists(file.path(runs,"finalised","summary.json"))]
+  layer_dir<-if(provisional_retains)"consensus" else "finalised"
+  runs<-runs[file.exists(file.path(runs,layer_dir,"summary.json"))]
   if(length(runs)!=1L)
-    stop("Expected exactly one finalised W04 full run; select a map with a unique run.")
+    stop(if(provisional_retains)"Expected exactly one explicit completed W04 consensus run."
+         else "Expected exactly one finalised W04 full run; select a map with a unique run.")
   w04<-runs[[1L]]
-  final_path<-file.path(w04,"finalised","workflow04_final_screening_layer.jsonl")
-  sm<-jsonlite::fromJSON(file.path(w04,"finalised","summary.json"))
-  if(!identical(sm$status,"final")||
-     (is.null(w04_run)&&!identical(sm$run_type,"full"))||
-     !identical(sm$final_layer_sha256,sha(final_path)))
+  input_path<-file.path(w04,layer_dir,
+    if(provisional_retains)"workflow04_consensus_layer.jsonl"
+    else "workflow04_final_screening_layer.jsonl")
+  sm<-jsonlite::fromJSON(file.path(w04,layer_dir,"summary.json"))
+  if(provisional_retains) {
+    manifest_path<-file.path(w04,"local_manifest.json")
+    if(!file.exists(manifest_path)||!file.exists(input_path))
+      stop("Provisional W04 consensus or local manifest missing.")
+    origin<-jsonlite::fromJSON(manifest_path)
+    if(!sm$status%in%c("PASS","HUMAN_REVIEW_REQUIRED")||
+       !identical(origin$status,"screened")||
+       !identical(origin$screening_summary_status,sm$status)||
+       !identical(origin$consensus_sha256,sha(input_path))||
+       !identical(origin$model,"gpt-5.6-luna"))
+      stop("Provisional W04 integrity or model provenance check failed.")
+    if(file.exists(file.path(w04,"finalised","summary.json")))
+      stop("W04 is already finalised; use provisional_retains=FALSE.")
+  } else if(!identical(sm$status,"final")||
+       (is.null(w04_run)&&!identical(sm$run_type,"full"))||
+       !identical(sm$final_layer_sha256,sha(input_path)))
     stop("W04 finalised screening integrity check failed.")
-  screened<-readjl(final_path)
-  retained<-Filter(function(z)identical(z$screening$decision,"retain"),screened)
-  if(length(screened)!=sm$records||length(retained)!=sm$retain)
+  screened<-readjl(input_path)
+  decisions<-vapply(screened,function(z)as.character(z$screening$decision),
+                    character(1))
+  retained<-screened[decisions=="retain"]
+  if(!length(retained))stop("W04 has no retained records for W08.")
+  if(provisional_retains) {
+    if(any(!decisions%in%c("retain","exclude","uncertain"))||
+       length(screened)!=as.integer(sm$records_screened)||
+       length(retained)!=as.integer(sm$final_retain)||
+       sum(decisions=="uncertain")!=as.integer(sm$final_unresolved))
+      stop("Provisional W04 consensus decision count mismatch.")
+    message("[W08] PROVISIONAL: ",length(retained),
+      " model-consensus retains; ",sum(decisions=="uncertain"),
+      " uncertain W04 records are NOT included.")
+  } else if(length(screened)!=sm$records||length(retained)!=sm$retain)
     stop("Final W04 count mismatch.")
   if(n>length(retained))stop("n exceeds the number of retained publications.")
   if(n==0L)n<-length(retained)
@@ -87,7 +123,7 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
     as.character(z$identity$record_id),character(1)))
   if(any(!selected %in% names(source)))stop("Selected W08 IDs missing from W02.")
   corrected<-list()
-  if(isTRUE(sm$reconciled_abstracts)) {
+  if(!provisional_retains&&isTRUE(sm$reconciled_abstracts)) {
     rr<-file.path(w04,"abstract_rescreens")
     dirs<-list.dirs(rr,recursive=FALSE,full.names=TRUE)
     dirs<-dirs[file.exists(file.path(dirs,"manifest.json"))]
@@ -102,20 +138,23 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
   prompt<-paste(readLines(prompt_file,warn=FALSE,encoding="UTF-8"),
                 collapse="\n")
   if(!nzchar(trimws(prompt)))stop("Empty W08 prompt.")
-  tag<-paste0("sample-",n,"-seed-",seed,"-",substr(sha(final_path),1,10),
+  tag<-paste0(if(provisional_retains)"provisional-" else "",
+              "sample-",n,"-seed-",seed,"-",substr(sha(input_path),1,10),
               "-",substr(sha(prompt_file),1,10))
   tag<-paste0(tag,"-model-",gsub("[^A-Za-z0-9._-]","_",model))
   dest<-file.path(map_path,"runs","W08",tag)
   manifest_path<-file.path(dest,"manifest.json")
   out<-file.path(dest,"case_assessments.jsonl")
   info<-list(schema="local-w08-case-pilot-v1",status="prepared",
-    source_w04=w04,source_w04_sha256=sha(final_path),
+    source_w04=w04,source_w04_sha256=sha(input_path),
+    source_w04_layer=layer_dir,provisional_retains=provisional_retains,
     canonical_w02_sha256=sha(canonical_file),
     prompt_sha256=sha(prompt_file),schema_sha256=sha(form_file),
     model=model,seed=seed,sample_size=n,selected_record_ids=as.list(selected))
   if(file.exists(manifest_path)) {
     prior<-jsonlite::fromJSON(manifest_path,simplifyVector=FALSE)
-    for(field in c("source_w04_sha256","canonical_w02_sha256",
+    for(field in c("source_w04_sha256","source_w04_layer","provisional_retains",
+                   "canonical_w02_sha256",
                    "prompt_sha256","schema_sha256","model","seed",
                    "sample_size","selected_record_ids"))
       if(!identical(prior[[field]],info[[field]]))
