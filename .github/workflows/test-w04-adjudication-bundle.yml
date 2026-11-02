@@ -1,0 +1,25 @@
+name: W04 portable adjudication bundle tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'R/w04-adjudication-bundle.R'
+      - 'tests/testthat/test-w04-adjudication-bundle.R'
+      - '.github/workflows/test-w04-adjudication-bundle.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::testthat, any::shiny
+          needs: check
+      - name: Test portable W04 adjudication ZIP
+        run: Rscript -e 'testthat::test_local(".", filter="w04-adjudication-bundle")'
