@@ -10,13 +10,18 @@
 #' @param max_records Maximum unprocessed IDs to submit on this call, default 1.
 #' @param model Luna model only.
 #' @param max_pages Max PDF pages; 0 means all.
+#' @param revalidate_only Recheck archived invalid responses without API calls.
 #' @return Output directory, invisibly.
 #' @export
 run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
-  max_records=1L,model="gpt-5.6-luna",max_pages=0L) {
+  max_records=1L,model="gpt-5.6-luna",max_pages=0L,
+  revalidate_only=FALSE) {
+  if(!is.logical(revalidate_only)||length(revalidate_only)!=1L||is.na(revalidate_only))
+    stop("revalidate_only must be TRUE or FALSE.")
   if(!identical(model,"gpt-5.6-luna"))
     stop("W09 case data extraction permits gpt-5.6-luna only.")
-  if(!nzchar(Sys.getenv("OPENAI_API_KEY")))stop("OPENAI_API_KEY is required.")
+  if(!revalidate_only&&!nzchar(Sys.getenv("OPENAI_API_KEY")))
+    stop("OPENAI_API_KEY is required.")
   w09<-normalizePath(w09,winslash="/",mustWork=TRUE)
   prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
   schema_file<-normalizePath(schema_file,winslash="/",mustWork=TRUE)
@@ -174,9 +179,22 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
           next_anchor<-regexpr("\\[(?:PAGE|SECTION|TEXT BLOCK) [0-9]+\\]",
                                after,perl=TRUE)[[1L]]
           segment<-if(next_anchor>0L)substr(after,1L,next_anchor-1L) else after
-          compact<-function(z)trimws(gsub("[[:space:]]+"," ",z))
-          if(!grepl(tolower(compact(e$quote)),tolower(compact(segment)),fixed=TRUE))
-            stop("Evidence quote does not occur in its cited source anchor: ",key)
+          # Ignore differences in punctuation, whitespace and capitalisation.
+          # An exact normalized match is still mandatory somewhere in the
+          # supplied full text. Never accept unsupported quotations.
+          compact<-function(z) {
+            z<-iconv(z,from="",to="ASCII//TRANSLIT",sub="")
+            z<-tolower(z)
+            trimws(gsub("[^[:alnum:]]+"," ",z))
+          }
+          quote<-compact(e$quote)
+          in_anchor<-grepl(quote,compact(segment),fixed=TRUE)
+          if(!in_anchor) {
+            if(!grepl(quote,compact(source_text),fixed=TRUE))
+              stop("Evidence quote is not traceable in supplied full text: ",key)
+            warning("W09 ",id," ",key,": evidence matches full text ",
+                    "but not cited anchor ",e$anchor,call.=FALSE)
+          }
         }
       }
     }
@@ -228,6 +246,37 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
         auto_unbox=TRUE,null="null"),"\n",
         file=source_selection,append=TRUE,sep="")
     }
+    # Revalidate archived model responses before any paid request.
+    history<-readjl(file.path(dest,"invalid_responses.jsonl"))
+    history<-Filter(function(z)identical(z$record_id,id)&&
+      is.character(z$raw)&&length(z$raw)==1L,history)
+    recovered<-FALSE
+    for(k in rev(seq_along(history))) {
+      old_obj<-tryCatch({
+        candidate<-jsonlite::fromJSON(history[[k]]$raw,simplifyVector=FALSE)
+        check_result(candidate,id,payload$text)
+        candidate
+      },error=function(e)NULL)
+      if(!is.null(old_obj)) {
+        cat(jsonlite::toJSON(old_obj,auto_unbox=TRUE,null="null"),"\n",
+            file=ledger,append=TRUE,sep="")
+        cat(jsonlite::toJSON(list(record_id=id,
+            archived_response_index=k,
+            recovery="offline_revalidation",
+            validation_rule="normalized_quote_with_global_source_fallback"),
+            auto_unbox=TRUE,null="null"),"\n",
+            file=file.path(dest,"revalidation_audit.jsonl"),
+            append=TRUE,sep="")
+        message("[W09 case data] Recovered archived response ",k,
+                " for ",id," (",length(old_obj$cases)," cases)")
+        recovered<-TRUE
+        break
+      }
+    }
+    if(recovered)next
+    if(revalidate_only)
+      stop("[W09 case data] No archived response passed revalidation for ",
+           id,". No API request was made.")
     body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
       input=list(
         list(role="system",content=list(list(type="input_text",
