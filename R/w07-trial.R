@@ -210,72 +210,113 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
                  list(role="user",content=list(list(type="input_text",
                     text=jsonlite::toJSON(record,auto_unbox=TRUE,null="null"))))),
       text=list(format=list(type="json_object")))
-    resp<-httr2::request("https://api.openai.com/v1/responses") |>
-      httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY")) |>
-      httr2::req_body_json(body,auto_unbox=TRUE) |>
-      httr2::req_timeout(180) |> httr2::req_perform() |>
-      httr2::resp_body_json(simplifyVector=FALSE)
-    texts<-unlist(lapply(resp$output,function(item)
-      unlist(lapply(item$content,function(part)
-        if(identical(part$type,"output_text"))part$text else NULL),use.names=FALSE)),
-      use.names=FALSE)
-    if(!length(texts))stop("No W07 response text for ",record_id)
-    result<-jsonlite::fromJSON(texts[[1L]],simplifyVector=FALSE)
-    if(!identical(result$record_id,record_id))stop("W07 record ID mismatch.")
-    assigned<-vapply(result$mechanisms,function(x)x$mechanism_id,character(1))
-    if(any(!assigned %in% codes)||anyDuplicated(assigned))
-      stop("W07 invalid or duplicate mechanism ID for ",record_id)
-    if(!result$coding_status%in%c("coded","insufficient_information","no_supported_mechanism"))
-      stop("Invalid W07 coding status for ",record_id)
-    if(identical(ontology_format,"hierarchical_v4")) {
-      if(!is.list(result$mechanisms)||!is.logical(result$ontology_gap)||
-         length(result$ontology_gap)!=1L||is.na(result$ontology_gap))
-        stop("W07 hierarchical coding requires mechanisms and ontology_gap: ",record_id)
-      if(length(assigned) && result$coding_status!="coded")
-        stop("Mechanisms present but coding_status is not coded: ",record_id)
-      if(isTRUE(result$ontology_gap)) {
-        if(result$coding_status!="coded"||
-           is.null(result$proposed_new_mechanism)||
-           !nzchar(trimws(as.character(result$proposed_new_mechanism)))||
-           is.null(result$ontology_gap_reason)||
-           !nzchar(trimws(as.character(result$ontology_gap_reason))))
-          stop("W07 ontology gap lacks a supported proposal/reason: ",record_id)
-        closest<-result$closest_existing_mechanism_id
-        if(!is.null(closest)&&!identical(closest,"")&&
-           !as.character(closest)%in%codes)
-          stop("W07 ontology gap refers to unknown nearest code: ",record_id)
-      } else if(!is.null(result$proposed_new_mechanism)||
-                !is.null(result$ontology_gap_reason)||
-                !is.null(result$closest_existing_mechanism_id)) {
-        stop("W07 non-gap has non-null gap fields: ",record_id)
+    # Retry invalid evidence and response-shape errors; preserve every already
+    # accepted record in the append-only coding.jsonl. Do not loosen checks.
+    validate_result<-function(result){
+      assigned<-NULL
+      if(!identical(result$record_id,record_id))stop("W07 record ID mismatch.")
+      assigned<-vapply(result$mechanisms,function(x)x$mechanism_id,character(1))
+      if(any(!assigned %in% codes)||anyDuplicated(assigned))
+        stop("W07 invalid or duplicate mechanism ID for ",record_id)
+      if(!result$coding_status%in%c("coded","insufficient_information","no_supported_mechanism"))
+        stop("Invalid W07 coding status for ",record_id)
+      if(identical(ontology_format,"hierarchical_v4")) {
+        if(!is.list(result$mechanisms)||!is.logical(result$ontology_gap)||
+           length(result$ontology_gap)!=1L||is.na(result$ontology_gap))
+          stop("W07 hierarchical coding requires mechanisms and ontology_gap: ",record_id)
+        if(length(assigned) && result$coding_status!="coded")
+          stop("Mechanisms present but coding_status is not coded: ",record_id)
+        if(isTRUE(result$ontology_gap)) {
+          if(result$coding_status!="coded"||
+             is.null(result$proposed_new_mechanism)||
+             !nzchar(trimws(as.character(result$proposed_new_mechanism)))||
+             is.null(result$ontology_gap_reason)||
+             !nzchar(trimws(as.character(result$ontology_gap_reason))))
+            stop("W07 ontology gap lacks a supported proposal/reason: ",record_id)
+          closest<-result$closest_existing_mechanism_id
+          if(!is.null(closest)&&!identical(closest,"")&&
+             !as.character(closest)%in%codes)
+            stop("W07 ontology gap refers to unknown nearest code: ",record_id)
+        } else if(!is.null(result$proposed_new_mechanism)||
+                  !is.null(result$ontology_gap_reason)||
+                  !is.null(result$closest_existing_mechanism_id)) {
+          stop("W07 non-gap has non-null gap fields: ",record_id)
+        }
+        if(!length(assigned)&&!isTRUE(result$ontology_gap)&&
+           identical(result$coding_status,"coded"))
+          stop("W07 coded status without a mechanism or gap: ",record_id)
+        for(mech in result$mechanisms) {
+          if(is.null(mech$confidence)||
+             !mech$confidence%in%c("high","medium","low")||
+             is.null(mech$implementation_status)||
+             !mech$implementation_status%in%
+               c("implemented","proposed","mentioned_only","unclear")||
+             is.null(mech$evidence)||
+             !nzchar(trimws(as.character(mech$evidence))))
+            stop("Invalid mechanism confidence, status or evidence for ",record_id)
+          excerpt<-mech$evidence_excerpt
+          if(is.null(excerpt)||!is.character(excerpt)||
+             length(excerpt)!=1L||!nzchar(trimws(excerpt)))
+            stop("Mechanism lacks a supporting verbatim excerpt: ",record_id)
+          field<-mech$evidence_source
+          if(is.null(field)||length(field)!=1L||
+             !field%in%c("title","abstract","keywords"))
+            stop("Invalid mechanism evidence source: ",record_id)
+          raw<-if(identical(field,"title"))z$title else
+            if(identical(field,"abstract"))abstract else record$keywords
+          raw<-paste(unlist(raw,use.names=FALSE),collapse=" ")
+          if(!grepl(trimws(excerpt),raw,fixed=TRUE))
+            stop("Mechanism excerpt is not in the supplied ",field,": ",record_id)
+        }
       }
-      if(!length(assigned)&&!isTRUE(result$ontology_gap)&&
-         identical(result$coding_status,"coded"))
-        stop("W07 coded status without a mechanism or gap: ",record_id)
-      for(mech in result$mechanisms) {
-        if(is.null(mech$confidence)||
-           !mech$confidence%in%c("high","medium","low")||
-           is.null(mech$implementation_status)||
-           !mech$implementation_status%in%
-             c("implemented","proposed","mentioned_only","unclear")||
-           is.null(mech$evidence)||
-           !nzchar(trimws(as.character(mech$evidence))))
-          stop("Invalid mechanism confidence, status or evidence for ",record_id)
-        excerpt<-mech$evidence_excerpt
-        if(is.null(excerpt)||!is.character(excerpt)||
-           length(excerpt)!=1L||!nzchar(trimws(excerpt)))
-          stop("Mechanism lacks a supporting verbatim excerpt: ",record_id)
-        field<-mech$evidence_source
-        if(is.null(field)||length(field)!=1L||
-           !field%in%c("title","abstract","keywords"))
-          stop("Invalid mechanism evidence source: ",record_id)
-        raw<-if(identical(field,"title"))z$title else
-          if(identical(field,"abstract"))abstract else record$keywords
-        raw<-paste(unlist(raw,use.names=FALSE),collapse=" ")
-        if(!grepl(trimws(excerpt),raw,fixed=TRUE))
-          stop("Mechanism excerpt is not in the supplied ",field,": ",record_id)
-      }
+      invisible(TRUE)
     }
+    retry_log<-file.path(dest,"invalid_responses.jsonl")
+    result<-NULL
+    for(attempt in seq_len(5L)) {
+      resp<-httr2::request("https://api.openai.com/v1/responses") |>
+        httr2::req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY")) |>
+        httr2::req_body_json(body,auto_unbox=TRUE) |>
+        httr2::req_timeout(180) |> httr2::req_perform() |>
+        httr2::resp_body_json(simplifyVector=FALSE)
+      texts<-unlist(lapply(resp$output,function(item)
+        unlist(lapply(item$content,function(part)
+          if(identical(part$type,"output_text"))part$text else NULL),use.names=FALSE)),
+        use.names=FALSE)
+      error<-NULL
+      if(!length(texts)) {
+        error<-"No W07 output text"
+      } else {
+        result<-tryCatch(jsonlite::fromJSON(texts[[1L]],simplifyVector=FALSE),
+                         error=function(e){error<<-conditionMessage(e);NULL})
+        if(!is.null(result))
+          error<-tryCatch({validate_result(result);NULL},
+                           error=function(e)conditionMessage(e))
+      }
+      if(is.null(error))break
+      event<-list(schema="w07-invalid-response-v1",record_id=record_id,
+                  model=model,attempt=attempt,validation_error=error,
+                  response_id=resp$id,usage=resp$usage,
+                  raw_output=if(length(texts))texts[[1L]] else NULL)
+      cat(jsonlite::toJSON(event,auto_unbox=TRUE,null="null"),"\\n",
+          file=retry_log,append=TRUE,sep="")
+      if(attempt==5L)
+        stop("W07 ",record_id," failed strict validation after ",attempt,
+             " Luna attempts: ",error,". Completed coding checkpoint preserved.")
+      message("[W07] Invalid response for ",record_id,
+              " (attempt ",attempt,"/5): ",error,
+              ". Retrying with exact-source evidence instruction.")
+      body$input[[1L]]$content[[1L]]$text<-paste0(instructions,
+        "\\n\\nRETRY VALIDATION: Your previous answer failed the following check: ",
+        error,". Correct the error and preserve the record_id. For every ",
+        "mechanism, evidence_excerpt MUST be an exact, continuous verbatim ",
+        "substring of the specified evidence_source (title, abstract or ",
+        "keywords) in the supplied record. Copy punctuation and capitalization ",
+        "exactly. Do not paraphrase or infer quotations. If a proposed ",
+        "mechanism lacks an exact supporting excerpt, omit that mechanism ",
+        "rather than inventing evidence. Obey the original JSON schema.")
+    }
+    assigned<-vapply(result$mechanisms,function(x)x$mechanism_id,character(1))
     cat(jsonlite::toJSON(result,auto_unbox=TRUE,null="null"),"\n",
         file=outpath,append=TRUE,sep="")
     progress_index<-progress_index+1L
