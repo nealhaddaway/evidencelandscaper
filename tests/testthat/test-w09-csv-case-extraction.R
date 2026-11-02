@@ -17,5 +17,5 @@ testthat::test_that("W09 CSV-driven case extraction has separate mechanism-free 
   testthat::expect_false(grepl("w07_run",src,fixed=TRUE))
   testthat::expect_error(f(w09=tempdir(),prompt_file="missing.txt",
                           schema_file="missing.csv",record_ids="x",
-                          model="gpt-5.6"),"Luna only")
+                          model="gpt-5.6"),"gpt-5\\.6-luna only")
 })
