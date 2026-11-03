@@ -13,7 +13,7 @@ testthat::test_that("W07 accepts the client's 30-code native ontology", {
   testthat::expect_identical(meta$required,names(new))
   testthat::expect_error(
     evidencelandscaper:::.w07_ontology_columns(new[-1,]),
-    "exactly 30")
+    "28 or 30")
   broken<-new
   broken$definition[[2]]<-"  "
   testthat::expect_error(
