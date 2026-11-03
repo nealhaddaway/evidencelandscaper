@@ -27,6 +27,7 @@ CODING PRINCIPLES
 8. This is publication-level mechanism coding, not an initiative register. The distinct case-presence assessment below has separate criteria and must not change mechanism classifications.
 9. Do not code a sustainability objective, claimed impact or effectiveness finding as a mechanism unless the actual coordinated process, instrument or intervention is described.
 10. Review the whole supplied full text, including methods, results, discussion and relevant tables or descriptions that have been included in the supplied text. Do not rely solely on its abstract, summary or author-assigned labels.
+11. Where two approved entries have overlapping or identical definitions, use their specific fine-level labels and hierarchy to discriminate their intended functions. Do not automatically assign both because of shared terminology: each must be independently supported by the publication. Do not change, merge or invent mechanism IDs.
 
 MECHANISM INVENTORY
 Examine the ENTIRE fulltext. Evaluate EVERY mechanism_id supplied in approved_ontology exactly once, using its definition and hierarchy; do not consider only mechanisms explicitly named by the authors.
