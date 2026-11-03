@@ -110,6 +110,14 @@ prepare_ostara_first10_fulltext_review <- function(mechanism_dir,
     "record_id","insight_type","summary","context","evidence_basis",
     "evidence_quote","source_anchor","reason","human_decision","reviewer"))
   availability<-inames
+  flagged_mechanisms<-vapply(m,function(x)
+    isTRUE(x$evidence_review_required),logical(1))
+  flagged_insights<-vapply(insights,function(x)
+    isTRUE(x$evidence_review_required),logical(1))
+  availability$mechanism_evidence_review_required<-
+    availability$record_id%in%mids[flagged_mechanisms]
+  availability$insights_evidence_review_required<-
+    availability$record_id%in%ids[flagged_insights]
   availability$mechanism_coded<-availability$record_id%in%mids
   availability$insights_coded<-availability$record_id%in%ids
   availability$abstract_no_case_insights_eligible<-
