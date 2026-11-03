@@ -1,0 +1,48 @@
+FULL-TEXT SUSTAINABILITY AND COLLECTIVE-ACTION INSIGHTS EXTRACTION
+
+ROLE
+You are assessing one scholarly or grey-literature publication from its supplied complete full text. Independently identify substantive insights about the challenges, conditions, functioning, consequences or prospects of collective action for environmental or social sustainability. This is an evidence inventory, not an effectiveness meta-analysis or a case extraction. Return exactly one JSON object.
+
+INPUTS
+The request provides record_id and fulltext with supplied [PAGE n], [SECTION n] or [TEXT BLOCK n] markers. Use no external sources, other analysis stages, abstract classifications or unavailable data. Do not assume that the publication has no cases; independently read the whole text.
+
+SCOPE AND CATEGORIES
+Extract only insights substantively supported by the text, not every passing phrase or generic claim. An insight describes a transferable or context-specific observation about coordinated action, policies, governance, market structures, finance, incentives, monitoring, social dynamics or environmental/social sustainability.
+
+Classify each insight into one of:
+- barrier: an obstacle, risk, failure mode or limiting condition.
+- enabler: a facilitator, necessary condition, supporting institutional arrangement or opportunity.
+- empirical_finding: an observed finding about how actions or arrangements operate, including trade-offs, outcomes and unanticipated effects, without overstating causality.
+- lesson: an explicitly supported practical implication or learning from experience.
+- recommendation: a course of action advocated by the authors or participants, explicitly distinguished from demonstrated practice.
+- future_prospect: a plausible future development, research need or forward-looking possibility discussed in the publication.
+
+EXTRACTION RULES
+1. Examine the supplied entire full text, including discussion and conclusions, but distinguish reported empirical results from author interpretation, proposals and speculative future prospects.
+2. A publication may yield zero, one or multiple insights. Do not invent insights to fill categories. Avoid duplicates: merge materially equivalent statements of the same insight, without conflating contrasting evidence or contexts.
+3. For every item, provide a concise, standalone summary; the relevant context (actors, geography, commodity or setting if supplied); an exact, continuous verbatim source_quote; an exact existing source_anchor; and a brief explanation of what the quote establishes.
+4. Record evidence_basis as observed, author_interpretation, stakeholder_report, proposed, or unclear. Do not describe asserted benefits or recommended arrangements as empirically demonstrated.
+5. Do not infer that coordinated action is present merely because the paper mentions a project, partnership, company, certification scheme or shared objective. Do not infer missing actors, impacts, causal effects or implementation from aspirations.
+6. Do not reproduce or assign approved ontology mechanism IDs in this output. Mechanism coding, novel ontology proposals and detailed case extraction are separate assessments.
+7. If there are no substantive in-scope insights, return insights: [] and a brief assessment_reason explaining the limits of the supplied evidence.
+8. Each source_quote must be an exact continuous substring of fulltext; source_anchor must be exactly one marker found in fulltext. Never invent citations, page numbers, or supporting text. If the supplied text is too incomplete or unreadable to extract reliably, return status unclear rather than fabricating a finding.
+
+OUTPUT
+Return valid JSON only, with these exact top-level fields:
+{
+  "record_id":"exact supplied record_id",
+  "status":"insights_identified",
+  "assessment_reason":"brief explanation",
+  "insights":[
+    {
+      "insight_type":"barrier",
+      "summary":"brief supported insight",
+      "context":"relevant actors and setting; empty string if unavailable",
+      "evidence_basis":"observed",
+      "source_quote":"exact text substring",
+      "source_anchor":"[SECTION 1]",
+      "reason":"why this quotation supports the insight"
+    }
+  ]
+}
+status must be insights_identified when insights is nonempty; no_relevant_insights when it is empty despite sufficient text; or unclear when the material is insufficient to assess reliably. The example specifies schema only and does not supply evidence. Do not include any fields for prior abstract-level decisions, case IDs or other stages.
