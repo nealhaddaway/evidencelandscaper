@@ -61,6 +61,7 @@ testthat::test_that("First-10% abstract-no-case insights route uses checksum-ver
   f<-evidencelandscaper:::.w09_first10_abstract_case_decisions
   base<-f(root,w08=w08)
   testthat::expect_equal(base$no_case_ids,"b")
+  testthat::expect_equal(f(root)$no_case_ids,"b")
   testthat::expect_equal(base$unresolved_ids,"a")
   human<-file.path(w08,"human_adjudication","v1-test")
   dir.create(human,recursive=TRUE)
