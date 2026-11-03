@@ -97,7 +97,43 @@ prepare_w09_no_case_fulltexts_first10 <- function(w08=NULL,map_path=NULL) {
   if(anyDuplicated(cids)||any(!selected%in%cids))
     stop("Canonical W02 records do not cover the selected W08 cohort.")
   byid<-setNames(source,cids)
-  ids<-sort(observed[statuses=="no_identifiable_case"])
+  # Human-adjudicated W08 status overrides the abstract model only when
+  # backed by a checksum-verified immutable colleague-review snapshot.
+  human_root<-file.path(w08,"human_adjudication")
+  human_dirs<-if(dir.exists(human_root))
+    list.dirs(human_root,recursive=FALSE,full.names=TRUE) else character()
+  human_dirs<-human_dirs[file.exists(file.path(human_dirs,"manifest.json"))]
+  if(length(human_dirs)>1L)
+    stop("Multiple W08 human adjudication snapshots exist. Select and ",
+         "reconcile an authoritative version before preparing retrieval.")
+  human_path<-if(length(human_dirs))human_dirs[[1L]] else NULL
+  final_statuses<-statuses
+  origin<-rep("W08_model",length(observed))
+  human_checksum<-NULL
+  if(!is.null(human_path)) {
+    hm<-jsonlite::fromJSON(file.path(human_path,"manifest.json"),
+                           simplifyVector=FALSE)
+    hp<-file.path(human_path,"effective_case_classifications.csv")
+    if(!file.exists(hp)||
+       !identical(hm$source_w08_sha256,sha(paths[[3L]]))||
+       !identical(hm$effective_case_classifications_sha256,sha(hp)))
+      stop("W08 human adjudication provenance/checksum mismatch.")
+    human<-utils::read.csv(hp,stringsAsFactors=FALSE)
+    if(anyDuplicated(human$record_id)||!setequal(human$record_id,observed)||
+       !all(c("model_case_status","final_case_status","decision_origin")%in%names(human)))
+      stop("W08 human classification table does not match model cohort.")
+    human<-human[match(observed,human$record_id),,drop=FALSE]
+    if(!identical(as.character(human$model_case_status),as.character(statuses))||
+       any(!human$final_case_status%in%c("specific_case","multiple_cases",
+         "no_identifiable_case","unclear")))
+      stop("W08 human effective classifications contain invalid statuses.")
+    final_statuses<-as.character(human$final_case_status)
+    origin<-as.character(human$decision_origin)
+    human_checksum<-sha(hp)
+    message("[W09 no-case] Using W08 human adjudications: ",human_path)
+  } else message("[W09 no-case] No imported W08 human decisions; ",
+       "using validated model classifications only.")
+  ids<-sort(observed[final_statuses=="no_identifiable_case"])
   if(!length(ids))stop("No validated case-negative W08 abstracts in this cohort.")
   scalar<-function(x)if(is.null(x)||!length(x))"" else
     paste(as.character(unlist(x,use.names=FALSE)),collapse="; ")
@@ -110,13 +146,17 @@ prepare_w09_no_case_fulltexts_first10 <- function(w08=NULL,map_path=NULL) {
   # Keep frozen selection and source checksums in a separate, non-case W09 run.
   dest<-file.path(map_path,"runs","W09",
     paste0("first10-abstract-no-case-",length(ids),"-",
-           substr(sha(paths[[3L]]),1L,12L)))
+           substr(sha(paths[[3L]]),1L,12L),
+           if(!is.null(human_checksum))paste0("-human-",
+              substr(human_checksum,1L,12L)) else ""))
   manifest<-list(schema="w09-first10-abstract-no-case-v1",
     source_w08=w08,w08_assessments_sha256=sha(paths[[3L]]),
+    human_adjudication_path=human_path,
+    human_effective_classifications_sha256=human_checksum,
     source_w04=w04,source_w04_layer_sha256=sha(authoritative$layer),
     canonical_w02_sha256=sha(canonical),
     selected_record_ids=as.list(ids),unresolved_w08_ids=as.list(unresolved),
-    excluded_unclear_ids=as.list(sort(observed[statuses=="unclear"])),
+    excluded_unclear_ids=as.list(sort(observed[final_statuses=="unclear"])),
     source_w08_partial=length(unresolved)>0L)
   mf<-file.path(dest,"manifest.json")
   if(file.exists(mf)) {
@@ -143,19 +183,22 @@ prepare_w09_no_case_fulltexts_first10 <- function(w08=NULL,map_path=NULL) {
   dir.create(file.path(dest,"pdfs"),recursive=TRUE,showWarnings=FALSE)
   dir.create(file.path(dest,"structured"),recursive=TRUE,showWarnings=FALSE)
   utils::write.csv(queue,file.path(dest,"retrieval_queue.csv"),row.names=FALSE)
+  idx<-match(ids,observed)
   utils::write.csv(data.frame(record_id=ids,
-      w08_status=rep("no_identifiable_case",length(ids))),
+      model_w08_status=statuses[idx],
+      final_w08_status=final_statuses[idx],
+      decision_origin=origin[idx]),
     file.path(dest,"w08_abstract_no_case_selection.csv"),row.names=FALSE)
   excluded<-rbind(
     data.frame(record_id=unresolved,status="unvalidated"),
-    data.frame(record_id=observed[statuses=="unclear"],status="unclear"))
+    data.frame(record_id=observed[final_statuses=="unclear"],status="unclear"))
   excluded<-excluded[order(excluded$record_id),,drop=FALSE]
   utils::write.csv(excluded,file.path(dest,"not_selected_unresolved.csv"),
                    row.names=FALSE)
   jsonlite::write_json(manifest,mf,auto_unbox=TRUE,pretty=TRUE)
   message("[W09 no-case] Prepared ",length(ids),
     " case-negative ABSTRACT publications of ",length(selected),
-    " first-10% retained publications; ",sum(statuses=="unclear"),
+    " first-10% retained publications; ",sum(final_statuses=="unclear"),
     " unclear and ",length(unresolved)," unvalidated excluded.")
   invisible(dest)
 }
