@@ -34,13 +34,19 @@
       stop("Independent mechanism inventory must not have case_ids")
     if(!sc(m$status)%in%statuses)
       stop("Invalid mechanism inventory status")
-    if(sc(m$status)!="not_identified")quoted(m,"Mechanism inventory")
+    if(sc(m$status)!="not_identified") {
+      quoted(m,"Mechanism inventory")
+    } else if(nzchar(sc(m$source_quote))||nzchar(sc(m$source_anchor))) {
+      stop("Unidentified mechanism must not have invented evidence")
+    }
   }
   for(n in z$new_novelty) {
     if(!is.null(n$case_ids))
       stop("Independent novelty must not have case_ids")
     if(!sc(n$support_status)%in%c("implemented","proposed","unclear")||
-       !nzchar(sc(n$proposed_label))||!nzchar(sc(n$working_definition)))
+       !nzchar(sc(n$proposed_label))||!nzchar(sc(n$working_definition))||
+       (nzchar(sc(n$closest_approved_mechanism_id))&&
+         !sc(n$closest_approved_mechanism_id)%in%approved_codes))
       stop("Invalid novel mechanism proposal")
     quoted(n,"New mechanism")
   }
@@ -209,8 +215,19 @@ extract_ostara_all_fulltext_mechanisms <- function(
          "the run manifest and inventory are saved at ",dest)
   instructions<-paste(lines(prompt),collapse="\n")
   ontology_text<-utils::capture.output(utils::write.csv(ont,row.names=FALSE))
+  unreadable<-file.path(dest,"unreadable_fulltexts.jsonl")
   for(id in todo) {
-    source<-w09_text_payload(w09,id,max_pages=0L)
+    source<-tryCatch(w09_text_payload(w09,id,max_pages=0L),
+                     error=function(e)e)
+    if(inherits(source,"error")) {
+      event<-list(record_id=id,source_sha256=source_hashes[match(id,record_ids)],
+                  error=conditionMessage(source))
+      cat(as.character(jsonlite::toJSON(event,auto_unbox=TRUE)),
+          "\n",file=unreadable,append=TRUE,sep="")
+      message("[FT mechanisms] Unreadable source ",id,": ",
+              conditionMessage(source),". Skipping and retaining checkpoint.")
+      next
+    }
     if(!identical(sha(source$path),source_hashes[match(id,record_ids)]))
       stop("Full-text file changed during extraction: ",id)
     input<-list(record_id=id,
@@ -244,10 +261,13 @@ extract_ostara_all_fulltext_mechanisms <- function(
       message("[FT mechanisms] ",id," attempt ",attempt,
               "/3 failed validation or transport: ",conditionMessage(candidate))
     }
-    if(is.null(result))
-      stop("Full-text mechanism extraction failed for ",id,
-           ". Prior validated records remain saved in ",results)
-    result$provenance<-list(source_path=source$path,
+    if(is.null(result)) {
+      message("[FT mechanisms] Failed ",id,
+              "; prior validated records remain saved in ",results)
+      next
+    }
+    result$provenance<-list(source_identity_verified=FALSE,
+      source_path=source$path,
       source_sha256=source$sha256,source_format=source$format,
       approved_ontology_sha256=sha(files[["ontology"]]),
       model=model,prompt_sha256=sha(prompt))
