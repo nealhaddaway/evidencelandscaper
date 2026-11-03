@@ -151,8 +151,8 @@ prepare_w09_no_case_fulltexts_first10 <- function(w08=NULL,map_path=NULL) {
               substr(human_checksum,1L,12L)) else ""))
   manifest<-list(schema="w09-first10-abstract-no-case-v1",
     source_w08=w08,w08_assessments_sha256=sha(paths[[3L]]),
-    human_adjudication_path=human_path,
-    human_effective_classifications_sha256=human_checksum,
+    human_adjudication_path=if(is.null(human_path))"" else human_path,
+    human_effective_classifications_sha256=if(is.null(human_checksum))"" else human_checksum,
     source_w04=w04,source_w04_layer_sha256=sha(authoritative$layer),
     canonical_w02_sha256=sha(canonical),
     selected_record_ids=as.list(ids),unresolved_w08_ids=as.list(unresolved),
