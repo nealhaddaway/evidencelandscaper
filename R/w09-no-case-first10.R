@@ -191,8 +191,10 @@ prepare_w09_no_case_fulltexts_first10 <- function(w08=NULL,map_path=NULL) {
       decision_origin=origin[idx]),
     file.path(dest,"w08_abstract_no_case_selection.csv"),row.names=FALSE)
   excluded<-rbind(
-    data.frame(record_id=unresolved,status="unvalidated"),
-    data.frame(record_id=observed[final_statuses=="unclear"],status="unclear"))
+    data.frame(record_id=unresolved,
+               status=rep("unvalidated",length(unresolved))),
+    data.frame(record_id=observed[final_statuses=="unclear"],
+               status=rep("unclear",sum(final_statuses=="unclear"))))
   excluded<-excluded[order(excluded$record_id),,drop=FALSE]
   utils::write.csv(excluded,file.path(dest,"not_selected_unresolved.csv"),
                    row.names=FALSE)
