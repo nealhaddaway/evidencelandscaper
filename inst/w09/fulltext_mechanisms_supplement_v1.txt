@@ -1,64 +1,109 @@
-OSTARA W09 FULL-TEXT MECHANISM INVENTORY + INDEPENDENT CASE-PRESENCE SWEEP (v3)
+FULL-TEXT COLLECTIVE-ACTION MECHANISM INVENTORY AND CASE-PRESENCE ASSESSMENT
 
-PURPOSE
-Evaluate all approved mechanisms throughout the complete supplied full text. Independently perform a lightweight case-presence sweep to route later extraction. The mechanism inventory must NOT depend on W07 abstract mechanism assignments or novelty proposals, prior case detection, W09 case extraction, eligible case IDs, or the outcome of the case-presence sweep. Return one JSON object only.
+ROLE AND INPUTS
+Assess the supplied publication's full text for collective-action mechanisms and distinguishable collective-action arrangements. Return one valid JSON object and no additional text.
+
+The API input provides:
+- record_id: the identifier to return unchanged.
+- approved_ontology: the complete controlled ontology, including each mechanism_id and its definition, organised by collective_action_type, high_level_mechanism and fine_level_mechanism.
+- fulltext: the publication's full text, with any available source-location markers.
+
+Use only these inputs. Do not consult external sources, assume the existence of other datasets or assessments, or infer facts not supported by fulltext. Do not determine whether the publication should be included in a wider review.
 
 MECHANISM INVENTORY
-Evaluate EVERY mechanism_id in approved_ontology exactly once, including those absent from the abstract. Classify its status:
-- implemented_case: the full text directly establishes that the mechanism was actually used or implemented in real-world collective action, irrespective of whether a case record or ID was extracted separately
-- mentioned_only: substantive discussion or description, without direct support of actual implementation in the supplied text
-- proposed_only: a recommendation, conceptual approach, plan, or hypothetical future use, not demonstrated as implemented
-- not_identified: no support for the mechanism in the full text
-- unclear: relevant text is too ambiguous for a supported status
+Examine the ENTIRE fulltext. Evaluate EVERY mechanism_id supplied in approved_ontology exactly once, using its definition and hierarchy; do not consider only mechanisms explicitly named by the authors.
 
-The status label implemented_case is retained for compatibility with the approved downstream ontology schema. It does NOT require a case ID, an extracted case, or agreement with case-presence status. NEVER assign a case ID, create a case link, or modify mechanism status because a case ID is absent. A mechanism can be implemented even where no distinct eligible case can be extracted.
+Classify each mechanism using exactly one status:
+- implemented_case: direct evidence that the mechanism is actually operating or has operated in real-world coordinated action.
+- mentioned_only: a substantive description, discussion, theoretical treatment or comparison, without evidence of implementation in the publication.
+- proposed_only: a recommendation, plan, design or hypothetical future application, not demonstrated as implemented.
+- not_identified: no relevant support found in the supplied fulltext.
+- unclear: potentially relevant discussion, but insufficient information to decide among the other statuses.
 
-For every status except not_identified, provide a concise verbatim source_quote, an exact source_anchor ([PAGE n], [SECTION n], or [TEXT BLOCK n] exactly as provided), and a reason; if evidence is absent, classify not_identified rather than inventing quotations. Use exact approved mechanism IDs only.
+The status implemented_case denotes observed or described implementation of a mechanism. It does not require a named initiative, a separately extracted case, or a case identifier. A mechanism's status must be determined independently of the case-presence assessment below. Do not invent case IDs or include case_ids fields.
+
+For every status other than not_identified, provide a short verbatim source_quote, the exact source_anchor marker, and an evidence-based reason. For not_identified, use empty strings for source_quote and source_anchor and briefly explain the absence. Do not invent evidence to force a positive code.
 
 INDEPENDENT NOVELTY ASSESSMENT
-Evaluate the complete full text without access to abstract-level mechanism assignments or prior novelty proposals. Compare all potentially novel approaches against EVERY approved ontology mechanism and their definitions before proposing novelty.
+Examine the entire fulltext for collective-action mechanisms that are conceptually distinct from EVERY supplied approved ontology mechanism, considering the ontology definitions and hierarchy. Report only genuinely new, substantively supported mechanism concepts. The mere use of different terminology for an existing mechanism is not novelty.
 
-In new_novelty, report a mechanism only when substantive full-text evidence supports a conceptually distinct collective-action approach that the approved ontology does not adequately cover. Specify whether the approach is implemented, proposed or unclear; provide a working label, definition, the nearest approved code (if identifiable), a reasoned explanation of why that code does not already cover it, a verbatim supporting quote and exact source anchor. Proposed mechanisms are candidates for later human adjudication, never approved codes. Do not invent new ontology codes.
+For each justified new_novelty proposal, provide:
+- proposed_label and working_definition.
+- support_status: implemented, proposed, or unclear.
+- closest_approved_mechanism_id: the nearest approved code, or an empty string where no meaningful near match exists.
+- reason: why the proposal is substantively distinct from the closest existing ontology coverage.
+- source_quote and source_anchor: exact supporting full-text evidence.
 
-If no new mechanism is justified, return new_novelty: []. Do not assess or refer to W07 abstract novelty proposals within this model call. Abstract/full-text comparisons, if desired, occur later as a separate deterministic analysis.
+Do not assign a new approved mechanism_id or silently enlarge the supplied ontology. Return new_novelty: [] when no genuinely new mechanism is supported. Do not extract effectiveness or impact conclusions as new mechanism types.
 
-This is inventory and candidate ontology assessment, not effectiveness or impact evaluation. Do not extract case-level details or general insights here.
+INDEPENDENT FULL-TEXT CASE-PRESENCE ASSESSMENT
+Separately examine the entire fulltext for distinguishable real-world arrangements of collective action directed towards environmental or social sustainability.
 
-FULL-TEXT CASE PRESENCE SWEEP
-Independently assess whether the entire full text identifies any real-world collective-action arrangement meeting the exact supplied w08_case_inclusion_criteria. In particular, an eligible distinguishable arrangement requires two or more actors, groups, or organisations deliberately coordinating activities, decisions, resources, commitments or governance towards an environmental or social sustainability objective. Mere institutional names, ordinary commercial transactions, research activity, aspirational collaboration, or vague references to partnership are insufficient. Explicitly described proposed arrangements may qualify as candidates if distinguishable, but must not be presented as implemented.
+A distinguishable collective-action arrangement involves two or more actors, actor groups or organisations deliberately coordinating activities, decisions, commitments, governance, responsibilities or resources towards a shared environmental or social sustainability objective. It need not be named if its actors, activities and setting distinguish it. A single publication may describe multiple genuinely separate arrangements.
 
-This assessment is separate from mechanism inventory. Use the W08 criteria in full, do not broaden them, and independently check the complete full text regardless of abstract classification. If criteria are missing, classify unclear and state why.
+Important boundaries:
+- A named organisation, cooperative, project, programme, country, study or campaign is not automatically an eligible arrangement.
+- Research data collection, research partnerships and a study team's activities are not, by themselves, collective-action arrangements.
+- Ordinary commercial transactions or a business selling services to customers are not automatically coordinated collective action.
+- Vague calls for collaboration and generic descriptions of partnerships without identifiable coordination are insufficient.
+- A clearly described proposed arrangement may qualify as a candidate, but must be identified as proposed and must not be described as implemented.
+- Do not split components of a single initiative into multiple cases without evidence that they are distinct arrangements.
+- Do not infer implementation, effectiveness or impacts from stated objectives or aspirations.
 
-case_status:
-- case_present: one or more distinguishable arrangements sufficiently meet the supplied criteria.
-- no_case: no qualifying identifiable arrangement is found in the supplied full text.
-- unclear: evidence is ambiguous or too incomplete to determine case presence.
+Classify case_status as:
+- case_present: at least one distinguishable arrangement sufficiently meets the definition.
+- no_case: no qualifying distinguishable arrangement is identified in the supplied fulltext.
+- unclear: plausible arrangement(s) exist, but their identity, coordinated action or sustainability purpose cannot be determined confidently from the fulltext.
 
-Return candidate_case_count as integer >=1 for case_present, 0 for no_case, and null for unclear. candidate_cases must have exactly candidate_case_count entries for case_present; [] for no_case; for unclear may include genuine ambiguous candidates. Candidates are provisional, NOT W09 case IDs. For each candidate provide a short descriptive label, case_description, verbatim source_quote, exact source_anchor and eligibility_reason.
+Set candidate_case_count to an integer of at least 1 for case_present, 0 for no_case, and null for unclear. For case_present, return exactly candidate_case_count candidate_cases; for no_case, return []; for unclear, return only genuinely plausible candidates, if any, without treating them as confirmed.
 
-Include assessment_reason. Compare to final_w08_case_status if provided: agrees, disagrees, not_comparable (W08 unclear), or not_provided (missing). Set review_required true if case_status is unclear or w08_comparison is disagrees. The sweep never changes W08 adjudications; flagged differences require review before routing to either downstream case or insights extraction.
+Each candidate requires a concise descriptive label, case_description, implementation_status (implemented, proposed, historical, or unclear), an exact source_quote and source_anchor, and eligibility_reason explaining the actual coordination and sustainability objective, or the unresolved evidence for an unclear candidate. Do not invent a case identifier.
 
-QUOTE AND ANCHOR INTEGRITY
-Every nonempty source_quote must be an exact continuous substring of the supplied fulltext (whitespace normalisation only if the text was normalised upstream). Use only existing anchor markers. Never fabricate quotations or page numbers for XML/JSON. A negative case assessment needs reasoning, not a fabricated absence quote.
+The case-presence assessment is independent of the mechanism inventory; evidence of a mechanism does not itself establish a distinguishable arrangement. Include a concise assessment_reason for each case_status. Do not invent a quotation to substantiate the absence of cases.
 
-OUTPUT JSON (all arrays/objects required; return actual values, not pipe-separated choices):
+SOURCE EVIDENCE AND ANCHORS
+All source_quote strings must be exact continuous substrings of the supplied fulltext. Every positive or unclear mechanism entry, novelty proposal and case candidate must have a supporting verbatim quote and exact source_anchor matching an existing location marker, such as [PAGE n], [SECTION n] or [TEXT BLOCK n]. Never invent page numbers for XML or JSON sources. Preserve qualifications, uncertainty, and the difference between actual implementation and proposals. If no location markers are supplied, do not fabricate one; report uncertainty rather than a false citation.
+
+OUTPUT CONTRACT
+Return exactly one JSON object with these top-level keys: record_id, mechanism_inventory, new_novelty, case_presence_assessment. All arrays must be present; use [] when empty.
+
 {
- "record_id":"input record ID",
- "case_presence_assessment":{
-   "case_status":"case_present",
-   "candidate_case_count":1,
-   "candidate_cases":[{"candidate_label":"","case_description":"","source_quote":"","source_anchor":"","eligibility_reason":""}],
-   "assessment_reason":"",
-   "w08_comparison":"not_provided",
-   "review_required":false
- },
- "mechanism_inventory":[
-   {"mechanism_id":"","status":"not_identified","source_quote":"","source_anchor":"","reason":""}
- ],
- "new_novelty":[
-   {"proposed_label":"","working_definition":"","support_status":"proposed",
-    "closest_approved_mechanism_id":"","source_quote":"","source_anchor":"","reason":""}
- ]
+  "record_id": "exact input record_id",
+  "mechanism_inventory": [
+    {
+      "mechanism_id": "exact approved code",
+      "status": "implemented_case",
+      "source_quote": "exact quotation",
+      "source_anchor": "[SECTION 1]",
+      "reason": "brief evidence-based explanation"
+    }
+  ],
+  "new_novelty": [
+    {
+      "proposed_label": "working label",
+      "working_definition": "concise definition",
+      "support_status": "proposed",
+      "closest_approved_mechanism_id": "approved code or empty string",
+      "reason": "why existing codes do not cover this mechanism",
+      "source_quote": "exact quotation",
+      "source_anchor": "[SECTION 2]"
+    }
+  ],
+  "case_presence_assessment": {
+    "case_status": "case_present",
+    "candidate_case_count": 1,
+    "candidate_cases": [
+      {
+        "candidate_label": "short distinguishing label",
+        "case_description": "specific coordinated arrangement",
+        "implementation_status": "implemented",
+        "source_quote": "exact quotation",
+        "source_anchor": "[SECTION 3]",
+        "eligibility_reason": "why the arrangement meets the definition"
+      }
+    ],
+    "assessment_reason": "brief evidence-based explanation"
+  }
 }
 
-If no justified novel mechanism is identified, return new_novelty: []. Do not output any case_ids field anywhere. Keep the exact case_presence_assessment object even when status is no_case.
+The example shows object shapes, not mandatory findings. Use the actual publication evidence and valid statuses; never reproduce the example's invented quotations or anchors. Return no fields relating to other assessment stages or datasets.
