@@ -113,12 +113,17 @@ rerun_w09_case_data_batch <- function(prompt_file=NULL, schema_file=NULL, w09=NU
     audit$in_current_w09_queue<-audit$record_id%in%queue_check$record_id
     audit$human_snapshot_sha256<-sha(effective_file)
     audit_path<-file.path(w09,"case_data_human_selection_audit.csv")
+    audit_temp<-tempfile(fileext=".csv")
+    on.exit(unlink(audit_temp),add=TRUE)
+    utils::write.csv(audit,audit_temp,row.names=FALSE,na="")
     if(file.exists(audit_path)) {
       prior<-utils::read.csv(audit_path,stringsAsFactors=FALSE)
-      if(!identical(prior,audit))
+      expected<-utils::read.csv(audit_temp,stringsAsFactors=FALSE)
+      if(!identical(prior,expected))
         stop("Existing human-selection audit differs. ",
              "Preserve the earlier audit and reconcile inputs before retrying.")
-    } else utils::write.csv(audit,audit_path,row.names=FALSE,na="")
+    } else if(!file.copy(audit_temp,audit_path))
+      stop("Failed to save human-selection audit.")
     message("[W09 case data] Using checksum-verified W08 human adjudication: ",
             human_dir)
     message("[W09 case data] Human adjudications: ",
