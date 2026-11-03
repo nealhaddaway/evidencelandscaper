@@ -126,10 +126,14 @@ prepare_w09_no_case_fulltexts_first10 <- function(w08=NULL,map_path=NULL) {
     qf<-file.path(dest,"retrieval_queue.csv")
     if(!file.exists(qf))stop("Existing first-10% W09 queue is missing.")
     present<-utils::read.csv(qf,stringsAsFactors=FALSE)
-    if(!all(c("record_id","title","doi")%in%names(present))||
-       !identical(as.character(present$record_id),as.character(queue$record_id))||
-       !identical(as.character(present$title),as.character(queue$title))||
-       !identical(as.character(present$doi),as.character(queue$doi)))
+    tmp<-tempfile(fileext=".csv")
+    on.exit(unlink(tmp),add=TRUE)
+    utils::write.csv(queue,tmp,row.names=FALSE)
+    expected<-utils::read.csv(tmp,stringsAsFactors=FALSE)
+    identity_cols<-c("record_id","title","doi")
+    if(!all(identity_cols%in%names(present))||
+       !identical(present[,identity_cols,drop=FALSE],
+                  expected[,identity_cols,drop=FALSE]))
       stop("Existing first-10% W09 queue bibliographic identity changed.")
     message("[W09 no-case] Verified existing queue: ",dest)
     return(invisible(dest))
@@ -142,11 +146,12 @@ prepare_w09_no_case_fulltexts_first10 <- function(w08=NULL,map_path=NULL) {
   utils::write.csv(data.frame(record_id=ids,
       w08_status=rep("no_identifiable_case",length(ids))),
     file.path(dest,"w08_abstract_no_case_selection.csv"),row.names=FALSE)
-  utils::write.csv(data.frame(record_id=sort(c(unresolved,
-        observed[statuses=="unclear"])),
-      status=c(rep("unvalidated",length(unresolved)),
-               rep("unclear",sum(statuses=="unclear")))),
-    file.path(dest,"not_selected_unresolved.csv"),row.names=FALSE)
+  excluded<-rbind(
+    data.frame(record_id=unresolved,status="unvalidated"),
+    data.frame(record_id=observed[statuses=="unclear"],status="unclear"))
+  excluded<-excluded[order(excluded$record_id),,drop=FALSE]
+  utils::write.csv(excluded,file.path(dest,"not_selected_unresolved.csv"),
+                   row.names=FALSE)
   jsonlite::write_json(manifest,mf,auto_unbox=TRUE,pretty=TRUE)
   message("[W09 no-case] Prepared ",length(ids),
     " case-negative ABSTRACT publications of ",length(selected),
