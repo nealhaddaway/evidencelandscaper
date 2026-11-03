@@ -176,34 +176,23 @@
 #' @param model Luna model (gpt-5.6-luna by default).
 #' @param mechanism_prompt_file Optional full-text mechanism prompt (.txt).
 #' @param insights_prompt_file Optional independent insights prompt (.txt).
+#' @param insights_only If TRUE, skip mechanism extraction and resume insights only.
+#' @param mechanism_dir Existing fingerprinted mechanism run, required for insights_only.
 #' @return List of output directory paths, invisibly.
 #' @export
 run_ostara_first10_fulltext_inventory <- function(
     ontology_file=NULL,w09=NULL,w08=NULL,max_records=0L,
     model="gpt-5.6-luna",mechanism_prompt_file=NULL,
-    insights_prompt_file=NULL) {
+    insights_prompt_file=NULL,insights_only=FALSE,mechanism_dir=NULL) {
   if(!is.character(model)||length(model)!=1L||is.na(model)||
      !grepl("-luna$",model))
     stop("Only Luna models are permitted; Sol is not allowed")
   if(length(max_records)!=1L||is.na(max_records)||
      max_records!=as.integer(max_records)||max_records<0L)
     stop("max_records must be a nonnegative integer; 0 means all")
-  if(is.null(mechanism_prompt_file)) {
-    if(!interactive())stop("Provide mechanism_prompt_file outside interactive R")
-    message("[OSTARA FT] Select revised full-text mechanism prompt (.txt)")
-    mechanism_prompt_file<-file.choose()
-  }
-  mechanism_prompt_file<-normalizePath(mechanism_prompt_file,
-                                        winslash="/",mustWork=TRUE)
-  message("[OSTARA FT] Mechanism prompt selected: ",
-          basename(mechanism_prompt_file))
-  if(is.null(ontology_file)) {
-    if(!interactive())stop("Provide ontology_file outside interactive R")
-    message("[OSTARA FT] Select approved mechanism ontology (.csv; 30 IDs)")
-    ontology_file<-file.choose()
-  }
-  ontology_file<-normalizePath(ontology_file,winslash="/",mustWork=TRUE)
-  message("[OSTARA FT] Ontology selected: ",basename(ontology_file))
+  if(!is.logical(insights_only)||length(insights_only)!=1L||
+     is.na(insights_only))
+    stop("insights_only must be TRUE or FALSE")
   if(is.null(w09))w09<-prepare_w09_first10_all_included()
   w09<-normalizePath(w09,winslash="/",mustWork=TRUE)
   decisions<-.w09_first10_abstract_case_decisions(w09,w08=w08)
@@ -212,11 +201,44 @@ run_ostara_first10_fulltext_inventory <- function(
   message("[OSTARA FT] W08 no-case abstracts: ",length(decisions$no_case_ids),
           " (",if(nzchar(decisions$human_sha256))"human adjudicated"
               else "model only",")")
-  message("[OSTARA FT] Mechanisms and full-text case presence: ",
-          "all available included full texts, regardless of W08 status")
-  mechanism_dir<-extract_ostara_all_fulltext_mechanisms(
-    w09=w09,ontology_file=ontology_file,max_records=max_records,
-    model=model,prompt_file=mechanism_prompt_file)
+  if(isTRUE(insights_only)) {
+    if(is.null(mechanism_dir))
+      stop("Provide the existing mechanism_dir when insights_only=TRUE")
+    mechanism_dir<-normalizePath(mechanism_dir,winslash="/",mustWork=TRUE)
+    mf<-file.path(mechanism_dir,"manifest.json")
+    inv<-file.path(mechanism_dir,"source_inventory.csv")
+    if(!file.exists(mf)||!file.exists(inv))
+      stop("Existing mechanism checkpoint manifest/inventory missing.")
+    mm<-jsonlite::fromJSON(mf,simplifyVector=FALSE)
+    if(!identical(mm$schema,"ostara-fulltext-mechanism-all-v4")||
+       !identical(mm$source_w09,w09))
+      stop("Mechanism checkpoint does not match the all-included W09 source.")
+    message("[OSTARA FT] Insights-only resumption: mechanism inventory ",
+            "unchanged at ",mechanism_dir)
+  } else {
+    if(is.null(mechanism_prompt_file)) {
+      if(!interactive())
+        stop("Provide mechanism_prompt_file outside interactive R")
+      message("[OSTARA FT] Select revised full-text mechanism prompt (.txt)")
+      mechanism_prompt_file<-file.choose()
+    }
+    mechanism_prompt_file<-normalizePath(mechanism_prompt_file,
+                                          winslash="/",mustWork=TRUE)
+    message("[OSTARA FT] Mechanism prompt selected: ",
+            basename(mechanism_prompt_file))
+    if(is.null(ontology_file)) {
+      if(!interactive())stop("Provide ontology_file outside interactive R")
+      message("[OSTARA FT] Select approved mechanism ontology (.csv; 30 IDs)")
+      ontology_file<-file.choose()
+    }
+    ontology_file<-normalizePath(ontology_file,winslash="/",mustWork=TRUE)
+    message("[OSTARA FT] Ontology selected: ",basename(ontology_file))
+    message("[OSTARA FT] Mechanisms and full-text case presence: ",
+            "all available included full texts, regardless of W08 status")
+    mechanism_dir<-extract_ostara_all_fulltext_mechanisms(
+      w09=w09,ontology_file=ontology_file,max_records=max_records,
+      model=model,prompt_file=mechanism_prompt_file)
+  }
   prompt<-if(is.null(insights_prompt_file))
     system.file("w09","fulltext_insights_v1.txt",
                 package="evidencelandscaper")
