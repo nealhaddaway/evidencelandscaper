@@ -8,23 +8,43 @@
   if(!identical(identical(x$status,"insights_identified"),
                 length(x$insights)>0L))
     stop("Full-text insights status/count mismatch")
+  flags<-list()
   for(v in x$insights) {
     if(!sc(v$insight_type)%in%c("barrier","enabler","empirical_finding",
                               "lesson","recommendation","future_prospect")||
        !sc(v$evidence_basis)%in%c("observed","author_interpretation",
          "stakeholder_report","proposed","unclear")||
-       !nzchar(sc(v$summary))||!nzchar(sc(v$reason))||
-       !nzchar(sc(v$source_quote))||!nzchar(sc(v$source_anchor)))
+       !nzchar(sc(v$summary))||!nzchar(sc(v$reason)))
       stop("Incomplete full-text insight")
-    if(!grepl(sc(v$source_quote),fulltext,fixed=TRUE)||
-       !grepl(sc(v$source_anchor),fulltext,fixed=TRUE)||
-       !grepl("^\\[(PAGE|SECTION|TEXT BLOCK) [0-9]+\\]$",
-              sc(v$source_anchor)))
-      stop("Insight quotation or source anchor not present verbatim")
     if(!is.null(v$case_ids)||!is.null(v$mechanism_id))
       stop("Insights response must not invent case or ontology IDs")
+    quote<-sc(v$source_quote)
+    anchor<-sc(v$source_anchor)
+    causes<-character()
+    if(!nzchar(trimws(quote)))causes<-c(causes,"missing_quote")
+    if(!grepl("^\\[(PAGE|SECTION|TEXT BLOCK) [0-9]+\\]$",anchor))
+      causes<-c(causes,"missing_or_invalid_anchor")
+    at<-if(nzchar(anchor))regexpr(anchor,fulltext,fixed=TRUE)[[1L]] else -1L
+    if(nzchar(anchor)&&at<1L)causes<-c(causes,"anchor_not_in_text")
+    if(nzchar(quote)) {
+      if(!grepl(quote,fulltext,fixed=TRUE))
+        causes<-c(causes,"quote_not_verbatim_in_full_text")
+      if(at>0L) {
+        after<-substring(fulltext,at+nchar(anchor))
+        next_at<-regexpr("\\[(?:PAGE|SECTION|TEXT BLOCK) [0-9]+\\]",
+                        after,perl=TRUE)[[1L]]
+        segment<-if(next_at>0L)substr(after,1L,next_at-1L) else after
+        if(!grepl(quote,segment,fixed=TRUE))
+          causes<-c(causes,"quote_not_in_cited_anchor")
+      }
+    }
+    if(length(causes))
+      flags[[length(flags)+1L]]<-list(
+        insight_type=sc(v$insight_type),
+        reasons=as.list(unique(causes)),
+        source_anchor=anchor,source_quote=quote)
   }
-  invisible(TRUE)
+  flags
 }
 
 #' Resolve first-10% W08 abstract classifications for insights eligibility.
@@ -275,8 +295,8 @@ run_ostara_first10_fulltext_inventory <- function(
       message("[FT insights] Cannot read ",id,": ",conditionMessage(payload))
       next
     }
-    if(!identical(sha(payload$path),as.character(src$source_sha256[
-                                   match(id,src$record_id)])))
+    if(!identical(unname(sha(payload$path)),unname(as.character(src$source_sha256[
+                                   match(id,src$record_id)]))))
       stop("Full-text content changed during insights extraction: ",id)
     body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
       input=list(
@@ -301,7 +321,9 @@ run_ostara_first10_fulltext_inventory <- function(
           use.names=FALSE)
         if(!length(content))stop("Luna returned no insights text")
         x<-jsonlite::fromJSON(content[[1L]],simplifyVector=FALSE)
-        .w09_validate_insights(x,id,payload$text)
+        flags<-.w09_validate_insights(x,id,payload$text)
+        x$evidence_review_required<-length(flags)>0L
+        x$evidence_review_flags<-flags
         x
       },error=function(e)e)
       if(!inherits(z,"error")){result<-z;break}
@@ -316,6 +338,17 @@ run_ostara_first10_fulltext_inventory <- function(
       message("[FT insights] Failed ",id,
               "; previously successful records remain saved.")
       next
+    }
+    if(isTRUE(result$evidence_review_required)) {
+      audit<-list(record_id=id,source_sha256=payload$sha256,
+        evidence_review_required=TRUE,
+        evidence_flags=result$evidence_review_flags)
+      cat(as.character(jsonlite::toJSON(audit,auto_unbox=TRUE,null="null")),
+          "\n",file=file.path(dest,"insights_evidence_review_flags.jsonl"),
+          append=TRUE,sep="")
+      message("[FT insights] ",id,": ",
+              length(result$evidence_review_flags),
+              " evidence issue(s) retained for human review.")
     }
     result$provenance<-list(model=model,
       source_path=payload$path,source_sha256=payload$sha256,
