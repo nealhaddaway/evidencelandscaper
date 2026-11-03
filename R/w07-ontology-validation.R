@@ -7,8 +7,8 @@
   v4<-c("mechanism_id","collective_action_type","high_level_mechanism",
         "fine_level_mechanism","definition")
   if(all(v4 %in% names(rows))) {
-    if(nrow(rows)!=30L)
-      stop("The frozen v4 ontology must contain exactly 30 mechanisms.")
+    if(!nrow(rows)%in%c(28L,30L))
+      stop("The versioned v4 ontology must contain 28 or 30 mechanisms; frozen 30-code rounds are checked against the prompt.")
     for(k in v4) {
       x<-as.character(rows[[k]])
       if(anyNA(x)||any(!nzchar(trimws(x))))
