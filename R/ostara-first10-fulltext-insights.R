@@ -42,7 +42,7 @@
   wm<-jsonlite::fromJSON(manpath,simplifyVector=FALSE)
   if(!identical(wm$schema,"w09-first10-all-included-v1"))
     stop("Insights require the all-included first-10% W09 cohort")
-  map<-dirname(dirname(w09))
+  map<-dirname(dirname(dirname(w09)))
   if(is.null(w08)) {
     root<-file.path(map,"runs","W08")
     dirs<-if(dir.exists(root))list.dirs(root,recursive=FALSE,
