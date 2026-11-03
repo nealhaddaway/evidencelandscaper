@@ -72,9 +72,9 @@ testthat::test_that("eligibility-first W09 cases feed mechanism extraction witho
       candidate_cases=list(list(candidate_label="Case A",
         case_description="Documented cooperation",
         source_quote="Documented mechanism",source_anchor="[PAGE 2]",
-        eligibility_reason="Documented coordinated action")),
-      assessment_reason="Collective action described",
-      w08_comparison="not_provided",review_required=FALSE),
+        eligibility_reason="Documented coordinated action",
+        implementation_status="implemented")),
+      assessment_reason="Collective action described"),
    mechanism_inventory=list(
       list(mechanism_id="C01.01",status="not_identified",
            source_quote="",source_anchor="",reason=""),
