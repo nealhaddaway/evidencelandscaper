@@ -137,3 +137,5 @@ export(import_w08_colleague_adjudications)
 export(prepare_w09_first10_all_included)
 export(retrieve_w09_first10_all_included)
 export(run_ostara_first10_fulltext_inventory)
+
+export(prepare_ostara_first10_fulltext_review)
