@@ -39,8 +39,13 @@ testthat::test_that("All-full-text runner prepares independent inventory without
   dir.create(file.path(w09,"pdfs"))
   utils::write.csv(data.frame(record_id=c("work-1","work-2")),
                    file.path(w09,"retrieval_queue.csv"),row.names=FALSE)
-  utils::write.csv(data.frame(mechanism_id="C01.01",label="Cooperation"),
-                   file.path(w07,"ontology.csv"),row.names=FALSE)
+  ontology<-data.frame(
+    mechanism_id=paste0("M",seq_len(30L),".1.1"),
+    collective_action_type=rep("Coordination",30L),
+    high_level_mechanism=rep("Coordination",30L),
+    fine_level_mechanism=paste("Mechanism",seq_len(30L)),
+    definition=paste("Definition for mechanism",seq_len(30L)))
+  utils::write.csv(ontology,file.path(w07,"ontology.csv"),row.names=FALSE)
   writeLines(c('{"record_id":"work-1","mechanisms":[],"ontology_gap":false}',
                '{"record_id":"work-2","mechanisms":[],"ontology_gap":false}'),
              file.path(w07,"coding.jsonl"))
@@ -61,6 +66,8 @@ testthat::test_that("All-full-text runner prepares independent inventory without
   testthat::expect_equal(inventory$availability,
                          c("available","full_text_missing"))
   manifest<-jsonlite::fromJSON(file.path(dirs[[1L]],"manifest.json"))
-  testthat::expect_identical(manifest$schema,"ostara-fulltext-mechanism-all-v3")
+  testthat::expect_identical(manifest$schema,"ostara-fulltext-mechanism-all-v4")
   testthat::expect_false("eligible_case_ids"%in%names(manifest))
+  testthat::expect_false("w07_coding_sha256"%in%names(manifest))
+  testthat::expect_true(file.exists(file.path(dirs[[1L]],"ontology.csv")))
 })
