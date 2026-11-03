@@ -5,7 +5,8 @@
      !sc(x$status)%in%c("insights_identified","no_relevant_insights","unclear")||
      !nzchar(sc(x$assessment_reason)))
     stop("Invalid full-text insights output")
-  if(identical(x$status,"insights_identified")!=length(x$insights)>0L)
+  if(!identical(identical(x$status,"insights_identified"),
+                length(x$insights)>0L))
     stop("Full-text insights status/count mismatch")
   for(v in x$insights) {
     if(!sc(v$insight_type)%in%c("barrier","enabler","empirical_finding",
