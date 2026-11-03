@@ -7,7 +7,7 @@
 #' @param prompt_file Short case extraction TXT prompt.
 #' @param schema_file Case-analysis instructions CSV (without mechanism coding).
 #' @param record_ids Source identity-verified IDs selected for extraction.
-#' @param max_records Maximum unprocessed IDs to submit on this call, default 1.
+#' @param max_records Maximum unprocessed IDs to submit on this call; 0 means all.
 #' @param model Luna model only.
 #' @param max_pages Max PDF pages; 0 means all.
 #' @param revalidate_only Recheck archived invalid responses without API calls.
@@ -59,10 +59,10 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
                           stringsAsFactors=FALSE)
   if(anyDuplicated(queue$record_id)||any(!record_ids%in%queue$record_id))
     stop("record_ids must be uniquely present in W09 retrieval queue.")
-  if(length(max_records)!=1L||is.na(max_records)||max_records<1L||
+  if(length(max_records)!=1L||is.na(max_records)||max_records<0L||
      max_records!=as.integer(max_records)||length(max_pages)!=1L||
      is.na(max_pages)||max_pages<0L||max_pages!=as.integer(max_pages))
-    stop("max_records must be positive; max_pages must be nonnegative.")
+    stop("max_records must be nonnegative (0=all); max_pages must be nonnegative.")
   dest<-file.path(w09,"case_data_extraction",paste0(
     "csv-",substr(schema_sha,1,12),"-prompt-",substr(sha(prompt_file),1,12),
     "-model-",model))
@@ -238,7 +238,7 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
     "No cases: cases=[] with no_qualifying_case. ",
     "Do not output mechanism classifications.\n\nAUTHORITATIVE FIELD CSV:\n",defs)
   pending<-record_ids[!record_ids%in%done_ids]
-  pending<-head(pending,as.integer(max_records))
+  if(max_records>0L)pending<-head(pending,as.integer(max_records))
   message("[W09 case data] ",length(done_ids)," checkpointed; ",
           length(pending)," selected for this call.")
   for(id in pending) {
