@@ -166,8 +166,12 @@ import_w08_colleague_adjudications <- function(
   mf<-file.path(dest,"manifest.json")
   if(file.exists(mf)) {
     previous<-jsonlite::fromJSON(mf,simplifyVector=FALSE)
-    if(!identical(previous,manifest))
-      stop("Existing W08 human adjudication snapshot has different provenance.")
+    for(field in names(manifest))
+      if(!identical(previous[[field]],manifest[[field]]))
+        stop("Existing W08 human adjudication snapshot has different provenance: ",field)
+    if(!identical(previous$effective_case_classifications_sha256,
+        sha(file.path(dest,"effective_case_classifications.csv"))))
+      stop("Stored effective case classifications changed.")
     if(!identical(sha(file.path(dest,"review_history.jsonl")),human_hash))
       stop("Stored human review history changed.")
     message("[W08 adjudication] Verified existing human snapshot: ",dest)
