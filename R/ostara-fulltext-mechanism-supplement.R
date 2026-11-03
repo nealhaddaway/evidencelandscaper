@@ -79,7 +79,6 @@ extract_ostara_fulltext_mechanisms <- function(
   coding<-readjl(coded_path)
   coded<-setNames(coding,vapply(coding,function(z)z$record_id,character(1)))
   records<-readjl(registry)
-  records<-readjl(registry)
   if(eligibility_first) {
     audit<-utils::read.csv(final_path,colClasses="character",
                            stringsAsFactors=FALSE)
@@ -135,15 +134,19 @@ extract_ostara_fulltext_mechanisms <- function(
   if(!length(ids))stop("No eligible case publications in current review")
   prompt_path<-system.file("w09","fulltext_mechanisms_supplement_v1.txt",
                             package="evidencelandscaper")
-  if(!nzchar(prompt_path))stop("Supplemental extraction prompt missing")
+  w08_criteria_path<-system.file("w08","case_identification_prompt_v3.txt",
+                                  package="evidencelandscaper")
+  if(!nzchar(prompt_path)||!nzchar(w08_criteria_path))
+    stop("Full-text mechanism/case-sweep prompt or W08 case criteria missing")
   output<-file.path(review_dir,"fulltext_mechanism_supplement",
-    paste0("v1-",substr(sha(prompt_path),1,12),"-",
+    paste0("v2-",substr(sha(prompt_path),1,12),"-",
            substr(sha(onto_path),1,12),"-",
            gsub("[^A-Za-z0-9._-]","_",model)))
   manifest_path<-file.path(output,"manifest.json")
-  manifest<-list(schema="ostara-fulltext-mechanisms-v1",
+  manifest<-list(schema="ostara-fulltext-mechanisms-case-sweep-v2",
     w09_registry_sha256=sha(registry),w07_ontology_sha256=sha(onto_path),
     w07_coding_sha256=sha(coded_path),prompt_sha256=sha(prompt_path),
+    w08_criteria_sha256=sha(w08_criteria_path),
     model=model,eligible_record_ids=as.list(ids))
   if(eligibility_first) {
     manifest$eligibility_mode<-"eligibility_first"
@@ -159,7 +162,9 @@ extract_ostara_fulltext_mechanisms <- function(
       stop("Supplemental output directory exists without valid manifest")
     dir.create(output,recursive=TRUE,showWarnings=FALSE)
     jsonlite::write_json(manifest,manifest_path,auto_unbox=TRUE,pretty=TRUE)
-    file.copy(prompt_path,file.path(output,"prompt.txt"))
+    if(!file.copy(prompt_path,file.path(output,"prompt.txt"))||
+       !file.copy(w08_criteria_path,file.path(output,"w08_case_criteria.txt")))
+      stop("Could not archive full-text prompt and W08 criteria")
   }
   results<-file.path(output,"mechanism_assessments.jsonl")
   old<-if(file.exists(results))readjl(results)else list()
@@ -170,7 +175,11 @@ extract_ostara_fulltext_mechanisms <- function(
   if(max_records>0L)todo<-head(todo,max_records)
   if(length(todo)&&!nzchar(Sys.getenv("OPENAI_API_KEY")))
     stop("OPENAI_API_KEY required for supplementary extraction")
+  if(!identical(sha(file.path(output,"prompt.txt")),sha(prompt_path))||
+     !identical(sha(file.path(output,"w08_case_criteria.txt")),sha(w08_criteria_path)))
+    stop("Archived mechanism prompt or case criteria changed")
   instructions<-paste(readLines(prompt_path,warn=FALSE),collapse="\n")
+  w08_case_criteria<-paste(readLines(w08_criteria_path,warn=FALSE),collapse="\n")
   scalar<-function(x)if(is.null(x)||!length(x))"" else
     paste(as.character(unlist(x,use.names=FALSE)),collapse="; ")
   for(id in todo) {
@@ -179,21 +188,14 @@ extract_ostara_fulltext_mechanisms <- function(
     if(is.null(original))stop("W07 source record absent: ",id)
     codes<-if(is.null(original$mechanisms))character() else
       vapply(original$mechanisms,function(m)m$mechanism_id,character(1))
-    cases<-records[[id]]$cases
-    case_whitelist<-if(eligibility_first)
-      eligible_observations[approved$record_id==id] else
-      eligible_observations[startsWith(eligible_observations,paste0(id,"-case-"))]
-    input<-list(record_id=id,eligible_case_ids=as.list(case_whitelist),
+    # Case IDs are deliberately not supplied: mechanism detection is independent
+    # of the existing case extraction; full-text case sweep uses W08 criteria.
+    input<-list(record_id=id,
       approved_ontology=utils::capture.output(utils::write.csv(onto,row.names=FALSE)),
       w07_abstract_mechanism_ids=as.list(codes),
       w07_abstract_novelty=original$proposed_new_mechanism,
-      existing_w09_ontology_gaps=records[[id]]$ontology_gaps,
-      existing_w09_cases=lapply(seq_along(cases),function(j)
-        list(case_id=if(eligibility_first)
-               cases[[j]]$eligibility_case_id else
-               paste0(id,"-case-",sprintf("%03d",j)),
-             case_name=cases[[j]]$case_name,
-             case_description=cases[[j]]$case_description)),
+      w08_case_inclusion_criteria=w08_case_criteria,
+      final_w08_case_status=NULL,
       fulltext=source$text)
     response_body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
       input=list(list(role="system",content=list(list(type="input_text",
@@ -228,26 +230,80 @@ extract_ostara_fulltext_mechanisms <- function(
         if(any(!vapply(z$mechanism_inventory,function(x)
           scalar(x$status)%in%valid,logical(1))))
           stop("Invalid mechanism inventory statuses")
-        candidate_case_ids<-function(x)
-          as.character(unlist(x$case_ids,use.names=FALSE))
+        if(is.null(z$case_presence_assessment)||
+           !is.list(z$case_presence_assessment))
+          stop("Full-text case-presence assessment is missing")
+        sweep<-z$case_presence_assessment
+        cs<-scalar(sweep$case_status)
+        if(!cs%in%c("case_present","no_case","unclear"))
+          stop("Invalid full-text case status")
+        if(!is.list(sweep$candidate_cases))
+          stop("Invalid full-text candidate cases array")
+        cnt<-sweep$candidate_case_count
+        if(cs=="unclear") {
+          if(!is.null(cnt))stop("Unclear case count must be null")
+        } else {
+          if(!is.numeric(cnt)||length(cnt)!=1L||is.na(cnt)||
+             cnt!=as.integer(cnt)||cnt<0L||
+             (cs=="no_case"&&cnt!=0L)||
+             (cs=="case_present"&&cnt<1L)||
+             length(sweep$candidate_cases)!=cnt)
+            stop("Case presence/count mismatch")
+        }
+        comparison<-scalar(sweep$w08_comparison)
+        if(!comparison%in%c("agrees","disagrees","not_comparable","not_provided"))
+          stop("Invalid W08 case comparison")
+        # The current case-extraction review has no authoritative W08 join.
+        # Until it does, W08 comparison must be explicitly not_provided.
+        if(comparison!="not_provided")
+          stop("W08 comparison cannot be asserted without an authoritative W08 input")
+        if(!is.logical(sweep$review_required)||
+           length(sweep$review_required)!=1L||
+           is.na(sweep$review_required)||
+           !identical(sweep$review_required,cs=="unclear"))
+          stop("Case review_required inconsistent with case status and absent W08")
+        if(!nzchar(scalar(sweep$assessment_reason)))
+          stop("Missing full-text case assessment reason")
+        check_evidence<-function(x,context) {
+          quote<-scalar(x$source_quote)
+          anchor<-scalar(x$source_anchor)
+          if(!nzchar(quote)||!nzchar(anchor)||
+             !grepl(quote,source$text,fixed=TRUE)||
+             !grepl(anchor,source$text,fixed=TRUE)||
+             !grepl("^\\[(PAGE|SECTION|TEXT BLOCK) [0-9]+\\]$",anchor))
+            stop(context," has unverified quotation or anchor")
+        }
+        for(ca in sweep$candidate_cases) {
+          if(!nzchar(scalar(ca$candidate_label))||
+             !nzchar(scalar(ca$case_description))||
+             !nzchar(scalar(ca$eligibility_reason)))
+            stop("Incomplete provisional full-text case candidate")
+          check_evidence(ca,"Case sweep")
+        }
         for(entry in z$mechanism_inventory) {
-          status<-scalar(entry$status)
-          ids_for_entry<-candidate_case_ids(entry)
-          if(status=="implemented_case") {
-            if(!length(ids_for_entry)||any(!ids_for_entry%in%case_whitelist))
-              stop("Implemented mechanism has no approved eligible case")
-          } else if(length(ids_for_entry))stop("Nonimplemented mechanism linked to cases")
-          if(status%in%c("implemented_case","mentioned_only","proposed_only")&&
-             (!nzchar(scalar(entry$source_quote))||
-              !nzchar(scalar(entry$source_anchor))))
-            stop("Positive mechanism assessment lacks text quotation and anchor")
+          if(!is.null(entry$case_ids))
+            stop("Mechanism inventory must not contain case IDs")
+          if(!identical(scalar(entry$status),"not_identified"))
+            check_evidence(entry,"Mechanism inventory")
         }
         for(entry in z$new_novelty) {
-          if(!length(candidate_case_ids(entry))||
-             any(!candidate_case_ids(entry)%in%case_whitelist)||
-             !nzchar(scalar(entry$source_quote))||
-             !nzchar(scalar(entry$source_anchor)))
-            stop("Novel case mechanism requires eligible case and source evidence")
+          if(!is.null(entry$case_ids))
+            stop("Novel mechanisms must not contain case IDs")
+          if(!scalar(entry$support_status)%in%c("implemented","proposed","unclear")||
+             !nzchar(scalar(entry$proposed_label))||
+             !nzchar(scalar(entry$working_definition)))
+            stop("Invalid new novelty record")
+          check_evidence(entry,"New mechanism")
+        }
+        for(entry in z$abstract_novelty_validation) {
+          if(!is.null(entry$case_ids))
+            stop("Abstract novelty validation must not contain case IDs")
+          if(!scalar(entry$status)%in%c("confirmed_novel","refined_novel",
+                  "covered_by_existing","rejected","uncertain"))
+            stop("Invalid W07 novelty adjudication status")
+          if(scalar(entry$status)%in%c("confirmed_novel","refined_novel",
+                  "covered_by_existing"))
+            check_evidence(entry,"Abstract novelty")
         }
         if(isTRUE(original$ontology_gap)&&
            !length(z$abstract_novelty_validation))
@@ -260,11 +316,11 @@ extract_ostara_fulltext_mechanisms <- function(
     }
     if(is.null(result))stop("Incomplete extraction for ",id,
                            "; completed records remain checkpointed")
-    result$eligible_case_ids<-as.list(case_whitelist)
     result$provenance<-list(source_path=source$path,
       source_sha256=source$sha256,source_format=source$format,
       w09_registry_sha256=sha(registry),w07_ontology_sha256=sha(onto_path),
-      model=model,prompt_sha256=sha(prompt_path))
+      model=model,prompt_sha256=sha(prompt_path),
+      w08_criteria_sha256=sha(w08_criteria_path))
     cat(as.character(jsonlite::toJSON(result,auto_unbox=TRUE,null="null")),
         "\n",file=results,append=TRUE,sep="")
     message("[FT mechanism supplement] ",id," saved")
