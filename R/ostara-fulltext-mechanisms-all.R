@@ -228,7 +228,8 @@ extract_ostara_all_fulltext_mechanisms <- function(
               conditionMessage(source),". Skipping and retaining checkpoint.")
       next
     }
-    if(!identical(sha(source$path),source_hashes[match(id,record_ids)]))
+    if(!identical(unname(sha(source$path)),
+                  unname(source_hashes[match(id,record_ids)])))
       stop("Full-text file changed during extraction: ",id)
     input<-list(record_id=id,
       approved_ontology=ontology_text,
