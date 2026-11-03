@@ -188,10 +188,10 @@ export_w08_colleague_review <- function(w08, destination_zip, allow_partial=FALS
            if(is.null(review_statuses))"All statuses." else
              paste0("Included status(es): ",paste(review_statuses,collapse=", "),".")),
     "5. Enter reviewer name, examine each abstract and its detected case candidates.",
-    "6. Accept/reject the publication-level assessment and optionally accept/reject"
+    "6. Accept/reject the publication-level assessment and optionally accept/reject",
     "   each candidate individually. Record corrections and alternate cases in text boxes.",
-    "7. Save before navigating. Saved judgments append to decisions.jsonl."
-    "8. Export complete CSV and JSONL audit history and return both."
+    "7. Save before navigating. Saved judgments append to decisions.jsonl.",
+    "8. Export complete CSV and JSONL audit history and return both.",
     "",
     if(partial)paste0("IMPORTANT: PARTIAL RUN. W08 validated ",length(ids),
       " publications of ",length(chosen),"; this review bundle selects ",
