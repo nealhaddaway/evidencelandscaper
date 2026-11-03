@@ -161,8 +161,9 @@ prepare_w09_no_case_fulltexts_first10 <- function(w08=NULL,map_path=NULL) {
   mf<-file.path(dest,"manifest.json")
   if(file.exists(mf)) {
     old<-jsonlite::fromJSON(mf,simplifyVector=FALSE)
-    if(!identical(old,manifest))
-      stop("Existing first-10% no-case W09 run has different provenance.")
+    for(field in names(manifest))
+      if(!identical(old[[field]],manifest[[field]]))
+        stop("Existing first-10% no-case W09 run has different provenance: ",field)
     qf<-file.path(dest,"retrieval_queue.csv")
     if(!file.exists(qf))stop("Existing first-10% W09 queue is missing.")
     present<-utils::read.csv(qf,stringsAsFactors=FALSE)
