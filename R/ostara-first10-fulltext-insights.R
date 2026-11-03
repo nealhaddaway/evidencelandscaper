@@ -197,7 +197,9 @@ run_ostara_first10_fulltext_inventory <- function(
   if(!length(ids)) {
     message("[OSTARA FT] No abstract-case-negative publication has readable ",
             "full text; no insights calls made.")
-    return(invisible(list(mechanisms=mechanism_dir,insights=NULL)))
+    reviews<-prepare_ostara_first10_fulltext_review(mechanism_dir)
+    return(invisible(list(mechanisms=mechanism_dir,insights=NULL,
+                          review=reviews$review_dir)))
   }
   src<-sources[match(ids,sources$record_id),,drop=FALSE]
   key<-substr(digest::digest(c(sha(prompt),
@@ -306,7 +308,10 @@ run_ostara_first10_fulltext_inventory <- function(
         "\n",file=ledger,append=TRUE,sep="")
     message("[FT insights] Completed ",id)
   }
+  reviews<-prepare_ostara_first10_fulltext_review(mechanism_dir,dest)
   message("[OSTARA FT] Independent mechanisms: ",mechanism_dir)
   message("[OSTARA FT] Abstract-no-case insights: ",dest)
-  invisible(list(mechanisms=mechanism_dir,insights=dest))
+  message("[OSTARA FT] Human-review CSVs: ",reviews$review_dir)
+  invisible(list(mechanisms=mechanism_dir,insights=dest,
+                 review=reviews$review_dir))
 }
