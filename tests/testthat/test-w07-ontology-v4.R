@@ -1,11 +1,11 @@
-testthat::test_that("W07 accepts the client's 28-code native ontology", {
-  codes<-paste0("M",rep(1:6,length.out=28),".1.",seq_len(28))
+testthat::test_that("W07 accepts the client's 30-code native ontology", {
+  codes<-paste0("M",rep(1:6,length.out=30),".1.",seq_len(30))
   new<-data.frame(
     mechanism_id=codes,
-    collective_action_type=rep("Collective market shaping",28),
-    high_level_mechanism=rep("Operational incentive",28),
-    fine_level_mechanism=paste("Intervention",seq_len(28)),
-    definition=paste("Definition of intervention",seq_len(28)),
+    collective_action_type=rep("Collective market shaping",30),
+    high_level_mechanism=rep("Operational incentive",30),
+    fine_level_mechanism=paste("Intervention",seq_len(30)),
+    definition=paste("Definition of intervention",seq_len(30)),
     stringsAsFactors=FALSE)
   meta<-evidencelandscaper:::.w07_ontology_columns(new)
   testthat::expect_identical(meta$format,"hierarchical_v4")
@@ -13,7 +13,7 @@ testthat::test_that("W07 accepts the client's 28-code native ontology", {
   testthat::expect_identical(meta$required,names(new))
   testthat::expect_error(
     evidencelandscaper:::.w07_ontology_columns(new[-1,]),
-    "exactly 28")
+    "exactly 30")
   broken<-new
   broken$definition[[2]]<-"  "
   testthat::expect_error(
