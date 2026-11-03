@@ -48,8 +48,8 @@ prepare_ostara_first10_fulltext_review <- function(mechanism_dir,
     insights<-readjl(ifile)
   }
   ids<-vapply(insights,function(x)sc(x$record_id),character(1))
-  if(anyDuplicated(ids)||any(!ids%in%mids))
-    stop("Insights records require an accompanying full-text mechanism result")
+  if(anyDuplicated(ids)||any(!ids%in%inames$record_id))
+    stop("Insights records must belong to the same full-text cohort")
   mrows<-list();nrows<-list();crows<-list();irows<-list()
   for(z in m) {
     id<-sc(z$record_id)
