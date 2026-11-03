@@ -79,6 +79,13 @@ ui<-fluidPage(
       radioButtons("decision","Accept the model's case-detection assessment?",
         choices=c("Accept"="accept","Reject"="reject"),
         selected=character(0)),
+      selectInput("final_case_status","Human-adjudicated case classification",
+        choices=c("Select final classification"="",
+          "Specific case (one)"="specific_case",
+          "Multiple cases (two or more)"="multiple_cases",
+          "No identifiable case"="no_identifiable_case",
+          "Still unclear: requires full text"="unclear"),
+        selected=""),
       textAreaInput("alternative","Missing, different or incorrectly split cases",
         rows=5,width="100%"),
       textAreaInput("notes","Comments and reasons",
@@ -171,6 +178,8 @@ server<-function(input,output,session) {
     old<-reviewed()[[id]]
     updateRadioButtons(session,"decision",selected=if(is.null(old))
                          character(0) else sc(old$decision))
+    updateSelectInput(session,"final_case_status",
+      selected=if(is.null(old))"" else sc(old$final_case_status))
     updateTextAreaInput(session,"notes",value=if(is.null(old))"" else sc(old$notes))
     updateTextAreaInput(session,"alternative",value=if(is.null(old))""
                         else sc(old$alternative_cases))
@@ -241,6 +250,10 @@ server<-function(input,output,session) {
       return(showNotification("Select a record and identify reviewer",type="error"))
     if(is.null(input$decision)||!input$decision%in%c("accept","reject"))
       return(showNotification("Choose publication Accept or Reject",type="error"))
+    if(is.null(input$final_case_status)||
+       !input$final_case_status%in%c("specific_case","multiple_cases",
+                                    "no_identifiable_case","unclear"))
+      return(showNotification("Choose a final case classification",type="error"))
     per_case<-lapply(seq_along(x$detection$cases),function(i){
       decision<-input[[paste0("case_",i)]]
       if(is.null(decision)||!decision%in%c("accept","reject","unclear"))""
@@ -254,6 +267,7 @@ server<-function(input,output,session) {
     entry<-list(schema="ostara-w08-colleague-decision-v1",
       record_id=id,queue_sha256=meta$queue_sha256,
       reviewer=reviewer(),decision=input$decision,
+      final_case_status=input$final_case_status,
       case_decisions=per_case,alternative_cases=trimws(sc(input$alternative)),
       notes=trimws(sc(input$notes)),created_at_utc=utc())
     cat(as.character(jsonlite::toJSON(entry,auto_unbox=TRUE,null="null")),
@@ -273,6 +287,8 @@ server<-function(input,output,session) {
         collapse=" | "),character(1)),
       reviewer=vapply(ids,function(id)sc(d[[id]]$reviewer),character(1)),
       review_decision=vapply(ids,function(id)sc(d[[id]]$decision),character(1)),
+      final_case_status=vapply(ids,function(id)sc(d[[id]]$final_case_status),
+                              character(1)),
       case_decisions=vapply(ids,function(id)sc(d[[id]]$case_decisions),character(1)),
       alternative_cases=vapply(ids,function(id)sc(d[[id]]$alternative_cases),character(1)),
       notes=vapply(ids,function(id)sc(d[[id]]$notes),character(1)),
