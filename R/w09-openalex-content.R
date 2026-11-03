@@ -6,9 +6,17 @@
 #' has append-only status logging and the final report is CSV.
 #' @param w09 Prepared W09 directory, normally the case-only 47-record queue.
 #' @param retry_failed Reattempt unsuccessful records on subsequent calls (default TRUE).
+#' @param reuse_saved_without_network If TRUE, reuse valid existing files from
+#'   this or a bibliographically matched previous W09 run before any API call.
+#'   This avoids re-downloading already held first-10% case-positive full texts.
 #' @return Path to the final CSV report.
 #' @export
-retrieve_w09_openalex_content <- function(w09,retry_failed=TRUE) {
+retrieve_w09_openalex_content <- function(w09,retry_failed=TRUE,
+                                           reuse_saved_without_network=FALSE) {
+  if(!is.logical(reuse_saved_without_network)||
+     length(reuse_saved_without_network)!=1L||
+     is.na(reuse_saved_without_network))
+    stop("reuse_saved_without_network must be TRUE or FALSE.")
   w09 <- normalizePath(w09, mustWork=TRUE)
   q <- utils::read.csv(file.path(w09,"retrieval_queue.csv"),
                        stringsAsFactors=FALSE)
@@ -106,6 +114,48 @@ retrieve_w09_openalex_content <- function(w09,retry_failed=TRUE) {
       entry$sha256<-sha(f)
       entry$source<-origin
       entry
+    }
+    # In bulk first-10% runs, preserve and reuse all already held documents.
+    # A prior run must agree on record ID, DOI and title. A parseable document
+    # is not automatically accepted as the correct publication's full text.
+    # No OpenAlex or publisher call is made for reused sources in this mode.
+    if(isTRUE(reuse_saved_without_network)) {
+      existing<-names(targets)[vapply(names(targets),function(ex)
+        extok(targets[[ex]],ex),logical(1))]
+      if(length(existing)) {
+        entry<-setfile(targets[[existing[[1L]]]],"existing_current_run")
+      } else {
+        for(j in seq_along(olddirs)) {
+          tab<-pastq[[j]]
+          if(is.null(tab)||!all(c("record_id","title","doi")%in%names(tab)))next
+          ix<-which(tab$record_id==id)
+          if(length(ix)!=1L||
+             !identical(norm(tab$title[ix]),norm(title))||
+             !identical(tolower(clean(tab$doi[ix])),tolower(doi)))next
+          for(ex in names(targets)) {
+            src<-file.path(olddirs[[j]],
+              if(ex=="pdf")"pdfs" else "structured",paste0(id,".",ex))
+            if(extok(src,ex)&&!file.exists(targets[[ex]])) {
+              if(!file.copy(src,targets[[ex]],overwrite=FALSE))
+                stop("Unable to reuse W09 archived document: ",id)
+              if(!identical(sha(src),sha(targets[[ex]])))
+                stop("Reused W09 document hash does not match: ",id)
+              entry<-setfile(targets[[ex]],"existing_matching_W09_archive")
+              break
+            }
+          }
+          if(!is.null(entry$file))break
+        }
+      }
+      if(!is.null(entry$file)) {
+        entry$openalex_status<-"existing_file_reused_without_network"
+        entry$sciencedirect_status<-"not_needed"
+        cat(jsonlite::toJSON(entry,auto_unbox=TRUE,null="null"),"\n",
+          file=log,append=TRUE,sep="")
+        message("[W09] ",i,"/",nrow(remaining)," ",id,
+          " | reused existing document; no API request")
+        next
+      }
     }
     # Always check hosted-content availability, including for reused files.
     work<-NULL
