@@ -64,6 +64,18 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
   codes<-ontology_schema$codes
   prompt<-paste(readLines(prompt_file,warn=FALSE,encoding="UTF-8"),collapse="\n")
   if(!nzchar(trimws(prompt)))stop("Empty coding prompt.")
+  # The 30-code freeze is a run-specific contract, not a permanent ban on
+  # resuming historical 28-code ontology runs.
+  if(grepl("frozen at[[:space:]]+\\*\\*30\\*\\*[[:space:]]+codes",
+           prompt,ignore.case=TRUE) ||
+     grepl("frozen at[[:space:]]+30[[:space:]]+codes",
+           prompt,ignore.case=TRUE)) {
+    if(length(codes)!=30L)
+      stop("W07 prompt freezes this round at 30 codes, but ontology has ",
+           length(codes),".")
+    message("[W07] Frozen ontology: 30 approved mechanism IDs; ",
+            "only IDs supplied in ontology.csv can be assigned.")
+  }
   roots<-list.dirs(file.path(map_path,"runs","W01"),recursive=FALSE,full.names=TRUE)
   options<-unlist(lapply(roots,function(r) {
     path<-file.path(r,"W04_local")
