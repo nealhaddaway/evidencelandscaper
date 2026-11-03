@@ -62,16 +62,25 @@ testthat::test_that("eligibility-first W09 cases feed mechanism extraction witho
   prompt<-system.file("w09","fulltext_mechanisms_supplement_v1.txt",
                        package="evidencelandscaper")
   output<-file.path(review,"fulltext_mechanism_supplement",
-    paste0("v1-",substr(sha(prompt),1,12),"-",substr(sha(ontology),1,12),
+    paste0("v2-",substr(sha(prompt),1,12),"-",substr(sha(ontology),1,12),
            "-gpt-6-luna"))
   testthat::expect_true(file.exists(file.path(output,"manifest.json")))
   # Simulate an already checkpointed complete extraction: zero network calls.
-  mock<-list(record_id="work-1",eligible_case_ids=list("approved-001"),
+  mock<-list(record_id="work-1",
+   case_presence_assessment=list(case_status="case_present",
+      candidate_case_count=1L,
+      candidate_cases=list(list(candidate_label="Case A",
+        case_description="Documented cooperation",
+        source_quote="Documented mechanism",source_anchor="[PAGE 2]",
+        eligibility_reason="Documented coordinated action")),
+      assessment_reason="Collective action described",
+      w08_comparison="not_provided",review_required=FALSE),
    mechanism_inventory=list(
-      list(mechanism_id="C01.01",status="not_identified",case_ids=list()),
+      list(mechanism_id="C01.01",status="not_identified",
+           source_quote="",source_anchor="",reason=""),
       list(mechanism_id="C01.02",status="implemented_case",
-           case_ids=list("approved-001"),source_quote="Documented mechanism",
-           source_anchor="[PAGE 2]")),
+           source_quote="Documented mechanism",source_anchor="[PAGE 2]",
+           reason="Actual use described")),
    abstract_novelty_validation=list(),new_novelty=list())
   cat(as.character(jsonlite::toJSON(mock,auto_unbox=TRUE,null="null")),
       "\n",file=file.path(output,"mechanism_assessments.jsonl"))
@@ -80,7 +89,9 @@ testthat::test_that("eligibility-first W09 cases feed mechanism extraction witho
   worksheets<-prepare_ostara_supplement_review(review,output)
   observed<-utils::read.csv(worksheets$mechanisms)
   testthat::expect_equal(nrow(observed),2L)
-  testthat::expect_equal(observed$case_ids[[2L]],"approved-001")
+  testthat::expect_false("case_ids" %in% names(observed))
+  case_review<-utils::read.csv(worksheets$case_presence)
+  testthat::expect_equal(case_review$model_case_status[[1L]],"case_present")
   testthat::expect_false(any(observed$review_complete))
   # Changing approved decisions must make a new review impossible.
   utils::write.csv(data.frame(record_id="work-1",case_id="approved-001",
