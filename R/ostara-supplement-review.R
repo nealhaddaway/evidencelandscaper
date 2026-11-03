@@ -25,6 +25,83 @@ prepare_ostara_supplement_review <- function(review_dir,supplement_dir) {
   found<-vapply(extracted,function(x)x$record_id,character(1))
   if(anyDuplicated(found)||!setequal(found,expected))
     stop("Supplementary mechanism extraction is not complete for all selected records")
+  if(identical(meta$schema,"ostara-fulltext-mechanisms-case-sweep-v2")) {
+    # Independent publication-mechanism review: no case IDs or prior case
+    # eligibility gate. Case presence decisions are reviewed separately.
+    out<-file.path(review_dir,paste0("supplement_review_v2-",
+                                    substr(hash(ledger),1,12)))
+    if(dir.exists(out)&&length(list.files(out,all.files=TRUE,no..=TRUE)))
+      stop("Supplement review already exists; refusing overwrite")
+    get<-function(x,k) {
+      y<-x[[k]]
+      if(is.null(y)||!length(y))"" else
+        paste(as.character(unlist(y,use.names=FALSE)),collapse="; ")
+    }
+    rows<-list();novel<-list();sweep<-list()
+    for(z in extracted) {
+      id<-as.character(z$record_id)
+      for(v in z$mechanism_inventory) {
+        rows[[length(rows)+1L]]<-data.frame(
+          record_id=id,mechanism_id=get(v,"mechanism_id"),
+          model_status=get(v,"status"),source_quote=get(v,"source_quote"),
+          source_anchor=get(v,"source_anchor"),model_reason=get(v,"reason"),
+          human_decision="",review_complete=FALSE,reviewer="",review_timestamp="",
+          stringsAsFactors=FALSE)
+      }
+      for(kind in c("abstract_novelty_validation","new_novelty")) {
+        for(i in seq_along(z[[kind]])) {
+          v<-z[[kind]][[i]]
+          novel[[length(novel)+1L]]<-data.frame(
+            record_id=id,kind=kind,ordinal=i,
+            proposed_label=if(kind=="new_novelty")get(v,"proposed_label")
+              else get(v,"revised_label"),
+            model_status=if(kind=="new_novelty")get(v,"support_status")
+              else get(v,"status"),
+            closest_approved_mechanism_id=get(v,"closest_approved_mechanism_id"),
+            source_quote=get(v,"source_quote"),
+            source_anchor=get(v,"source_anchor"),
+            human_decision="",review_complete=FALSE,reviewer="",
+            stringsAsFactors=FALSE)
+        }
+      }
+      assessment<-z$case_presence_assessment
+      sweep[[length(sweep)+1L]]<-data.frame(
+        record_id=id,model_case_status=get(assessment,"case_status"),
+        model_candidate_case_count=if(is.null(assessment$candidate_case_count))
+          NA_integer_ else as.integer(assessment$candidate_case_count),
+        w08_comparison=get(assessment,"w08_comparison"),
+        review_required=isTRUE(assessment$review_required),
+        assessment_reason=get(assessment,"assessment_reason"),
+        reviewer_case_status="",reviewer="",review_notes="",
+        stringsAsFactors=FALSE)
+    }
+    if(!length(rows))stop("No W09 full-text mechanism inventory rows")
+    mechanisms<-do.call(rbind,rows)
+    if(anyDuplicated(paste(mechanisms$record_id,mechanisms$mechanism_id)))
+      stop("Duplicate mechanism assignments in full-text review")
+    novelty<-if(length(novel))do.call(rbind,novel) else data.frame(
+      record_id=character(),kind=character(),ordinal=integer(),
+      proposed_label=character(),model_status=character(),
+      closest_approved_mechanism_id=character(),
+      source_quote=character(),source_anchor=character(),
+      human_decision=character(),review_complete=logical(),
+      reviewer=character())
+    dir.create(out,recursive=TRUE,showWarnings=FALSE)
+    paths<-file.path(out,c("mechanism_review.csv","novelty_review.csv",
+                            "case_presence_review.csv","manifest.json"))
+    utils::write.csv(mechanisms,paths[[1]],row.names=FALSE,na="")
+    utils::write.csv(novelty,paths[[2]],row.names=FALSE,na="")
+    utils::write.csv(do.call(rbind,sweep),paths[[3]],row.names=FALSE,na="")
+    jsonlite::write_json(list(schema="ostara-FT-supplement-review-v2",
+      supplemental_ledger_sha256=hash(ledger),
+      mechanism_review_sha256=hash(paths[[1]]),
+      novelty_review_sha256=hash(paths[[2]]),
+      case_presence_review_sha256=hash(paths[[3]]),
+      legacy_case_eligibility_finaliser_compatible=FALSE),
+      paths[[4]],auto_unbox=TRUE,pretty=TRUE)
+    return(invisible(list(mechanisms=paths[[1]],novelty=paths[[2]],
+       case_presence=paths[[3]],review_dir=out)))
+  }
   out<-file.path(review_dir,paste0("supplement_review-",
                                    substr(hash(ledger),1,12)))
   if(dir.exists(out)&&length(list.files(out,all.files=TRUE,no..=TRUE)))
