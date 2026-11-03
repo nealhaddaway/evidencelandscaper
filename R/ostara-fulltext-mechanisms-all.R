@@ -4,7 +4,7 @@
 #' case IDs. Existing legacy "implemented_case" is a mechanism status, not a
 #' reference to a separately extracted case.
 .w09_validate_independent_mechanism_sweep <- function(z,record_id,approved_codes,
-                                                       fulltext,needs_w07_novelty=FALSE) {
+                                                       fulltext) {
   sc<-function(v) {
     if(is.null(v)||!length(v))return("")
     paste(as.character(unlist(v,use.names=FALSE)),collapse="; ")
@@ -20,7 +20,6 @@
   }
   if(!identical(sc(z$record_id),record_id)||
      !is.list(z$mechanism_inventory)||
-     !is.list(z$abstract_novelty_validation)||
      !is.list(z$new_novelty)||
      !is.list(z$case_presence_assessment))
     stop("Incorrect independent full-text output contract")
@@ -45,17 +44,6 @@
       stop("Invalid novel mechanism proposal")
     quoted(n,"New mechanism")
   }
-  for(n in z$abstract_novelty_validation) {
-    if(!is.null(n$case_ids))
-      stop("Independent W07 novelty reassessment must not have case_ids")
-    if(!sc(n$status)%in%c("confirmed_novel","refined_novel",
-      "covered_by_existing","rejected","uncertain"))
-      stop("Invalid W07 novelty assessment")
-    if(sc(n$status)%in%c("confirmed_novel","refined_novel","covered_by_existing"))
-      quoted(n,"W07 novelty")
-  }
-  if(isTRUE(needs_w07_novelty)&&!length(z$abstract_novelty_validation))
-    stop("W07 abstract novelty was not reassessed in full text")
   sweep<-z$case_presence_assessment
   status<-sc(sweep$case_status)
   if(!status%in%c("case_present","no_case","unclear")||
@@ -231,14 +219,8 @@ extract_ostara_all_fulltext_mechanisms <- function(
     source<-w09_text_payload(w09,id,max_pages=0L)
     if(!identical(sha(source$path),source_hashes[match(id,record_ids)]))
       stop("Full-text file changed during extraction: ",id)
-    original<-w07index[[id]]
-    abs_codes<-if(length(original$mechanisms))
-      vapply(original$mechanisms,function(x)as.character(x$mechanism_id),
-             character(1)) else character()
     input<-list(record_id=id,
       approved_ontology=ontology_text,
-      w07_abstract_mechanism_ids=as.list(abs_codes),
-      w07_abstract_novelty=original$proposed_new_mechanism,
       w08_case_inclusion_criteria=case_criteria,
       final_w08_case_status=NULL,
       fulltext=source$text)
@@ -263,7 +245,7 @@ extract_ostara_all_fulltext_mechanisms <- function(
         if(!length(parts))stop("Model returned no output text")
         z<-jsonlite::fromJSON(parts[[1L]],simplifyVector=FALSE)
         .w09_validate_independent_mechanism_sweep(
-          z,id,codes,source$text,isTRUE(original$ontology_gap))
+          z,id,codes,source$text)
         z
       },error=function(e)e)
       if(!inherits(candidate,"error")){result<-candidate;break}
