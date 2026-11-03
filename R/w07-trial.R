@@ -82,8 +82,12 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
     if(!dir.exists(path))return(character())
     list.dirs(path,recursive=FALSE,full.names=TRUE)
   }),use.names=FALSE)
-  options<-options[file.exists(file.path(options,
-    if(provisional_retains)"consensus" else "finalised","summary.json"))]
+  options<-options[vapply(options,function(p) {
+    if(provisional_retains)
+      return(file.exists(file.path(p,"consensus","summary.json")))
+    file.exists(file.path(p,"finalised","summary.json")) ||
+      dir.exists(file.path(p,"human_authoritative","snapshots"))
+  },logical(1))]
   if(!is.null(w04_run)) {
     w04_run<-normalizePath(w04_run,winslash="/",mustWork=TRUE)
     options<-options[options==w04_run]
@@ -94,15 +98,33 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
     stop(if(provisional_retains)"No completed W04 consensus for specified run."
          else "No appropriate finalised W04 screening run: full W04 required when n=0.")
   options<-options[order(file.info(file.path(options,
-        if(provisional_retains)"consensus" else "finalised",
-        "summary.json"))$mtime,decreasing=TRUE)]
+        "local_manifest.json"))$mtime,decreasing=TRUE)]
   w04<-options[[1L]]
   consensus_path<-file.path(w04,"consensus","workflow04_consensus_layer.jsonl")
-  summary_path<-file.path(w04,if(provisional_retains)"consensus" else "finalised","summary.json")
-  input_path<-file.path(w04,if(provisional_retains)"consensus" else "finalised",
-     if(provisional_retains)"workflow04_consensus_layer.jsonl"
-     else "workflow04_final_screening_layer.jsonl")
-  summary<-jsonlite::fromJSON(summary_path)
+  human<-if(provisional_retains)NULL else .w04_latest_authoritative(w04)
+  if(!is.null(human)&&!isTRUE(human$complete))
+    stop("W04 has imported authoritative human decisions, but unresolved ",
+         "records remain. Finish adjudications before final W07 coding.")
+  if(!is.null(human)) {
+    input_path<-human$layer
+    summary<-list(status="final",
+      run_type=human$summary$run_type,
+      records=human$summary$records,
+      retain=human$summary$retain,
+      exclude=human$summary$exclude,
+      final_layer_sha256=human$summary$layer_sha256,
+      original_consensus_sha256=human$summary$source_consensus_sha256,
+      reconciled_abstracts=FALSE)
+    message("[W07] Using authoritative human W04 screening layer: ",input_path)
+  } else {
+    summary_path<-file.path(w04,
+      if(provisional_retains)"consensus" else "finalised","summary.json")
+    input_path<-file.path(w04,
+      if(provisional_retains)"consensus" else "finalised",
+      if(provisional_retains)"workflow04_consensus_layer.jsonl"
+      else "workflow04_final_screening_layer.jsonl")
+    summary<-jsonlite::fromJSON(summary_path)
+  }
   if(provisional_retains) {
     w04_manifest_path<-file.path(w04,"local_manifest.json")
     if(!file.exists(w04_manifest_path)||!file.exists(consensus_path))
