@@ -9,13 +9,35 @@
     if(is.null(v)||!length(v))return("")
     paste(as.character(unlist(v,use.names=FALSE)),collapse="; ")
   }
+  evidence_flags<-list()
   quoted<-function(x,what) {
-    quote<-sc(x$source_quote);anchor<-sc(x$source_anchor)
-    if(!nzchar(quote)||!nzchar(anchor)||
-       !grepl(quote,fulltext,fixed=TRUE)||
-       !grepl(anchor,fulltext,fixed=TRUE)||
-       !grepl("^\\[(PAGE|SECTION|TEXT BLOCK) [0-9]+\\]$",anchor))
-      stop(what,": missing or non-verbatim full-text evidence/anchor")
+    quote<-sc(x$source_quote)
+    anchor<-sc(x$source_anchor)
+    causes<-character()
+    if(!nzchar(trimws(quote)))causes<-c(causes,"missing_quote")
+    if(!grepl("^\\[(PAGE|SECTION|TEXT BLOCK) [0-9]+\\]$",anchor))
+      causes<-c(causes,"missing_or_invalid_anchor")
+    at<-if(nzchar(anchor))regexpr(anchor,fulltext,fixed=TRUE)[[1L]] else -1L
+    if(nzchar(anchor)&&at<1L)causes<-c(causes,"anchor_not_in_text")
+    if(nzchar(quote)) {
+      if(!grepl(quote,fulltext,fixed=TRUE))
+        causes<-c(causes,"quote_not_verbatim_in_full_text")
+      if(at>0L) {
+        after<-substring(fulltext,at+nchar(anchor))
+        next_at<-regexpr("\\[(?:PAGE|SECTION|TEXT BLOCK) [0-9]+\\]",
+                        after,perl=TRUE)[[1L]]
+        segment<-if(next_at>0L)substr(after,1L,next_at-1L) else after
+        if(!grepl(quote,segment,fixed=TRUE))
+          causes<-c(causes,"quote_not_in_cited_anchor")
+      }
+    }
+    if(length(causes))
+      evidence_flags[[length(evidence_flags)+1L]]<<-list(
+        location=what,reasons=as.list(unique(causes)),
+        mechanism_id=if(!is.null(x$mechanism_id))sc(x$mechanism_id) else "",
+        candidate_label=if(!is.null(x$candidate_label))sc(x$candidate_label) else "",
+        proposed_label=if(!is.null(x$proposed_label))sc(x$proposed_label) else "",
+        source_anchor=anchor,source_quote=quote)
     invisible(TRUE)
   }
   if(!identical(sc(z$record_id),record_id)||
@@ -72,7 +94,8 @@
       stop("Incomplete provisional case candidate")
     quoted(ca,"Case presence candidate")
   }
-  invisible(TRUE)
+  # Structural validation remains strict; evidence exceptions require review.
+  evidence_flags
 }
 
 #' Code all available included full texts for mechanisms and case presence
@@ -254,8 +277,10 @@ extract_ostara_all_fulltext_mechanisms <- function(
           use.names=FALSE)
         if(!length(parts))stop("Model returned no output text")
         z<-jsonlite::fromJSON(parts[[1L]],simplifyVector=FALSE)
-        .w09_validate_independent_mechanism_sweep(
+        flags<-.w09_validate_independent_mechanism_sweep(
           z,id,codes,source$text)
+        z$evidence_review_required<-length(flags)>0L
+        z$evidence_review_flags<-flags
         z
       },error=function(e)e)
       if(!inherits(candidate,"error")){result<-candidate;break}
@@ -266,6 +291,17 @@ extract_ostara_all_fulltext_mechanisms <- function(
       message("[FT mechanisms] Failed ",id,
               "; prior validated records remain saved in ",results)
       next
+    }
+    if(isTRUE(result$evidence_review_required)) {
+      audit<-list(record_id=id,source_sha256=source$sha256,
+        evidence_review_required=TRUE,
+        evidence_flags=result$evidence_review_flags)
+      cat(as.character(jsonlite::toJSON(audit,auto_unbox=TRUE,null="null")),
+          "\n",file=file.path(dest,"evidence_review_flags.jsonl"),
+          append=TRUE,sep="")
+      message("[FT mechanisms] ",id,": ",
+              length(result$evidence_review_flags),
+              " evidence issue(s) retained for human review.")
     }
     result$provenance<-list(source_identity_verified=FALSE,
       source_path=source$path,
