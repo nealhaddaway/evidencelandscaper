@@ -168,12 +168,22 @@ run_ostara_first10_fulltext_inventory <- function(
   if(length(max_records)!=1L||is.na(max_records)||
      max_records!=as.integer(max_records)||max_records<0L)
     stop("max_records must be a nonnegative integer; 0 means all")
+  if(is.null(mechanism_prompt_file)) {
+    if(!interactive())stop("Provide mechanism_prompt_file outside interactive R")
+    message("[OSTARA FT] Select revised full-text mechanism prompt (.txt)")
+    mechanism_prompt_file<-file.choose()
+  }
+  mechanism_prompt_file<-normalizePath(mechanism_prompt_file,
+                                        winslash="/",mustWork=TRUE)
+  message("[OSTARA FT] Mechanism prompt selected: ",
+          basename(mechanism_prompt_file))
   if(is.null(ontology_file)) {
     if(!interactive())stop("Provide ontology_file outside interactive R")
-    message("[OSTARA FT] Select approved ontology v4 CSV (30 mechanism IDs)")
+    message("[OSTARA FT] Select approved mechanism ontology (.csv; 30 IDs)")
     ontology_file<-file.choose()
   }
   ontology_file<-normalizePath(ontology_file,winslash="/",mustWork=TRUE)
+  message("[OSTARA FT] Ontology selected: ",basename(ontology_file))
   if(is.null(w09))w09<-prepare_w09_first10_all_included()
   w09<-normalizePath(w09,winslash="/",mustWork=TRUE)
   decisions<-.w09_first10_abstract_case_decisions(w09,w08=w08)
