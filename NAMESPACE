@@ -123,3 +123,5 @@ export(export_w09_cases_wide_evidence)
 export(import_w04_authoritative_decisions)
 
 export(run_w04_remaining_90)
+
+export(run_w07_adjudicated_first_10)
