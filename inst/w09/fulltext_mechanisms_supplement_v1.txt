@@ -1,7 +1,7 @@
-OSTARA W09 FULL-TEXT MECHANISM INVENTORY + INDEPENDENT CASE-PRESENCE SWEEP (v2)
+OSTARA W09 FULL-TEXT MECHANISM INVENTORY + INDEPENDENT CASE-PRESENCE SWEEP (v3)
 
 PURPOSE
-Evaluate all approved mechanisms throughout the complete supplied full text. Independently perform a lightweight case-presence sweep to route later extraction. The mechanism inventory must NOT depend on prior case detection, W09 case extraction, eligible case IDs, or the outcome of the case-presence sweep. Return one JSON object only.
+Evaluate all approved mechanisms throughout the complete supplied full text. Independently perform a lightweight case-presence sweep to route later extraction. The mechanism inventory must NOT depend on W07 abstract mechanism assignments or novelty proposals, prior case detection, W09 case extraction, eligible case IDs, or the outcome of the case-presence sweep. Return one JSON object only.
 
 MECHANISM INVENTORY
 Evaluate EVERY mechanism_id in approved_ontology exactly once, including those absent from the abstract. Classify its status:
@@ -15,10 +15,12 @@ The status label implemented_case is retained for compatibility with the approve
 
 For every status except not_identified, provide a concise verbatim source_quote, an exact source_anchor ([PAGE n], [SECTION n], or [TEXT BLOCK n] exactly as provided), and a reason; if evidence is absent, classify not_identified rather than inventing quotations. Use exact approved mechanism IDs only.
 
-NOVELTY REVIEW
-For every W07 novelty proposal in w07_abstract_novelty, explicitly classify full-text support as confirmed_novel, refined_novel, covered_by_existing, rejected, or uncertain. For a covered_by_existing decision, identify the corresponding approved mechanism ID. Include a source quotation and anchor when textual support is claimed. Do not automatically adopt new mechanisms into the approved ontology.
+INDEPENDENT NOVELTY ASSESSMENT
+Evaluate the complete full text without access to abstract-level mechanism assignments or prior novelty proposals. Compare all potentially novel approaches against EVERY approved ontology mechanism and their definitions before proposing novelty.
 
-Independently propose truly new mechanisms in new_novelty only where they are substantively supported by the full text and not already covered by any approved mechanism. These may be observed/implemented or clearly proposed; specify support_status as implemented, proposed, or unclear, explain novelty relative to closest codes, and include exact quotation and source anchor. Case identification and case IDs are NOT prerequisites. Do not duplicate a proposal already addressed in abstract_novelty_validation.
+In new_novelty, report a mechanism only when substantive full-text evidence supports a conceptually distinct collective-action approach that the approved ontology does not adequately cover. Specify whether the approach is implemented, proposed or unclear; provide a working label, definition, the nearest approved code (if identifiable), a reasoned explanation of why that code does not already cover it, a verbatim supporting quote and exact source anchor. Proposed mechanisms are candidates for later human adjudication, never approved codes. Do not invent new ontology codes.
+
+If no new mechanism is justified, return new_novelty: []. Do not assess or refer to W07 abstract novelty proposals within this model call. Abstract/full-text comparisons, if desired, occur later as a separate deterministic analysis.
 
 This is inventory and candidate ontology assessment, not effectiveness or impact evaluation. Do not extract case-level details or general insights here.
 
@@ -53,15 +55,10 @@ OUTPUT JSON (all arrays/objects required; return actual values, not pipe-separat
  "mechanism_inventory":[
    {"mechanism_id":"","status":"not_identified","source_quote":"","source_anchor":"","reason":""}
  ],
- "abstract_novelty_validation":[
-   {"abstract_candidate_id":"","original_proposal":"","status":"uncertain",
-    "closest_approved_mechanism_id":"","revised_label":"","revised_definition":"",
-    "source_quote":"","source_anchor":"","reason":""}
- ],
  "new_novelty":[
    {"proposed_label":"","working_definition":"","support_status":"proposed",
     "closest_approved_mechanism_id":"","source_quote":"","source_anchor":"","reason":""}
  ]
 }
 
-If there is no W07 novelty proposal return abstract_novelty_validation: []; if no justified novel mechanism return new_novelty: []. Do not output any case_ids field anywhere. Keep the exact case_presence_assessment object even when status is no_case.
+If no justified novel mechanism is identified, return new_novelty: []. Do not output any case_ids field anywhere. Keep the exact case_presence_assessment object even when status is no_case.
