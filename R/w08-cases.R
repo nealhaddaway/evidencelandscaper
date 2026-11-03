@@ -4,7 +4,8 @@
 #' separate CSVs make the candidate cases and all publication assessments
 #' reviewable. Existing W04/W07 files are read-only.
 #' @param n Randomly sampled retained publications (default 20); 0 selects all.
-#' @param w04_run Explicit W04 run for a selected cohort.
+#' @param w04_run Explicit W04 run for a selected cohort. A completed
+#'   human-authoritative layer is preferred over model-only screening.
 #' @param provisional_retains Opt in to unfinalised W04 consensus retains; all
 #'   uncertain records are excluded from W08 inputs without adjudication.
 #' @param seed Sampling seed, recorded in the manifest.
@@ -59,15 +60,36 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
     runs<-runs[runs==w04_run]
   } else runs<-runs[grepl("^full-",basename(runs))]
   layer_dir<-if(provisional_retains)"consensus" else "finalised"
-  runs<-runs[file.exists(file.path(runs,layer_dir,"summary.json"))]
+  runs<-runs[vapply(runs,function(p) {
+    if(file.exists(file.path(p,layer_dir,"summary.json")))return(TRUE)
+    if(provisional_retains)return(FALSE)
+    dir.exists(file.path(p,"human_authoritative","snapshots"))
+  },logical(1))]
   if(length(runs)!=1L)
-    stop(if(provisional_retains)"Expected exactly one explicit completed W04 consensus run."
-         else "Expected exactly one finalised W04 full run; select a map with a unique run.")
+    stop("Expected exactly one explicit W04 source run; found ",length(runs),
+         ". Supply w04_run to select the intended cohort.")
   w04<-runs[[1L]]
-  input_path<-file.path(w04,layer_dir,
-    if(provisional_retains)"workflow04_consensus_layer.jsonl"
-    else "workflow04_final_screening_layer.jsonl")
-  sm<-jsonlite::fromJSON(file.path(w04,layer_dir,"summary.json"))
+  human<-if(provisional_retains)NULL else .w04_latest_authoritative(w04)
+  if(!is.null(human)&&!isTRUE(human$complete))
+    stop("W04 human-authoritative adjudications are incomplete; ",
+         "resolve all uncertainties before W08.")
+  if(!is.null(human)) {
+    input_path<-human$layer
+    sm<-list(status="final",run_type=human$summary$run_type,
+      records=human$summary$records,
+      retain=human$summary$retain,
+      exclude=human$summary$exclude,
+      final_layer_sha256=human$summary$layer_sha256,
+      original_consensus_sha256=human$summary$source_consensus_sha256,
+      reconciled_abstracts=FALSE)
+    layer_dir<-"human_authoritative"
+    message("[W08] Using human-adjudicated W04 layer: ",input_path)
+  } else {
+    input_path<-file.path(w04,layer_dir,
+      if(provisional_retains)"workflow04_consensus_layer.jsonl"
+      else "workflow04_final_screening_layer.jsonl")
+    sm<-jsonlite::fromJSON(file.path(w04,layer_dir,"summary.json"))
+  }
   if(provisional_retains) {
     manifest_path<-file.path(w04,"local_manifest.json")
     if(!file.exists(manifest_path)||!file.exists(input_path))
@@ -83,7 +105,10 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
       stop("W04 is already finalised; use provisional_retains=FALSE.")
   } else if(!identical(sm$status,"final")||
        (is.null(w04_run)&&!identical(sm$run_type,"full"))||
-       !identical(sm$final_layer_sha256,sha(input_path)))
+       !identical(sm$final_layer_sha256,sha(input_path))||
+       (!is.null(human)&&
+        !identical(sm$original_consensus_sha256,
+          sha(file.path(w04,"consensus","workflow04_consensus_layer.jsonl")))))
     stop("W04 finalised screening integrity check failed.")
   screened<-readjl(input_path)
   decisions<-vapply(screened,function(z)as.character(z$screening$decision),
