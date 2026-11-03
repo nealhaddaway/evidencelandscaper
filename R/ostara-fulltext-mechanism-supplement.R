@@ -194,16 +194,10 @@ extract_ostara_fulltext_mechanisms <- function(
     paste(as.character(unlist(x,use.names=FALSE)),collapse="; ")
   for(id in todo) {
     source<-w09_text_payload(w09,id,max_pages=0L)
-    original<-coded[[id]]
-    if(is.null(original))stop("W07 source record absent: ",id)
-    codes<-if(is.null(original$mechanisms))character() else
-      vapply(original$mechanisms,function(m)m$mechanism_id,character(1))
     # Case IDs are deliberately not supplied: mechanism detection is independent
     # of the existing case extraction; full-text case sweep uses W08 criteria.
     input<-list(record_id=id,
       approved_ontology=utils::capture.output(utils::write.csv(onto,row.names=FALSE)),
-      w07_abstract_mechanism_ids=as.list(codes),
-      w07_abstract_novelty=original$proposed_new_mechanism,
       w08_case_inclusion_criteria=w08_case_criteria,
       final_w08_case_status=NULL,
       fulltext=source$text)
@@ -229,7 +223,7 @@ extract_ostara_fulltext_mechanisms <- function(
         if(!length(parts))stop("Empty model response")
         z<-jsonlite::fromJSON(parts[[1]],simplifyVector=FALSE)
         if(!identical(z$record_id,id)||!is.list(z$mechanism_inventory)||
-           !is.list(z$abstract_novelty_validation)||!is.list(z$new_novelty))
+           !is.list(z$new_novelty))
           stop("Incorrect supplementary output contract")
         actual<-vapply(z$mechanism_inventory,function(x)scalar(x$mechanism_id),
                        character(1))
@@ -305,19 +299,6 @@ extract_ostara_fulltext_mechanisms <- function(
             stop("Invalid new novelty record")
           check_evidence(entry,"New mechanism")
         }
-        for(entry in z$abstract_novelty_validation) {
-          if(!is.null(entry$case_ids))
-            stop("Abstract novelty validation must not contain case IDs")
-          if(!scalar(entry$status)%in%c("confirmed_novel","refined_novel",
-                  "covered_by_existing","rejected","uncertain"))
-            stop("Invalid W07 novelty adjudication status")
-          if(scalar(entry$status)%in%c("confirmed_novel","refined_novel",
-                  "covered_by_existing"))
-            check_evidence(entry,"Abstract novelty")
-        }
-        if(isTRUE(original$ontology_gap)&&
-           !length(z$abstract_novelty_validation))
-          stop("W07 abstract novelty proposal was not reassessed")
         z
       },error=function(e)e)
       if(!inherits(candidate,"error")){result<-candidate;break}
