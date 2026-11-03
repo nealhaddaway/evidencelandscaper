@@ -241,8 +241,41 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
   if(max_records>0L)pending<-head(pending,as.integer(max_records))
   message("[W09 case data] ",length(done_ids)," checkpointed; ",
           length(pending)," selected for this call.")
+  skipped_file<-file.path(dest,"unprocessed_fulltexts.jsonl")
+  skipped_in_call<-character()
+  oversized_in_call<-character()
   for(id in pending) {
-    payload<-w09_text_payload(w09,id,max_pages=max_pages)
+    payload<-tryCatch(
+      w09_text_payload(w09,id,max_pages=max_pages),
+      error=function(e)e)
+    if(inherits(payload,"error")) {
+      msg<-conditionMessage(payload)
+      oversized<-grepl("Full-text payload exceeds 600 kB",msg,fixed=TRUE)
+      source_candidates<-c(
+        file.path(w09,"structured",paste0(id,".xml")),
+        file.path(w09,"structured",paste0(id,".json")),
+        file.path(w09,"pdfs",paste0(id,".pdf")))
+      present<-source_candidates[file.exists(source_candidates)]
+      source_path<-if(length(present))present[[1L]] else ""
+      event<-list(record_id=id,
+        status=if(oversized)"oversized_fulltext_not_processed"
+               else "unreadable_fulltext_not_processed",
+        reason=msg,source_path=source_path,
+        source_sha256=if(nzchar(source_path))sha(source_path) else "",
+        source_file_bytes=if(nzchar(source_path))
+          as.numeric(file.info(source_path)$size) else NULL,
+        required_action=if(oversized)
+          "full_text_preserving_multi_pass_extraction"
+        else "inspect_source_and_retry")
+      cat(as.character(jsonlite::toJSON(event,auto_unbox=TRUE,null="null")),
+          "\n",file=skipped_file,append=TRUE,sep="")
+      skipped_in_call<-c(skipped_in_call,id)
+      if(oversized)oversized_in_call<-c(oversized_in_call,id)
+      message("[W09 case data] ",id,": ",msg,
+        " Skipped WITHOUT truncation or a negative case decision; ",
+        "reason saved in ",skipped_file)
+      next
+    }
     # Hash-bound source selections ensure a resume never silently substitutes
     # a different full text for a completed ID.
     old_sources<-readjl(source_selection)
@@ -393,13 +426,29 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
       obj<-tryCatch({
         if(!length(parts))stop("Missing model JSON text.")
         x<-jsonlite::fromJSON(parts[[1L]],simplifyVector=FALSE)
-        check_result(x,id,payload$text)
+        flags<-character()
+        withCallingHandlers(check_result(x,id,payload$text),
+          warning=function(w) {
+            flags<<-c(flags,conditionMessage(w))
+            invokeRestart("muffleWarning")
+          })
+        attr(x,"w09_evidence_flags")<-unique(flags)
         x
       },error=function(e){issue<<-conditionMessage(e);NULL})
       if(!is.null(obj)) {
+        flags<-attr(obj,"w09_evidence_flags")
+        attr(obj,"w09_evidence_flags")<-NULL
         cat(jsonlite::toJSON(obj,auto_unbox=TRUE,null="null"),"\n",
             file=ledger,append=TRUE,sep="")
-        message("[W09 case data] Saved ",id," (",length(obj$cases)," cases)")
+        audit<-list(record_id=id,source_sha256=payload$sha256,
+          evidence_review_required=length(flags)>0L,
+          evidence_flags=as.list(flags),
+          validation_rule="case_data_schema_strict_evidence_flagged")
+        cat(as.character(jsonlite::toJSON(audit,auto_unbox=TRUE,null="null")),
+            "\n",file=file.path(dest,"evidence_validation_audit.jsonl"),
+            append=TRUE,sep="")
+        message("[W09 case data] Saved ",id," (",length(obj$cases),
+                " cases; ",length(flags)," evidence review flags)")
         success<-TRUE;break
       }
       log<-file.path(dest,"invalid_responses.jsonl")
@@ -425,5 +474,9 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
               "continuing to next publication.",call.=FALSE)
     }
   }
+  message("[W09 case data] Call complete. Unprocessed sources in this call: ",
+          length(skipped_in_call)," (oversized: ",
+          length(oversized_in_call),"). ",
+          "Unprocessed is NOT a no-case classification.")
   invisible(dest)
 }
