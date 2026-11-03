@@ -27,6 +27,7 @@ finalize_w04 <- function(map_path=NULL,w04=NULL,uncertain=c("adjudicate","exclud
   if(!length(runs))stop("No completed local W04 screening runs found.")
   if(!is.null(w04))runs<-runs[runs==w04]
   received<-runs[vapply(runs,function(run) {
+    if(dir.exists(file.path(run,"human_authoritative","snapshots")))return(TRUE)
     if(file.exists(file.path(run,"human_review_returned","receipt.json")) ||
        file.exists(file.path(run,"reconciled_human_review_returned","receipt.json")))return(TRUE)
     if(dir.exists(file.path(run,"reconciled")))return(TRUE)
@@ -42,6 +43,16 @@ finalize_w04 <- function(map_path=NULL,w04=NULL,uncertain=c("adjudicate","exclud
     warning("Multiple returned W04 runs found; using most recently returned: ",received[[1L]])
   }
   w04<-received[[1L]]
+  human<-.w04_latest_authoritative(w04)
+  if(!is.null(human)) {
+    if(!human$complete)
+      stop("W04 authoritative human decisions are imported but some ",
+           "records remain uncertain. Import remaining human adjudications ",
+           "before finalisation.")
+    message("[W04] Human-authoritative screening is final: ",human$directory,
+            ". Original LLM/finalised layers remain unchanged.")
+    return(invisible(human$directory))
+  }
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
   readjl<-function(p){
     z<-readLines(p,warn=FALSE,encoding="UTF-8")
