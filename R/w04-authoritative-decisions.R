@@ -127,6 +127,7 @@ import_w04_authoritative_decisions <- function(w04, decisions_file,
           !identical(scalar(previous$reviewer),scalar(e$reviewer))))
         stop("Conflicting human decisions across imports for ",id,
              ". No effective layer was updated.")
+      e$source_import_sha256<-tools::file_path_sans_ext(basename(p))
       combined[[id]]<-e
     }
   }
@@ -146,9 +147,7 @@ import_w04_authoritative_decisions <- function(w04, decisions_file,
     effective[[i]]$screening$human_adjudication<-list(
       reviewer=e$reviewer,reason=e$reason,
       reviewed_at_utc=e$created_at_utc,
-      source_import_sha256=sha(file.path(imports,
-        paste0(digest::digest(file=if(FALSE)NULL else decisions_file,
-          algo="sha256",serialize=FALSE),".jsonl"))))
+      source_import_sha256=e$source_import_sha256)
   }
   # Store a stable digest of the set of immutable import hashes, independent
   # of file creation timestamps; every additive import makes a new snapshot.
