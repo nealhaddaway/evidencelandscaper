@@ -55,6 +55,15 @@
       !is.null(z)&&identical(z$source_w04,wm$source_w04)&&
         identical(z$source_w04_sha256,wm$source_w04_layer_sha256)
     },logical(1))]
+    if(length(dirs)>1L) {
+      adjudicated<-dirs[vapply(dirs,function(d) {
+        hr<-file.path(d,"human_adjudication")
+        length(list.dirs(hr,recursive=FALSE,full.names=TRUE)[
+          file.exists(file.path(list.dirs(hr,recursive=FALSE,
+            full.names=TRUE),"manifest.json"))])>0L
+      },logical(1))]
+      if(length(adjudicated)==1L)dirs<-adjudicated
+    }
     if(length(dirs)!=1L)
       stop("Cannot identify exactly one W08 run matching the first-10% W04 ",
            "cohort (found ",length(dirs),"). Supply w08 explicitly.")
