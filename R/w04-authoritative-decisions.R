@@ -203,6 +203,20 @@ import_w04_authoritative_decisions <- function(w04=NULL, decisions_file=NULL,
   writeLines(vapply(effective,function(z)jsonlite::toJSON(z,
       auto_unbox=TRUE,null="null",na="null",digits=NA),character(1)),
       output,useBytes=TRUE)
+  overrides<-if(length(human_ids))do.call(rbind,lapply(human_ids,function(id) {
+    e<-combined[[id]]
+    prior<-scalar(original[[id]]$screening$decision)
+    data.frame(record_id=id,model_decision=prior,
+      final_decision=scalar(e$decision),
+      disagreement=!identical(prior,scalar(e$decision)),
+      decision_origin="human_authoritative",
+      reviewer=scalar(e$reviewer),reason=scalar(e$reason),
+      reviewed_at_utc=scalar(e$created_at_utc),
+      source_import_sha256=scalar(e$source_import_sha256),
+      stringsAsFactors=FALSE)
+  })) else data.frame()
+  utils::write.csv(overrides,file.path(target,"human_override_audit.csv"),
+                   row.names=FALSE,na="")
   jsonlite::write_json(list(schema="w04-authoritative-snapshot-v1",
     source_consensus_sha256=sha(base),
     import_sha256=as.list(basename(all_files)),
