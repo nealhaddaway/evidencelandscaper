@@ -7,9 +7,19 @@
 #' @param destination_zip A new ZIP path, not an existing file.
 #' @param allow_partial Explicitly permit PILOT_PARTIAL runs. Only validated
 #'   responses enter the Shiny queue; missing IDs are reported separately.
+#' @param review_statuses Optional subset of case evidence statuses, e.g.
+#'   "unclear" to review only uncertain case assessments. All validated
+#'   assessments still undergo provenance checks before filtering.
 #' @return ZIP path, invisibly.
 #' @export
-export_w08_colleague_review <- function(w08, destination_zip, allow_partial=FALSE) {
+export_w08_colleague_review <- function(w08, destination_zip, allow_partial=FALSE,
+                                        review_statuses=NULL) {
+  valid_statuses<-c("specific_case","multiple_cases","no_identifiable_case","unclear")
+  if(!is.null(review_statuses) &&
+     (!is.character(review_statuses)||!length(review_statuses)||
+      anyNA(review_statuses)||anyDuplicated(review_statuses)||
+      any(!review_statuses%in%valid_statuses)))
+    stop("review_statuses must contain unique valid W08 case status values.")
   if(!is.logical(allow_partial)||length(allow_partial)!=1L||is.na(allow_partial))
     stop('allow_partial must be TRUE or FALSE.')
   w08 <- normalizePath(w08,winslash="/",mustWork=TRUE)
@@ -57,10 +67,19 @@ export_w08_colleague_review <- function(w08, destination_zip, allow_partial=FALS
   }
   w04<-normalizePath(manifest$source_w04,mustWork=TRUE)
   provisional<-isTRUE(manifest$provisional_retains)
-  layer_dir<-if(provisional)"consensus" else "finalised"
-  source_layer<-file.path(w04,layer_dir,
-    if(provisional)"workflow04_consensus_layer.jsonl"
-    else "workflow04_final_screening_layer.jsonl")
+  layer_dir<-if(provisional)"consensus" else
+    if(identical(manifest$source_w04_layer,"human_authoritative"))
+      "human_authoritative" else "finalised"
+  if(identical(layer_dir,"human_authoritative")) {
+    human<-.w04_latest_authoritative(w04)
+    if(is.null(human)||!isTRUE(human$complete))
+      stop("The source W04 human-adjudicated snapshot is incomplete or missing.")
+    source_layer<-human$layer
+  } else {
+    source_layer<-file.path(w04,layer_dir,
+      if(provisional)"workflow04_consensus_layer.jsonl"
+      else "workflow04_final_screening_layer.jsonl")
+  }
   if(!file.exists(source_layer)||
      !identical(sha(source_layer),manifest$source_w04_sha256))
     stop("Source W04 screening layer changed or is missing.")
@@ -78,8 +97,10 @@ export_w08_colleague_review <- function(w08, destination_zip, allow_partial=FALS
   if(anyDuplicated(original_ids)||any(!chosen%in%original_ids))
     stop("Could not match W08 publication IDs uniquely to source abstracts.")
   source<-setNames(original,original_ids)
-  w04_summary<-jsonlite::fromJSON(file.path(w04,layer_dir,"summary.json"),
-                                   simplifyVector=FALSE)
+  w04_summary<-if(identical(layer_dir,"human_authoritative"))
+    human$summary else
+    jsonlite::fromJSON(file.path(w04,layer_dir,"summary.json"),
+                       simplifyVector=FALSE)
   corrections<-list()
   if(!provisional&&isTRUE(w04_summary$reconciled_abstracts)) {
     dirs<-list.dirs(file.path(w04,"abstract_rescreens"),
@@ -95,7 +116,12 @@ export_w08_colleague_review <- function(w08, destination_zip, allow_partial=FALS
   }
   scalar<-function(z)if(is.null(z)||!length(z))"" else
     paste(as.character(unlist(z,use.names=FALSE)),collapse="; ")
-  rows<-lapply(assessments,function(x) {
+  review_assessments<-if(is.null(review_statuses))assessments else
+    Filter(function(x)as.character(x$case_evidence_status)%in%review_statuses,
+           assessments)
+  if(!length(review_assessments))
+    stop("No validated W08 assessments match review_statuses.")
+  rows<-lapply(review_assessments,function(x) {
     id<-as.character(x$record_id)
     z<-source[[id]]$canonical
     list(record_id=id,
@@ -142,8 +168,12 @@ export_w08_colleague_review <- function(w08, destination_zip, allow_partial=FALS
     prompt_sha256=sha(file.path(root,"data","prompt.txt")),
     queue_sha256=sha(queue),records=length(rows),
     partial_run=partial,selected_records=length(chosen),
+    validated_records=length(assessments),
+    review_statuses=if(is.null(review_statuses))as.list(valid_statuses) else
+      as.list(review_statuses),
     unresolved_record_ids=as.list(missing),
-    candidate_cases=sum(vapply(assessments,function(x)length(x$cases),integer(1))))
+    candidate_cases=sum(vapply(review_assessments,
+      function(x)length(x$cases),integer(1))))
   jsonlite::write_json(metadata,file.path(root,"manifest.json"),
                        pretty=TRUE,auto_unbox=TRUE)
   writeLines(c(
@@ -153,14 +183,19 @@ export_w08_colleague_review <- function(w08, destination_zip, allow_partial=FALS
     "2. Install R packages once: install.packages(c('shiny','jsonlite','digest'))",
     "3. Open w08_review_bundle/app.R and click Run App.",
     "   Alternatively run shiny::runApp('/path/to/w08_review_bundle').",
-    "4. Enter reviewer name, examine each abstract and its detected case candidates.",
-    "5. Accept/reject the publication-level assessment and optionally accept/reject",
+    paste0("4. This bundle includes ",length(rows),
+           " validated publications selected for review. ",
+           if(is.null(review_statuses))"All statuses." else
+             paste0("Included status(es): ",paste(review_statuses,collapse=", "),".")),
+    "5. Enter reviewer name, examine each abstract and its detected case candidates.",
+    "6. Accept/reject the publication-level assessment and optionally accept/reject"
     "   each candidate individually. Record corrections and alternate cases in text boxes.",
-    "6. Save before navigating. Saved judgments append to decisions.jsonl.",
-    "7. Export complete CSV and JSONL audit history and return both.",
+    "7. Save before navigating. Saved judgments append to decisions.jsonl."
+    "8. Export complete CSV and JSONL audit history and return both."
     "",
-    if(partial)paste0("IMPORTANT: PARTIAL RUN. Shiny contains ",length(ids),
-      " validated publications of ",length(chosen),
+    if(partial)paste0("IMPORTANT: PARTIAL RUN. W08 validated ",length(ids),
+      " publications of ",length(chosen),"; this review bundle selects ",
+      length(rows)," of those validated assessments.",
       ". Missing ID(s): ",paste(missing,collapse=", "),
       ". See data/unresolved_publications.csv. No model assessment was fabricated.")
     else "COMPLETE RUN: All selected publications have validated assessments.",
