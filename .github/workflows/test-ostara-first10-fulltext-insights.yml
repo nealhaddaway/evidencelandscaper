@@ -5,9 +5,11 @@ on:
     paths:
       - 'R/ostara-fulltext-mechanisms-all.R'
       - 'R/ostara-first10-fulltext-insights.R'
+      - 'R/ostara-first10-fulltext-review.R'
       - 'inst/w09/fulltext_insights_v1.txt'
       - 'tests/testthat/test-ostara-fulltext-mechanisms-all.R'
       - 'tests/testthat/test-ostara-first10-fulltext-insights.R'
+      - 'tests/testthat/test-ostara-first10-fulltext-review.R'
       - '.github/workflows/test-ostara-first10-fulltext-insights.yml'
   workflow_dispatch:
 jobs:
@@ -25,4 +27,4 @@ jobs:
           extra-packages: any::testthat
           needs: check
       - name: Test independent Luna mechanisms and W08-routed insights
-        run: Rscript -e 'testthat::test_local(".", filter="ostara-fulltext-mechanisms-all|ostara-first10-fulltext-insights")'
+        run: Rscript -e 'testthat::test_local(".", filter="ostara-fulltext-mechanisms-all|ostara-first10-fulltext-insights|ostara-first10-fulltext-review")'
