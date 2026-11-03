@@ -127,3 +127,5 @@ export(run_w04_remaining_90)
 export(run_w07_adjudicated_first_10)
 
 export(run_w08_adjudicated_first_10)
+
+export(extract_ostara_all_fulltext_mechanisms)
