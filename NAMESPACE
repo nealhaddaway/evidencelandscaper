@@ -121,3 +121,5 @@ export(rerun_w09_case_data_batch)
 export(export_w09_cases_wide_evidence)
 
 export(import_w04_authoritative_decisions)
+
+export(run_w04_remaining_90)
