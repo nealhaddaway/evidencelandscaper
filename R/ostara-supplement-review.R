@@ -25,7 +25,8 @@ prepare_ostara_supplement_review <- function(review_dir,supplement_dir) {
   found<-vapply(extracted,function(x)x$record_id,character(1))
   if(anyDuplicated(found)||!setequal(found,expected))
     stop("Supplementary mechanism extraction is not complete for all selected records")
-  if(identical(meta$schema,"ostara-fulltext-mechanisms-case-sweep-v2")) {
+  if(meta$schema%in%c("ostara-fulltext-mechanisms-case-sweep-v2",
+                     "ostara-fulltext-mechanisms-case-sweep-v3")) {
     # Independent publication-mechanism review: no case IDs or prior case
     # eligibility gate. Case presence decisions are reviewed separately.
     out<-file.path(review_dir,paste0("supplement_review_v2-",
