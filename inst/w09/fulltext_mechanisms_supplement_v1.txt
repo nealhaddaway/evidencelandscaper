@@ -1,61 +1,67 @@
-OSTARA W09 SUPPLEMENTARY FULL-TEXT MECHANISM INVENTORY v1
-You are coding already retrieved scholarly full texts about collective action
-in commodity supply chains. Return one JSON object, no markdown.
+OSTARA W09 FULL-TEXT MECHANISM INVENTORY + INDEPENDENT CASE-PRESENCE SWEEP (v2)
 
-Evaluate EVERY approved ontology mechanism in approved_ontology (not only
-abstract-assigned mechanisms). Use EXACT mechanism_id values from the table.
-Use the entire supplied fulltext, not solely its abstract. Do not infer
-absence of a mechanism merely because the abstract omits it.
+PURPOSE
+Evaluate all approved mechanisms throughout the complete supplied full text. Independently perform a lightweight case-presence sweep to route later extraction. The mechanism inventory must NOT depend on prior case detection, W09 case extraction, eligible case IDs, or the outcome of the case-presence sweep. Return one JSON object only.
 
-For each approved mechanism classify status:
-- implemented_case: direct source support that at least one described
-  initiative/case actually uses this mechanism
-- mentioned_only: discussed as context/theory or comparative mechanism,
-  but not shown to operate in an extracted case
-- proposed_only: prospective, recommended or hypothetical application only
-- not_identified: no relevant description found in this full text
-- unclear: relevant text is ambiguous
+MECHANISM INVENTORY
+Evaluate EVERY mechanism_id in approved_ontology exactly once, including those absent from the abstract. Classify its status:
+- implemented_case: the full text directly establishes that the mechanism was actually used or implemented in real-world collective action, irrespective of whether a case record or ID was extracted separately
+- mentioned_only: substantive discussion or description, without direct support of actual implementation in the supplied text
+- proposed_only: a recommendation, conceptual approach, plan, or hypothetical future use, not demonstrated as implemented
+- not_identified: no support for the mechanism in the full text
+- unclear: relevant text is too ambiguous for a supported status
 
-Use at most one status per ontology ID. For all positive/unclear statuses
-provide a verbatim short source_quote and its exact [PAGE n], [SECTION n] or
-[TEXT BLOCK n] source_anchor. Never fabricate quotes or print page numbers
-for XML/JSON. Provide case_ids only for implemented_case. Match case_ids
-from eligible_case_ids ONLY. Other IDs in existing_w09_cases are not eligible\nand must not be used for implemented mechanisms or novel case proposals.\nDo not invent new IDs. A publication can mention
-mechanisms outside its cases; keep those separate.
+The status label implemented_case is retained for compatibility with the approved downstream ontology schema. It does NOT require a case ID, an extracted case, or agreement with case-presence status. NEVER assign a case ID, create a case link, or modify mechanism status because a case ID is absent. A mechanism can be implemented even where no distinct eligible case can be extracted.
 
-For every original W07 novel proposal in w07_abstract_novelty explicitly
-assess full-text support: confirmed_novel, refined_novel,
-covered_by_existing, rejected or uncertain. Identify exactly which
-approved ontology code subsumes a proposal, if applicable. Give a quote and
-anchor for positive decisions. Do not silently turn a novel mechanism
-proposal into an approved code.
+For every status except not_identified, provide a concise verbatim source_quote, an exact source_anchor ([PAGE n], [SECTION n], or [TEXT BLOCK n] exactly as provided), and a reason; if evidence is absent, classify not_identified rather than inventing quotations. Use exact approved mechanism IDs only.
 
-Independently propose truly NEW mechanisms in new_novelty only when they
-are not covered by ANY approved ontology mechanism and are demonstrated
-in a case. Explain the novelty in relation to closest existing codes.
-Each proposal requires a full-text quote and source anchor and existing
-case ID. If a proposal is also one of the abstract suggestions, link to it
-in abstract_novelty_validation rather than double-count it.
+NOVELTY REVIEW
+For every W07 novelty proposal in w07_abstract_novelty, explicitly classify full-text support as confirmed_novel, refined_novel, covered_by_existing, rejected, or uncertain. For a covered_by_existing decision, identify the corresponding approved mechanism ID. Include a source quotation and anchor when textual support is claimed. Do not automatically adopt new mechanisms into the approved ontology.
 
-This is extraction, not final adjudication. Human review will determine
-actual case eligibility, supported coding and ontology changes.
-Do not extract effectiveness or impact conclusions.
+Independently propose truly new mechanisms in new_novelty only where they are substantively supported by the full text and not already covered by any approved mechanism. These may be observed/implemented or clearly proposed; specify support_status as implemented, proposed, or unclear, explain novelty relative to closest codes, and include exact quotation and source anchor. Case identification and case IDs are NOT prerequisites. Do not duplicate a proposal already addressed in abstract_novelty_validation.
 
-JSON structure (all arrays mandatory):
+This is inventory and candidate ontology assessment, not effectiveness or impact evaluation. Do not extract case-level details or general insights here.
+
+FULL-TEXT CASE PRESENCE SWEEP
+Independently assess whether the entire full text identifies any real-world collective-action arrangement meeting the exact supplied w08_case_inclusion_criteria. In particular, an eligible distinguishable arrangement requires two or more actors, groups, or organisations deliberately coordinating activities, decisions, resources, commitments or governance towards an environmental or social sustainability objective. Mere institutional names, ordinary commercial transactions, research activity, aspirational collaboration, or vague references to partnership are insufficient. Explicitly described proposed arrangements may qualify as candidates if distinguishable, but must not be presented as implemented.
+
+This assessment is separate from mechanism inventory. Use the W08 criteria in full, do not broaden them, and independently check the complete full text regardless of abstract classification. If criteria are missing, classify unclear and state why.
+
+case_status:
+- case_present: one or more distinguishable arrangements sufficiently meet the supplied criteria.
+- no_case: no qualifying identifiable arrangement is found in the supplied full text.
+- unclear: evidence is ambiguous or too incomplete to determine case presence.
+
+Return candidate_case_count as integer >=1 for case_present, 0 for no_case, and null for unclear. candidate_cases must have exactly candidate_case_count entries for case_present; [] for no_case; for unclear may include genuine ambiguous candidates. Candidates are provisional, NOT W09 case IDs. For each candidate provide a short descriptive label, case_description, verbatim source_quote, exact source_anchor and eligibility_reason.
+
+Include assessment_reason. Compare to final_w08_case_status if provided: agrees, disagrees, not_comparable (W08 unclear), or not_provided (missing). Set review_required true if case_status is unclear or w08_comparison is disagrees. The sweep never changes W08 adjudications; flagged differences require review before routing to either downstream case or insights extraction.
+
+QUOTE AND ANCHOR INTEGRITY
+Every nonempty source_quote must be an exact continuous substring of the supplied fulltext (whitespace normalisation only if the text was normalised upstream). Use only existing anchor markers. Never fabricate quotations or page numbers for XML/JSON. A negative case assessment needs reasoning, not a fabricated absence quote.
+
+OUTPUT JSON (all arrays/objects required; return actual values, not pipe-separated choices):
 {
  "record_id":"input record ID",
+ "case_presence_assessment":{
+   "case_status":"case_present",
+   "candidate_case_count":1,
+   "candidate_cases":[{"candidate_label":"","case_description":"","source_quote":"","source_anchor":"","eligibility_reason":""}],
+   "assessment_reason":"",
+   "w08_comparison":"not_provided",
+   "review_required":false
+ },
  "mechanism_inventory":[
-   {"mechanism_id":"approved code","status":"implemented_case | mentioned_only | proposed_only | not_identified | unclear",
-    "case_ids":["existing W09 case ID"],"source_quote":"","source_anchor":"","reason":""}
+   {"mechanism_id":"","status":"not_identified","source_quote":"","source_anchor":"","reason":""}
  ],
  "abstract_novelty_validation":[
-   {"abstract_candidate_id":"original W07 candidate ID or stable ordinal",
-    "original_proposal":"","status":"confirmed_novel | refined_novel | covered_by_existing | rejected | uncertain",
+   {"abstract_candidate_id":"","original_proposal":"","status":"uncertain",
     "closest_approved_mechanism_id":"","revised_label":"","revised_definition":"",
-    "case_ids":[],"source_quote":"","source_anchor":"","reason":""}
+    "source_quote":"","source_anchor":"","reason":""}
  ],
  "new_novelty":[
-   {"proposed_label":"","working_definition":"","closest_approved_mechanism_id":"",
-    "case_ids":[],"source_quote":"","source_anchor":"","reason":""}
+   {"proposed_label":"","working_definition":"","support_status":"proposed",
+    "closest_approved_mechanism_id":"","source_quote":"","source_anchor":"","reason":""}
  ]
 }
+
+If there is no W07 novelty proposal return abstract_novelty_validation: []; if no justified novel mechanism return new_novelty: []. Do not output any case_ids field anywhere. Keep the exact case_presence_assessment object even when status is no_case.
