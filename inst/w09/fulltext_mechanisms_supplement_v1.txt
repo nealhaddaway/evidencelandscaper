@@ -1,7 +1,7 @@
 FULL-TEXT COLLECTIVE-ACTION MECHANISM INVENTORY AND CASE-PRESENCE ASSESSMENT
 
 ROLE AND INPUTS
-Assess the supplied publication's full text for collective-action mechanisms and distinguishable collective-action arrangements. Return one valid JSON object and no additional text.
+You are coding a scholarly or grey-literature publication's supplied full text. Your task is to identify which collective-action mechanism types, if any, are supported by the publication's full text. Use the accompanying approved_ontology as the controlled vocabulary. The ontology has collective_action_type > high_level_mechanism > fine_level_mechanism hierarchy; each mechanism has a definition. Assess mechanism evidence throughout the full text; do not perform publication eligibility screening. Independently assess whether distinguishable collective-action arrangements are present. Return one valid JSON object and no additional text.
 
 The API input provides:
 - record_id: the identifier to return unchanged.
@@ -9,6 +9,24 @@ The API input provides:
 - fulltext: the publication's full text, with any available source-location markers.
 
 Use only these inputs. Do not consult external sources, assume the existence of other datasets or assessments, or infer facts not supported by fulltext. Do not determine whether the publication should be included in a wider review.
+
+DEFINITIONS
+A collective action mechanism [hereafter referred to as ‘mechanism’] is defined as a specific system, process, instrument or intervention that operationalises collective action and aims to align the actions of actors in pursuit of a specific function, purpose or common goal.
+Collective action mechanisms can be grouped into categories, which refer to the specific function or purpose of the collective and aims to organise the different types and reasons for collective action, such that a category consists of more than one mechanism.
+
+A mechanism which conforms to the above definition qualifies as a collective action mechanism even if it is not explicitly called a “collective action mechanism” or a “mechanism”.
+
+CODING PRINCIPLES
+1. Code the mechanism: HOW distinct actors deliberately coordinate actions, commitments, governance, markets, finance, monitoring or resources towards a shared sustainability objective. Do not confuse a named organisation, coalition, initiative, case, certification label, sector or goal with a mechanism.
+2. Evaluate zero, one or multiple supported mechanism types per publication; each approved mechanism_id must appear exactly once in the final inventory, even when it is not identified. Multiple distinct arrangements using the same mechanism do not require duplicate mechanism inventory rows. Do not infer that every mechanism from an ontology's illustrative examples applies to the publication.
+3. Every positive or unclear mechanism assessment requires record-specific evidence from the supplied full text, including a short verbatim supporting excerpt and its exact source anchor. Do not invent a quotation, initiative, actor, coordination process or outcome.
+4. A generic mention of partnership, initiative, stakeholders, joint authorship or a shared problem is insufficient to identify a mechanism. Evidence must support an identifiable operational arrangement or action. If a specific mechanism is plausible but unclear, classify it unclear and explain the uncertainty; do not invent support or automatically infer implementation.
+5. Distinguish implemented, proposed, mentioned_only and unclear. A prospective or proposed mechanism is identifiable and codable when its operational arrangement is sufficiently described, but it must not be labelled implemented. A failed or discontinued implemented mechanism remains implemented.
+6. If an identifiable mechanism does not fit any approved definition, do not force it into an existing code. Assess it independently for possible novelty, identify the closest existing mechanism_id if appropriate, and explain why the existing definition is insufficient. A new initiative, sector, organisation or implementation of an existing mechanism is not an ontology gap.
+7. If information about a mechanism is insufficient to establish a status, use unclear; if no relevant evidence of a particular approved mechanism is identified, use not_identified. Do not confuse missing evidence with demonstrated absence from the world beyond the supplied text.
+8. This is publication-level mechanism coding, not an initiative register. The distinct case-presence assessment below has separate criteria and must not change mechanism classifications.
+9. Do not code a sustainability objective, claimed impact or effectiveness finding as a mechanism unless the actual coordinated process, instrument or intervention is described.
+10. Review the whole supplied full text, including methods, results, discussion and relevant tables or descriptions that have been included in the supplied text. Do not rely solely on its abstract, summary or author-assigned labels.
 
 MECHANISM INVENTORY
 Examine the ENTIRE fulltext. Evaluate EVERY mechanism_id supplied in approved_ontology exactly once, using its definition and hierarchy; do not consider only mechanisms explicitly named by the authors.
