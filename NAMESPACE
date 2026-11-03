@@ -133,3 +133,6 @@ export(extract_ostara_all_fulltext_mechanisms)
 export(prepare_w09_no_case_fulltexts_first10)
 export(retrieve_w09_no_case_fulltexts_first10)
 export(import_w08_colleague_adjudications)
+
+export(prepare_w09_first10_all_included)
+export(retrieve_w09_first10_all_included)
