@@ -72,37 +72,44 @@
 #' Code all available included full texts for mechanisms and case presence
 #'
 #' Completely independent of case-extraction registries or W09 case IDs.
-#' Publications are selected from the W07 included coding layer and the W09
-#' retrieval queue, then actual available XML/JSON/PDF files. Missing full text
+#' Publications are selected from the full W09 included retrieval queue,
+#' independently of W07 abstract mechanism or case coding. Missing full text
 #' and records absent from W09 are recorded, not silently deemed negative.
 #' Results are checkpointed in an immutable versioned directory. Human review
 #' is required before case/insights routing and ontology changes.
 #'
 #' @param w09 W09 retrieval run directory (with retrieval_queue.csv).
-#' @param w07 Completed W07 run directory (ontology.csv and coding.jsonl).
-#' @param record_ids Optional specific included W07 record IDs; default all W07.
+#' @param w07 Optional W07 directory used only as a fallback ontology source.
+#' @param record_ids Optional W09 included record IDs; default the entire queue.
 #' @param max_records Maximum NEW LLM assessments; 0 means all available.
 #' @param model Luna model.
 #' @param output_dir Optional new output base directory.
+#' @param ontology_file Explicit approved CSV ontology, overriding w07/ontology.csv.
+#' @param prompt_file Optional locally revised standalone full-text prompt.
 #' @return Versioned mechanism inventory run directory, invisibly.
 #' @export
 extract_ostara_all_fulltext_mechanisms <- function(
-    w09,w07,record_ids=NULL,max_records=0L,model="gpt-5.6-luna",
-    output_dir=NULL) {
+    w09,w07=NULL,record_ids=NULL,max_records=0L,model="gpt-5.6-luna",
+    output_dir=NULL,ontology_file=NULL,prompt_file=NULL) {
   w09<-normalizePath(w09,winslash="/",mustWork=TRUE)
-  w07<-normalizePath(w07,winslash="/",mustWork=TRUE)
-  if(!grepl("-luna$",model)||length(model)!=1L||is.na(model))
+  if(!is.null(w07))w07<-normalizePath(w07,winslash="/",mustWork=TRUE)
+  if(!is.character(model)||length(model)!=1L||is.na(model)||
+     !grepl("-luna$",model))
     stop("Only a Luna model is permitted for new full-text assessments")
   if(length(max_records)!=1L||is.na(max_records)||
      max_records!=as.integer(max_records)||max_records<0L)
     stop("max_records must be a nonnegative integer")
-  files<-c(queue=file.path(w09,"retrieval_queue.csv"),
-           coding=file.path(w07,"coding.jsonl"),
-           ontology=file.path(w07,"ontology.csv"))
-  if(any(!file.exists(files)))stop("Missing W09 queue or W07 archive: ",
-                                   paste(files[!file.exists(files)],collapse=", "))
-  prompt<-system.file("w09","fulltext_mechanisms_supplement_v1.txt",
-                      package="evidencelandscaper")
+  if(is.null(ontology_file)) {
+    if(is.null(w07))stop("Provide ontology_file or a W07 ontology directory")
+    ontology_file<-file.path(w07,"ontology.csv")
+  }
+  ontology_file<-normalizePath(ontology_file,winslash="/",mustWork=TRUE)
+  files<-c(queue=file.path(w09,"retrieval_queue.csv"),ontology=ontology_file)
+  if(any(!file.exists(files)))stop("Missing W09 queue or approved ontology")
+  prompt<-if(is.null(prompt_file))
+    system.file("w09","fulltext_mechanisms_supplement_v1.txt",
+                package="evidencelandscaper") else
+    normalizePath(prompt_file,winslash="/",mustWork=TRUE)
   if(!nzchar(prompt))
     stop("Package is missing full-text mechanism and case assessment prompt")
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
@@ -111,22 +118,23 @@ extract_ostara_all_fulltext_mechanisms <- function(
                               jsonlite::fromJSON,simplifyVector=FALSE)
   ont<-utils::read.csv(files[["ontology"]],stringsAsFactors=FALSE,
                         check.names=FALSE,fileEncoding="UTF-8-BOM")
-  if(!"mechanism_id"%in%names(ont)||anyDuplicated(ont$mechanism_id))
-    stop("Invalid archived W07 mechanism ontology")
+  expected_columns<-c("mechanism_id","collective_action_type",
+    "high_level_mechanism","fine_level_mechanism","definition")
+  if(!identical(names(ont),expected_columns)||nrow(ont)!=30L||
+     anyNA(ont)||any(!nzchar(trimws(as.matrix(ont))))||
+     anyDuplicated(ont$mechanism_id)||
+     any(!grepl("^M[0-9]+\\.[0-9]+\\.[0-9]+$",ont$mechanism_id)))
+    stop("Approved ontology must have 30 unique, nonempty IDs and five canonical columns")
   codes<-as.character(ont$mechanism_id)
-  w07rows<-readjl(files[["coding"]])
-  w07ids<-vapply(w07rows,function(z)as.character(z$record_id),character(1))
-  if(!length(w07ids)||anyDuplicated(w07ids)||anyNA(w07ids))
-    stop("W07 record IDs are missing or duplicated")
-  w07index<-setNames(w07rows,w07ids)
-  if(is.null(record_ids))record_ids<-w07ids
-  if(!is.character(record_ids)||!length(record_ids)||anyNA(record_ids)||
-     anyDuplicated(record_ids)||any(!record_ids%in%w07ids))
-    stop("record_ids must be unique included W07 publication IDs")
-  record_ids<-sort(record_ids)
   queue<-utils::read.csv(files[["queue"]],stringsAsFactors=FALSE)
-  if(!"record_id"%in%names(queue)||anyDuplicated(queue$record_id))
-    stop("Invalid or duplicate W09 retrieval queue record IDs")
+  if(!"record_id"%in%names(queue)||anyDuplicated(queue$record_id)||
+     anyNA(queue$record_id))stop("Invalid W09 retrieval queue IDs")
+  queue_ids<-as.character(queue$record_id)
+  if(is.null(record_ids))record_ids<-queue_ids
+  if(!is.character(record_ids)||!length(record_ids)||anyNA(record_ids)||
+     anyDuplicated(record_ids)||any(!record_ids%in%queue_ids))
+    stop("record_ids must be unique W09 included publication IDs")
+  record_ids<-sort(record_ids)
   in_queue<-record_ids%in%as.character(queue$record_id)
   choose_source<-function(id) {
     paths<-c(file.path(w09,"structured",paste0(id,".xml")),
@@ -147,23 +155,22 @@ extract_ostara_all_fulltext_mechanisms <- function(
     stringsAsFactors=FALSE)
   ids<-record_ids[available]
   if(!length(ids))
-    stop("No included W07 publications have retrievable W09 full-text files")
-  message("[FT mechanisms] ",length(record_ids)," W07 records selected; ",
+    stop("No selected W09 publications have retrievable full-text files")
+  message("[FT mechanisms] ",length(record_ids)," included records selected; ",
           length(ids)," with W09 files, ",sum(!in_queue),
           " absent from retrieval queue, ",sum(in_queue&!available),
           " without available full text")
   base<-if(is.null(output_dir))file.path(w09,"fulltext_mechanism_inventory")
         else normalizePath(output_dir,winslash="/",mustWork=TRUE)
   key<-substr(digest::digest(c(sha(files[["queue"]]),
-    sha(files[["coding"]]),sha(files[["ontology"]]),sha(prompt),
+    sha(files[["ontology"]]),sha(prompt),
     record_ids,source_hashes,model),algo="sha256"),1L,12L)
-  dest<-file.path(base,paste0("v3-",key))
+  dest<-file.path(base,paste0("v4-",key))
   manifest_path<-file.path(dest,"manifest.json")
-  manifest<-list(schema="ostara-fulltext-mechanism-all-v3",
-    source_w09=w09,source_w07=w07,
+  manifest<-list(schema="ostara-fulltext-mechanism-all-v4",
+    source_w09=w09,source_w07=if(is.null(w07))"" else w07,
     w09_queue_sha256=sha(files[["queue"]]),
-    w07_coding_sha256=sha(files[["coding"]]),
-    w07_ontology_sha256=sha(files[["ontology"]]),
+    approved_ontology_sha256=sha(files[["ontology"]]),
     prompt_sha256=sha(prompt),
     model=model,selected_ids=as.list(record_ids),
     available_ids=as.list(ids),
@@ -179,10 +186,12 @@ extract_ostara_all_fulltext_mechanisms <- function(
     jsonlite::write_json(manifest,manifest_path,auto_unbox=TRUE,pretty=TRUE)
     utils::write.csv(inventory,file.path(dest,"source_inventory.csv"),
                      row.names=FALSE,na="")
-    if(!file.copy(prompt,file.path(dest,"prompt.txt")))
-      stop("Failed to archive full-text prompt")
+    if(!file.copy(prompt,file.path(dest,"prompt.txt"))||
+       !file.copy(files[["ontology"]],file.path(dest,"ontology.csv")))
+      stop("Failed to archive full-text prompt and approved ontology")
   }
-  if(!identical(sha(file.path(dest,"prompt.txt")),sha(prompt)))
+  if(!identical(sha(file.path(dest,"prompt.txt")),sha(prompt))||
+     !identical(sha(file.path(dest,"ontology.csv")),sha(files[["ontology"]])))
     stop("Archived full-text prompt does not match")
   saved_inventory<-utils::read.csv(file.path(dest,"source_inventory.csv"),
                                     stringsAsFactors=FALSE)
@@ -240,7 +249,7 @@ extract_ostara_all_fulltext_mechanisms <- function(
            ". Prior validated records remain saved in ",results)
     result$provenance<-list(source_path=source$path,
       source_sha256=source$sha256,source_format=source$format,
-      w07_ontology_sha256=sha(files[["ontology"]]),
+      approved_ontology_sha256=sha(files[["ontology"]]),
       model=model,prompt_sha256=sha(prompt))
     cat(as.character(jsonlite::toJSON(result,auto_unbox=TRUE,null="null")),
         "\n",file=results,append=TRUE,sep="")
