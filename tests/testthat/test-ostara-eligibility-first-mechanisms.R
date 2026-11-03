@@ -63,7 +63,7 @@ testthat::test_that("eligibility-first W09 cases feed mechanism extraction witho
                        package="evidencelandscaper")
   output<-file.path(review,"fulltext_mechanism_supplement",
     paste0("v2-",substr(sha(prompt),1,12),"-",substr(sha(ontology),1,12),
-           "-gpt-6-luna"))
+           "-gpt-5.6-luna"))
   testthat::expect_true(file.exists(file.path(output,"manifest.json")))
   # Simulate an already checkpointed complete extraction: zero network calls.
   mock<-list(record_id="work-1",
