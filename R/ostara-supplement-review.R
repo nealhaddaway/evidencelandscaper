@@ -69,7 +69,6 @@ prepare_ostara_supplement_review <- function(review_dir,supplement_dir) {
         record_id=id,model_case_status=get(assessment,"case_status"),
         model_candidate_case_count=if(is.null(assessment$candidate_case_count))
           NA_integer_ else as.integer(assessment$candidate_case_count),
-        w08_comparison=get(assessment,"w08_comparison"),
         review_required=isTRUE(assessment$review_required),
         assessment_reason=get(assessment,"assessment_reason"),
         reviewer_case_status="",reviewer="",review_notes="",
