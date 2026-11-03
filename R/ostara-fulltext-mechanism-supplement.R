@@ -179,7 +179,17 @@ extract_ostara_fulltext_mechanisms <- function(
      !identical(sha(file.path(output,"w08_case_criteria.txt")),sha(w08_criteria_path)))
     stop("Archived mechanism prompt or case criteria changed")
   instructions<-paste(readLines(prompt_path,warn=FALSE),collapse="\n")
-  w08_case_criteria<-paste(readLines(w08_criteria_path,warn=FALSE),collapse="\n")
+  w08_lines<-readLines(w08_criteria_path,warn=FALSE,encoding="UTF-8")
+  definitions<-which(trimws(w08_lines)=="DEFINITIONS")
+  classification<-which(trimws(w08_lines)=="CLASSIFICATION")
+  if(length(definitions)!=1L||length(classification)!=1L||
+     classification<=definitions+1L)
+    stop("Archived W08 case inclusion criteria headings changed; review manually")
+  # Supply just the W08 definitions and inclusion/exclusion boundaries.
+  # The W08 response schema belongs to abstract screening and must not
+  # compete with the separate W09 full-text JSON output contract.
+  w08_case_criteria<-paste(w08_lines[definitions:(classification-1L)],
+                            collapse="\n")
   scalar<-function(x)if(is.null(x)||!length(x))"" else
     paste(as.character(unlist(x,use.names=FALSE)),collapse="; ")
   for(id in todo) {
