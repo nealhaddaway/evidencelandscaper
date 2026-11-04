@@ -201,7 +201,7 @@ run_pass <- function(records,pass,path){
   if(workers>1L&&length(pending))
     message("[W04] Pass ",pass,": ",length(pending)," unfinished votes; ",
             workers," concurrent API workers; ",length(done)," checkpoints preserved.")
-  for(start in seq.int(1L,length(pending),by=max(1L,workers))) {
+  if(length(pending)) for(start in seq.int(1L,length(pending),by=max(1L,workers))) {
     batch_idx<-pending[seq.int(start,min(start+workers-1L,length(pending)))]
     if(workers==1L) {
       rows<-lapply(batch_idx,function(i)screen_one(records[[i]],pass))
