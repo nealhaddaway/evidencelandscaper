@@ -8,10 +8,13 @@
 #'   or NULL to discover the uniquely human-imported selected cohort.
 #' @param map_path Existing Ostara evidence-map project.
 #' @param open_app Whether to open Shiny review (default FALSE).
-#' @param workers Concurrent model API requests, default 1 for original serial mode.
+#' @param workers Concurrent model API requests in direct mode.
+#' @param execution Use batch for asynchronous Batch API, direct for original API calls.
+#' @param batch_chunk_size Number of requests in each Batch API input file.
 #' @return New selected-cohort W04 run directory, invisibly.
 #' @export
-run_w04_remaining_90 <- function(sample_w04=NULL,map_path=NULL,open_app=FALSE,workers=1L) {
+run_w04_remaining_90 <- function(sample_w04=NULL,map_path=NULL,open_app=FALSE,workers=1L,execution=c("direct","batch"),batch_chunk_size=1000L) {
+  execution<-match.arg(execution)
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
@@ -124,5 +127,6 @@ run_w04_remaining_90 <- function(sample_w04=NULL,map_path=NULL,open_app=FALSE,wo
           "Original LLM and human review outputs stay unchanged.")
   run_w04(scored=scored,prompt_file=prompt,
           max_records=0L,record_ids_csv=selected_csv,
-          model="gpt-5.6-luna",open_app=open_app,workers=workers)
+          model="gpt-5.6-luna",open_app=open_app,workers=workers,
+          execution=execution,batch_chunk_size=batch_chunk_size)
 }
