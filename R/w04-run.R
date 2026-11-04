@@ -8,10 +8,12 @@
 #' @param record_ids_csv Optional exact selected record_id CSV. Requires max_records=0.
 #' @param model OpenAI API model identifier.
 #' @param open_app NULL prompts in an interactive R console (default); TRUE opens without asking; FALSE never opens.
-#' @param workers Concurrent independent API calls (1 = original serial mode; macOS/Linux only).
+#' @param workers Concurrent independent API calls in direct mode.
+#' @param execution Either direct API requests or asynchronous Batch API.
+#' @param batch_chunk_size Requests per Batch API file (default 1000).
 #' @return New local W04 run directory, invisibly.
 #' @export
-run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", open_app=NULL,record_ids_csv=NULL,workers=1L) {
+run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", open_app=NULL,record_ids_csv=NULL,workers=1L,execution=c("direct","batch"),batch_chunk_size=1000L) {
   launch_review<-function(run_dir,status) {
     if(!identical(status,"HUMAN_REVIEW_REQUIRED"))return(invisible(NULL))
     if(identical(open_app,FALSE)) {
@@ -37,6 +39,10 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", 
   if(!length(lines)||!nzchar(trimws(paste(lines,collapse=""))))
     stop("W04 screening prompt is empty.")
   if(any(!validEnc(lines)))stop("Invalid prompt text encoding.")
+  execution<-match.arg(execution)
+  batch_chunk_size<-as.integer(batch_chunk_size)
+  if(length(batch_chunk_size)!=1L||is.na(batch_chunk_size)||batch_chunk_size<1L||batch_chunk_size>10000L)
+    stop("batch_chunk_size must be between 1 and 10000.")
   workers<-as.integer(workers)
   if(length(workers)!=1L||is.na(workers)||workers<1L||workers>32L)
     stop("workers must be an integer from 1 to 32.")
@@ -118,13 +124,20 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", 
   script<-system.file("w04","workflow_04_luna_consensus.R",
                       package="evidencelandscaper")
   if(!nzchar(script))stop("Original W04 scanner was not installed.")
+  helper<-if(identical(execution,"batch"))system.file("w04","workflow_04_batch.R",package="evidencelandscaper") else NULL
+  if(identical(execution,"batch")&&!nzchar(helper))stop("The Batch API helper was not installed.")
   output<-file.path(dest,"consensus")
   args<-c(script,"--canonical",canonical,"--workflow03-status",w03,
           "--screening-config",config,"--output-dir",output,
           "--model",model,"--max-records",as.character(max_records),
           if(!is.null(record_ids_csv))c("--include-record-ids",record_ids_csv),
-          "--checkpoint-every","10","--workers",as.character(workers))
-  cat("[W04] Running original screening engine with ",workers,
+          "--checkpoint-every","10","--workers",as.character(workers),
+          "--execution",execution,
+          if(identical(execution,"batch"))c("--batch-helper",helper,
+            "--batch-chunk-size",as.character(batch_chunk_size)))
+  if(identical(execution,"batch"))
+    message("[W04] Resuming OpenAI Batch API transport; prompts, model and consensus unchanged.")
+  else cat("[W04] Running original screening engine with ",workers,
       " concurrent API worker(s); model API requests will incur costs.\n",sep="")
 
   log<-suppressWarnings(system2(file.path(R.home("bin"),"Rscript"),
@@ -133,7 +146,13 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", 
   if(!is.null(result)&&result!=0L)
     stop("[W04] Screening script failed:\n",paste(tail(log,35L),collapse="\n"))
   summary_file<-file.path(output,"summary.json")
-  if(!file.exists(summary_file))stop("W04 consensus summary was not produced.")
+  if(!file.exists(summary_file)) {
+    if(identical(execution,"batch")) {
+      message("[W04 Batch] Submitted or awaiting batch results. R can be closed; rerun the same command to collect.")
+      return(invisible(dest))
+    }
+    stop("W04 consensus summary was not produced.")
+  }
   summary<-jsonlite::fromJSON(summary_file)
   if(!summary$status %in% c("PASS","HUMAN_REVIEW_REQUIRED"))
     stop("W04 screening incomplete: ",summary$status)
