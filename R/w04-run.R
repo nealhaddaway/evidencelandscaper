@@ -142,9 +142,13 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", 
 
   log<-suppressWarnings(system2(file.path(R.home("bin"),"Rscript"),
     args=vapply(args,shQuote,character(1)),stdout="",stderr=""))
+  # system2(stdout="", stderr="") returns an integer exit status on R;
+  # attr(status) is used instead when stdout is captured as text.
   result<-attr(log,"status")
+  if(is.null(result)&&is.numeric(log)&&length(log)==1L)result<-as.integer(log)
   if(!is.null(result)&&result!=0L)
-    stop("[W04] Screening script failed:\n",paste(tail(log,35L),collapse="\n"))
+    stop("[W04] Screening subprocess failed (exit status ",result,
+         "). Read its preceding console error; no W04 completion was recorded.")
   summary_file<-file.path(output,"summary.json")
   if(!file.exists(summary_file)) {
     if(identical(execution,"batch")) {
