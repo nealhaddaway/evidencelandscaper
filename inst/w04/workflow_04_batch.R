@@ -43,7 +43,7 @@ batch_download <- function(file_id,target) {
   TRUE
 }
 
-batch_create <- function(records,pass,job_dir,ordinal) {
+batch_create <- function(records,pass,job_dir,ordinal,pilot=FALSE) {
   dir.create(job_dir,recursive=TRUE,showWarnings=FALSE)
   stem<-sprintf("pass%d-%04d",pass,ordinal)
   input<-file.path(job_dir,paste0(stem,"-input.jsonl"))
@@ -68,7 +68,7 @@ batch_create <- function(records,pass,job_dir,ordinal) {
   batch_atomic_text(input_lines,input)
   ids<-vapply(records,record_id,character(1))
   state<-list(
-    schema="ostara-w04-batch-v1",pass=pass,
+    schema="ostara-w04-batch-v1",pass=pass,pilot=isTRUE(pilot),
     source_prompt_sha256=PROMPT_SHA256,model=model,
     input_sha256=digest::digest(file=input,algo="sha256",serialize=FALSE),
     record_ids=as.list(ids),custom_ids=as.list(keys),
@@ -151,6 +151,26 @@ batch_collect <- function(state_file,record_lookup,pass,path,existing) {
     stop("Unexpected or duplicate custom_id in remote Batch output: ",stem,call.=FALSE)
   if(identical(status,"completed")&&!setequal(result_keys,keys))
     stop("Completed batch has missing result IDs; refusing silent omissions: ",stem,call.=FALSE)
+  if(isTRUE(state$pilot)) {
+    if(!identical(status,"completed")||length(all_rows)!=length(keys)||
+       length(error_rows)>0L)
+      stop("W04 Batch pilot did not complete cleanly: ",stem,
+           ". Inspect saved output/error files before submitting the full corpus.",
+           call.=FALSE)
+    for(i in seq_along(keys)) {
+      result<-all_rows[[match(keys[[i]],result_keys)]]
+      if(!identical(as.integer(result$response$status_code %||% 0L),200L) ||
+         is.null(result$response$body))
+        stop("W04 Batch pilot rejected a model request: ",stem,
+             ". Raw output saved at ",results_file,call.=FALSE)
+      tryCatch(screen_response_row(result$response$body,
+                record_lookup[[ids[[i]]]],pass),error=function(e)
+        stop("W04 Batch pilot output validation failed: ",
+             conditionMessage(e),". Raw output: ",results_file,call.=FALSE))
+    }
+    message("[W04 Batch] Model/endpoint pilot passed: ",
+            length(keys)," valid gpt-5.6-luna votes.")
+  }
   complete_ids<-if(length(existing))
     vapply(existing,function(x)batch_scalar(x$record_id),character(1)) else character()
   for(i in seq_along(ids)){
@@ -205,11 +225,19 @@ batch_run_pass <- function(records,pass,path,existing) {
     return(NULL)
   }
   if(length(pending)) {
-    size<-batch_chunk_size
-    chunks<-split(pending,ceiling(seq_along(pending)/size))
+    # Initial three-record pilot verifies custom model/endpoint support before
+    # committing the remainder of the screening corpus to asynchronous billing.
+    pilot<-identical(pass,1L)&&!length(states)&&length(pending)>3L
+    if(pilot) {
+      chunks<-list(head(pending,3L))
+      message("[W04 Batch] Submitting a 3-record compatibility pilot first.")
+    } else {
+      chunks<-split(pending,ceiling(seq_along(pending)/batch_chunk_size))
+    }
     next_number<-length(states)+1L
     for(i in seq_along(chunks)) {
-      batch_create(records[chunks[[i]]],pass,job_dir,next_number+i-1L)
+      batch_create(records[chunks[[i]]],pass,job_dir,next_number+i-1L,
+                   pilot=pilot)
     }
     message("[W04 Batch] Submitted ",length(chunks)," new batch(es) for pass ",
             pass,". R can be closed. Rerun the same command to collect results.")
