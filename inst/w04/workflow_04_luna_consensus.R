@@ -215,7 +215,16 @@ run_pass <- function(records,pass,path){
   if(anyDuplicated(done))stop(sprintf("Duplicate record IDs in pass %d checkpoint",pass),call.=FALSE)
   ids<-vapply(records,record_id,character(1))
   if(any(!done %in% ids))stop(sprintf("Pass %d checkpoint contains IDs absent from queue",pass),call.=FALSE)
-  if(batch_mode)return(batch_run_pass(records,pass,path,existing))
+  if(batch_mode) {
+    repeat {
+      outcome<-batch_run_pass(records,pass,path,
+               if(file.exists(path))read_jsonl(path) else list())
+      if(!is.null(outcome))return(outcome)
+      message("[W04 Batch] Waiting 120 seconds before automatic collection. ",
+              "Press Ctrl+C to stop safely; rerun the same command to resume.")
+      Sys.sleep(120)
+    }
+  }
   total<-length(records)
   pending<-which(!ids%in%done)
   # Parallelism changes only scheduling. Every model call still uses screen_one()
