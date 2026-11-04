@@ -15,6 +15,9 @@ output_dir <- arg("--output-dir","outputs/workflow04_consensus")
 model <- arg("--model",Sys.getenv("OPENAI_RELEVANCE_MODEL","gpt-5.6-luna"))
 if(!identical(model,"gpt-5.6-luna")) stop("W04 API model is locked to gpt-5.6-luna",call.=FALSE)
 checkpoint_every <- as.integer(arg("--checkpoint-every","25"))
+workers <- as.integer(arg("--workers","1"))
+if(length(workers)!=1L||is.na(workers)||workers<1L||workers>32L) stop("Invalid --workers (1..32)",call.=FALSE)
+if(.Platform$OS.type=="windows"&&workers>1L) stop("Concurrent W04 requires macOS/Linux; use --workers 1 on Windows.",call.=FALSE)
 max_records <- as.integer(arg("--max-records","0"))
 include_ids_path <- arg("--include-record-ids",NULL)
 shard_index <- as.integer(arg("--shard-index","1"))
@@ -190,14 +193,35 @@ run_pass <- function(records,pass,path){
   ids<-vapply(records,record_id,character(1))
   if(any(!done %in% ids))stop(sprintf("Pass %d checkpoint contains IDs absent from queue",pass),call.=FALSE)
   total<-length(records)
-  for(i in seq_along(records)){
-    rid<-ids[[i]]
-    if(rid %in% done)next
-    row<-screen_one(records[[i]],pass)
-    append_jsonl(row,path)
-    done<-c(done,rid)
-    if(length(done)%%checkpoint_every==0L || length(done)==total){
-      cat(sprintf("PASS %d checkpoint: %d/%d\n",pass,length(done),total))
+  pending<-which(!ids%in%done)
+  # Parallelism changes only scheduling. Every model call still uses screen_one()
+  # and its unchanged Responses request body, schema, retries and validator.
+  # The coordinator is the SOLE writer of passN.jsonl. Completed checkpoint
+  # rows retain their original model response IDs and are never resubmitted.
+  if(workers>1L&&length(pending))
+    message("[W04] Pass ",pass,": ",length(pending)," unfinished votes; ",
+            workers," concurrent API workers; ",length(done)," checkpoints preserved.")
+  for(start in seq.int(1L,length(pending),by=max(1L,workers))) {
+    batch_idx<-pending[seq.int(start,min(start+workers-1L,length(pending)))]
+    if(workers==1L) {
+      rows<-lapply(batch_idx,function(i)screen_one(records[[i]],pass))
+    } else {
+      rows<-parallel::mclapply(batch_idx,function(i)screen_one(records[[i]],pass),
+                              mc.cores=min(workers,length(batch_idx)),
+                              mc.preschedule=FALSE,mc.set.seed=FALSE)
+    }
+    if(length(rows)!=length(batch_idx))
+      stop("Incomplete parallel response batch; checkpoint remains intact.",call.=FALSE)
+    for(j in seq_along(batch_idx)) {
+      row<-rows[[j]]
+      expected_id<-ids[[batch_idx[[j]]]]
+      if(!is.list(row)||!identical(scalar(row$record_id),expected_id)||
+         !identical(as.integer(row$pass),pass))
+        stop("Parallel response identity validation failed; checkpoint remains intact.",call.=FALSE)
+      append_jsonl(row,path)
+      done<-c(done,expected_id)
+      if(length(done)%%checkpoint_every==0L || length(done)==total)
+        cat(sprintf("PASS %d checkpoint: %d/%d\n",pass,length(done),total))
     }
   }
   read_jsonl(path)
