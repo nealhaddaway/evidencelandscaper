@@ -125,7 +125,7 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", 
           if(!is.null(record_ids_csv))c("--include-record-ids",record_ids_csv),
           "--checkpoint-every","10","--workers",as.character(workers))
   cat("[W04] Running original screening engine with ",workers,
-      " concurrent API worker(s); model API requests will incur costs.\\n",sep="")
+      " concurrent API worker(s); model API requests will incur costs.\n",sep="")
 
   log<-suppressWarnings(system2(file.path(R.home("bin"),"Rscript"),
     args=vapply(args,shQuote,character(1)),stdout="",stderr=""))
