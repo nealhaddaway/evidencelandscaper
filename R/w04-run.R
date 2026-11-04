@@ -8,9 +8,10 @@
 #' @param record_ids_csv Optional exact selected record_id CSV. Requires max_records=0.
 #' @param model OpenAI API model identifier.
 #' @param open_app NULL prompts in an interactive R console (default); TRUE opens without asking; FALSE never opens.
+#' @param workers Concurrent independent API calls (1 = original serial mode; macOS/Linux only).
 #' @return New local W04 run directory, invisibly.
 #' @export
-run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", open_app=NULL,record_ids_csv=NULL) {
+run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", open_app=NULL,record_ids_csv=NULL,workers=1L) {
   launch_review<-function(run_dir,status) {
     if(!identical(status,"HUMAN_REVIEW_REQUIRED"))return(invisible(NULL))
     if(identical(open_app,FALSE)) {
@@ -36,6 +37,11 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", 
   if(!length(lines)||!nzchar(trimws(paste(lines,collapse=""))))
     stop("W04 screening prompt is empty.")
   if(any(!validEnc(lines)))stop("Invalid prompt text encoding.")
+  workers<-as.integer(workers)
+  if(length(workers)!=1L||is.na(workers)||workers<1L||workers>32L)
+    stop("workers must be an integer from 1 to 32.")
+  if(.Platform$OS.type=="windows"&&workers>1L)
+    stop("Concurrent W04 screening uses forked Rscript workers, supported on macOS/Linux; use workers=1 on Windows.")
   max_records<-as.integer(max_records)
   if(is.na(max_records)||max_records<0L)
     stop("max_records must be 0 (full corpus) or positive.")
@@ -117,8 +123,10 @@ run_w04 <- function(scored, prompt_file, max_records=20L, model="gpt-5.6-luna", 
           "--screening-config",config,"--output-dir",output,
           "--model",model,"--max-records",as.character(max_records),
           if(!is.null(record_ids_csv))c("--include-record-ids",record_ids_csv),
-          "--checkpoint-every","10")
-  cat("[W04] Running original screening engine; model API requests will incur costs.\n")
+          "--checkpoint-every","10","--workers",as.character(workers))
+  cat("[W04] Running original screening engine with ",workers,
+      " concurrent API worker(s); model API requests will incur costs.\\n",sep="")
+
   log<-suppressWarnings(system2(file.path(R.home("bin"),"Rscript"),
     args=vapply(args,shQuote,character(1)),stdout="",stderr=""))
   result<-attr(log,"status")
