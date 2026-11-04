@@ -16,6 +16,11 @@ model <- arg("--model",Sys.getenv("OPENAI_RELEVANCE_MODEL","gpt-5.6-luna"))
 if(!identical(model,"gpt-5.6-luna")) stop("W04 API model is locked to gpt-5.6-luna",call.=FALSE)
 checkpoint_every <- as.integer(arg("--checkpoint-every","25"))
 workers <- as.integer(arg("--workers","1"))
+batch_mode <- identical(arg("--execution","direct"),"batch")
+batch_helper_path <- arg("--batch-helper",NULL)
+batch_chunk_size <- as.integer(arg("--batch-chunk-size","1000"))
+if(batch_mode && (is.null(batch_helper_path)||!file.exists(batch_helper_path))) stop("Missing installed W04 batch helper",call.=FALSE)
+if(batch_mode && (is.na(batch_chunk_size)||batch_chunk_size<1L||batch_chunk_size>10000L))stop("Invalid batch chunk size",call.=FALSE)
 if(length(workers)!=1L||is.na(workers)||workers<1L||workers>32L) stop("Invalid --workers (1..32)",call.=FALSE)
 if(.Platform$OS.type=="windows"&&workers>1L) stop("Concurrent W04 requires macOS/Linux; use --workers 1 on Windows.",call.=FALSE)
 max_records <- as.integer(arg("--max-records","0"))
@@ -107,43 +112,58 @@ schema <- list(
   properties=list(decision=list(type="string",enum=list("retain","exclude","uncertain")),reason=list(type="string")),
   required=list("decision","reason")
 )
-screen_one <- function(r,pass){
+# The exact request body and response validation are shared by direct and
+# Batch API modes. Do not change these when changing transport.
+screen_request_body <- function(r){
   view<-record_view(r)
-  tryCatch({
-    user_text<-paste0("SCREEN THIS RECORD USING ONLY THE SUPPLIED METADATA.\n\n",toJSON(view,auto_unbox=TRUE,pretty=TRUE,null="null",na="null"))
-    body<-list(
-      model=model,store=FALSE,reasoning=list(effort="low"),
-      input=list(
-        list(role="system",content=list(list(type="input_text",text=SYSTEM_PROMPT))),
-        list(role="user",content=list(list(type="input_text",text=user_text)))
-      ),
-      text=list(verbosity="low",format=list(type="json_schema",name=RESPONSE_SCHEMA_NAME,strict=TRUE,schema=schema))
-    )
-    resp<-request("https://api.openai.com/v1/responses") |>
-      req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY")) |>
-      req_body_json(body,auto_unbox=TRUE) |> req_timeout(120) |>
-      req_retry(max_tries=5,backoff=~min(30,2^.x)) |> req_perform() |>
-      resp_body_json(simplifyVector=FALSE)
-    parsed<-fromJSON(extract_output_text(resp),simplifyVector=FALSE)
-    d<-scalar(parsed$decision); rr<-scalar(parsed$reason)
-    if(!d %in% c("retain","exclude","uncertain")) stop("Invalid model decision")
-    if(!nzchar(rr)) stop("Empty model reason")
-    list(
-      record_id=record_id(r),pass=pass,decision=d,reason=rr,
-      technical_failure=FALSE,error=NULL,model_requested=model,
-      model_returned=scalar(resp$model %||% model),response_id=scalar(resp$id),
-      usage=resp$usage %||% NULL,prompt_version=PROMPT_VERSION,
-      prompt_sha256=PROMPT_SHA256,screened_at=now_utc()
-    )
-  },error=function(e) list(
+  user_text<-paste0("SCREEN THIS RECORD USING ONLY THE SUPPLIED METADATA.\\n\\n",
+                    toJSON(view,auto_unbox=TRUE,pretty=TRUE,null="null",na="null"))
+  list(
+    model=model,store=FALSE,reasoning=list(effort="low"),
+    input=list(
+      list(role="system",content=list(list(type="input_text",text=SYSTEM_PROMPT))),
+      list(role="user",content=list(list(type="input_text",text=user_text)))
+    ),
+    text=list(verbosity="low",format=list(
+      type="json_schema",name=RESPONSE_SCHEMA_NAME,strict=TRUE,schema=schema))
+  )
+}
+screen_response_row <- function(resp,r,pass){
+  parsed<-fromJSON(extract_output_text(resp),simplifyVector=FALSE)
+  d<-scalar(parsed$decision); rr<-scalar(parsed$reason)
+  if(!d %in% c("retain","exclude","uncertain"))stop("Invalid model decision")
+  if(!nzchar(rr))stop("Empty model reason")
+  list(
+    record_id=record_id(r),pass=pass,decision=d,reason=rr,
+    technical_failure=FALSE,error=NULL,model_requested=model,
+    model_returned=scalar(resp$model %||% model),response_id=scalar(resp$id),
+    usage=resp$usage %||% NULL,prompt_version=PROMPT_VERSION,
+    prompt_sha256=PROMPT_SHA256,screened_at=now_utc()
+  )
+}
+screen_failure_row <- function(r,pass,message){
+  list(
     record_id=record_id(r),pass=pass,decision="uncertain",
     reason="Technical screening failure; retry required.",technical_failure=TRUE,
-    error=conditionMessage(e),model_requested=model,model_returned=NULL,response_id=NULL,
-    usage=NULL,prompt_version=PROMPT_VERSION,prompt_sha256=PROMPT_SHA256,screened_at=now_utc()
-  ))
+    error=as.character(message),model_requested=model,model_returned=NULL,
+    response_id=NULL,usage=NULL,prompt_version=PROMPT_VERSION,
+    prompt_sha256=PROMPT_SHA256,screened_at=now_utc()
+  )
+}
+screen_one <- function(r,pass) {
+  tryCatch({
+    resp<-request("https://api.openai.com/v1/responses") |>
+      req_auth_bearer_token(Sys.getenv("OPENAI_API_KEY")) |>
+      req_body_json(screen_request_body(r),auto_unbox=TRUE) |> req_timeout(120) |>
+      req_retry(max_tries=5,backoff=~min(30,2^.x)) |> req_perform() |>
+      resp_body_json(simplifyVector=FALSE)
+    screen_response_row(resp,r,pass)
+  },error=function(e)screen_failure_row(r,pass,conditionMessage(e)))
 }
 # Top-level task wrapper avoids serializing the full run_pass environment.
 screen_one_task <- function(task) screen_one(task$record,task$pass)
+
+if(batch_mode)source(batch_helper_path,local=FALSE)
 
 run_pass <- function(records,pass,path){
   existing<-if(file.exists(path))read_jsonl(path) else list()
@@ -195,6 +215,7 @@ run_pass <- function(records,pass,path){
   if(anyDuplicated(done))stop(sprintf("Duplicate record IDs in pass %d checkpoint",pass),call.=FALSE)
   ids<-vapply(records,record_id,character(1))
   if(any(!done %in% ids))stop(sprintf("Pass %d checkpoint contains IDs absent from queue",pass),call.=FALSE)
+  if(batch_mode)return(batch_run_pass(records,pass,path,existing))
   total<-length(records)
   pending<-which(!ids%in%done)
   # Parallelism changes only scheduling. Every model call still uses screen_one()
@@ -322,7 +343,9 @@ p2_path<-file.path(output_dir,"pass2.jsonl")
 p3_path<-file.path(output_dir,"pass3_conflicts.jsonl")
 
 p1<-run_pass(eligible,1L,p1_path)
+if(is.null(p1))quit(save="no",status=0L)
 p2<-run_pass(eligible,2L,p2_path)
+if(is.null(p2))quit(save="no",status=0L)
 
 map_dec<-function(rows)setNames(vapply(rows,function(x)scalar(x$decision),character(1)),vapply(rows,function(x)scalar(x$record_id),character(1)))
 map_fail<-function(rows)setNames(vapply(rows,function(x)isTRUE(x$technical_failure),logical(1)),vapply(rows,function(x)scalar(x$record_id),character(1)))
@@ -334,6 +357,7 @@ if(!setequal(names(d1),ids)||!setequal(names(d2),ids))stop("Pass 1/2 coverage in
 need3<-ids[(d1[ids]!=d2[ids]) | d1[ids]=="uncertain" | d2[ids]=="uncertain" | f1[ids] | f2[ids]]
 queue3<-eligible[match(need3,ids)]
 p3<-if(length(queue3))run_pass(queue3,3L,p3_path) else list()
+if(is.null(p3))quit(save="no",status=0L)
 d3<-if(length(p3))map_dec(p3) else character()
 f3<-if(length(p3))map_fail(p3) else logical()
 
