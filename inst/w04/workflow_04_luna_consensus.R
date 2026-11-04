@@ -142,6 +142,9 @@ screen_one <- function(r,pass){
     usage=NULL,prompt_version=PROMPT_VERSION,prompt_sha256=PROMPT_SHA256,screened_at=now_utc()
   ))
 }
+# Top-level task wrapper avoids serializing the full run_pass environment.
+screen_one_task <- function(task) screen_one(task$record,task$pass)
+
 run_pass <- function(records,pass,path){
   existing<-if(file.exists(path))read_jsonl(path) else list()
   transition_file<-file.path(dirname(output_dir),"model_transition.json")
@@ -198,17 +201,42 @@ run_pass <- function(records,pass,path){
   # and its unchanged Responses request body, schema, retries and validator.
   # The coordinator is the SOLE writer of passN.jsonl. Completed checkpoint
   # rows retain their original model response IDs and are never resubmitted.
-  if(workers>1L&&length(pending))
+  # macOS libraries (including Objective-C backed text handling) cannot safely
+  # run in forked R children. PSOCK launches clean independent Rscript sessions.
+  # The main process alone owns and appends the existing checkpoint JSONL.
+  cl<-NULL
+  if(workers>1L&&length(pending)) {
     message("[W04] Pass ",pass,": ",length(pending)," unfinished votes; ",
-            workers," concurrent API workers; ",length(done)," checkpoints preserved.")
+            workers," independent R worker processes; ",length(done),
+            " checkpoints preserved.")
+    cl<-parallel::makePSOCKcluster(min(workers,length(pending)),outfile="")
+    on.exit(parallel::stopCluster(cl),add=TRUE)
+    parallel::clusterEvalQ(cl,{
+      suppressPackageStartupMessages({
+        library(httr2)
+        library(jsonlite)
+        library(stringi)
+        library(digest)
+      })
+      NULL
+    })
+    parallel::clusterExport(cl,c(
+      "%||%","scalar","textify","first_nonempty","record_id",
+      "canonical","screening_view","record_view","extract_output_text",
+      "now_utc","screen_one","screen_one_task","schema",
+      "model","SYSTEM_PROMPT","PROMPT_VERSION","PROMPT_SHA256",
+      "RESPONSE_SCHEMA_NAME"
+    ),envir=.GlobalEnv)
+  }
   if(length(pending)) for(start in seq.int(1L,length(pending),by=max(1L,workers))) {
     batch_idx<-pending[seq.int(start,min(start+workers-1L,length(pending)))]
     if(workers==1L) {
       rows<-lapply(batch_idx,function(i)screen_one(records[[i]],pass))
     } else {
-      rows<-parallel::mclapply(batch_idx,function(i)screen_one(records[[i]],pass),
-                              mc.cores=min(workers,length(batch_idx)),
-                              mc.preschedule=FALSE,mc.set.seed=FALSE)
+      # Only a small batch of source records crosses the process boundary.
+      # The full 45k-record corpus is not copied to each worker.
+      tasks<-lapply(batch_idx,function(i)list(record=records[[i]],pass=pass))
+      rows<-parallel::parLapply(cl,tasks,screen_one_task)
     }
     if(length(rows)!=length(batch_idx))
       stop("Incomplete parallel response batch; checkpoint remains intact.",call.=FALSE)
