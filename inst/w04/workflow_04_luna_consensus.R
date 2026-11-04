@@ -116,7 +116,7 @@ schema <- list(
 # Batch API modes. Do not change these when changing transport.
 screen_request_body <- function(r){
   view<-record_view(r)
-  user_text<-paste0("SCREEN THIS RECORD USING ONLY THE SUPPLIED METADATA.\\n\\n",
+  user_text<-paste0("SCREEN THIS RECORD USING ONLY THE SUPPLIED METADATA.\n\n",
                     toJSON(view,auto_unbox=TRUE,pretty=TRUE,null="null",na="null"))
   list(
     model=model,store=FALSE,reasoning=list(effort="low"),
