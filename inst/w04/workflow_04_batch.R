@@ -11,7 +11,7 @@ batch_api <- function(method,endpoint,body=NULL,file=NULL) {
     httr2::req_retry(max_tries=4,backoff=~min(30,2^.x))
   if(!is.null(file)) {
     req<-httr2::req_body_multipart(req,purpose="batch",
-                                  file=httr2::upload_file(file,type="application/jsonl"))
+                                  file=curl::form_file(file,type="application/jsonl"))
   } else if(!is.null(body)) {
     req<-httr2::req_body_json(req,body,auto_unbox=TRUE)
   }
@@ -98,6 +98,52 @@ batch_create <- function(records,pass,job_dir,ordinal,pilot=FALSE) {
   batch_atomic_json(state,state_file)
   message("[W04 Batch] Submitted ",stem,": ",state$batch_id)
   invisible(state)
+}
+
+# Resume locally prepared/uploaded work without regenerating input or paying
+# for any already accepted model responses. A remote-create ambiguity is held.
+batch_resume_upload <- function(state_file) {
+  state<-batch_state(state_file)
+  stem<-sub("-state[.]json$","",basename(state_file))
+  input<-file.path(dirname(state_file),paste0(stem,"-input.jsonl"))
+  if(!file.exists(input) ||
+     !identical(digest::digest(file=input,algo="sha256",
+                 serialize=FALSE),batch_scalar(state$input_sha256)))
+    stop("Prepared Batch API input changed: ",input,call.=FALSE)
+  stage<-batch_scalar(state$stage)
+  if(identical(stage,"prepared")) {
+    message("[W04 Batch] Retrying upload of existing input ",stem,
+            " (no batch had been submitted).")
+    uploaded<-batch_api("POST","files",file=input)
+    if(!nzchar(batch_scalar(uploaded$id)))
+      stop("Batch file upload returned no file ID.",call.=FALSE)
+    state$input_file_id<-batch_scalar(uploaded$id)
+    state$stage<-"uploaded"
+    batch_atomic_json(state,state_file)
+    stage<-"uploaded"
+  }
+  if(identical(stage,"uploaded")) {
+    if(!nzchar(batch_scalar(state$input_file_id)))
+      stop("Uploaded batch has no input_file_id: ",stem,call.=FALSE)
+    state$stage<-"creating"
+    batch_atomic_json(state,state_file)
+    created<-batch_api("POST","batches",body=list(
+      input_file_id=state$input_file_id,
+      endpoint="/v1/responses",
+      completion_window="24h",
+      metadata=list(project="ostara-w04",
+                    pass=as.character(state$pass),job=stem)
+    ))
+    if(!nzchar(batch_scalar(created$id)))
+      stop("Batch created without batch ID.",call.=FALSE)
+    state$batch_id<-batch_scalar(created$id)
+    state$stage<-"submitted"
+    batch_atomic_json(state,state_file)
+    message("[W04 Batch] Submitted ",stem,": ",state$batch_id)
+    return(invisible(state))
+  }
+  stop("Unexpected batch submission stage ",stage,
+       " for ",stem,"; not resubmitting.",call.=FALSE)
 }
 
 batch_collect <- function(state_file,record_lookup,pass,path,existing) {
@@ -212,6 +258,12 @@ batch_run_pass <- function(records,pass,path,existing) {
   states<-sort(list.files(job_dir,pattern="-state[.]json$",full.names=TRUE))
   active<-FALSE
   if(length(states))for(state_file in states) {
+    state<-batch_state(state_file)
+    if(batch_scalar(state$stage)%in%c("prepared","uploaded")) {
+      batch_resume_upload(state_file)
+      active<-TRUE
+      next
+    }
     ready<-batch_collect(state_file,lookup,pass,path,existing)
     if(!ready)active<-TRUE
     existing<-if(file.exists(path))read_jsonl(path) else list()
