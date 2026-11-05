@@ -234,6 +234,7 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
     "\n\nReturn only the requested JSON object. Preserve the supplied record_id.")
   message("[W07] Progress: ",length(done_ids)," of ",length(id)," records completed; ",length(id)-length(done_ids)," remaining.")
   progress_index<-length(done_ids)
+  failed_ids<-character()
   for(record_id in id[!id%in%done_ids]){
     z<-source[[record_id]]$canonical
     abstract<-if(!is.null(amended[[record_id]]))amended[[record_id]] else z$abstract
@@ -249,7 +250,8 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
     validate_result<-function(result){
       assigned<-NULL
       if(!identical(result$record_id,record_id))stop("W07 record ID mismatch.")
-      assigned<-vapply(result$mechanisms,function(x)x$mechanism_id,character(1))
+      if(record_id%in%failed_ids)next
+    assigned<-vapply(result$mechanisms,function(x)x$mechanism_id,character(1))
       if(any(!assigned %in% codes)||anyDuplicated(assigned))
         stop("W07 invalid or duplicate mechanism ID for ",record_id)
       if(!result$coding_status%in%c("coded","insufficient_information","no_supported_mechanism"))
@@ -362,9 +364,15 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
                   raw_output=if(length(texts))texts[[1L]] else NULL)
       cat(jsonlite::toJSON(event,auto_unbox=TRUE,null="null"),"\n",
           file=retry_log,append=TRUE,sep="")
-      if(attempt==5L)
-        stop("W07 ",record_id," failed strict validation after ",attempt,
-             " Luna attempts: ",error,". Completed coding checkpoint preserved.")
+      if(attempt==5L) {
+        failed_ids<-c(failed_ids,record_id)
+        message("[W07] Validation exhausted for ",record_id,
+                " after ",attempt,
+                " attempts; response preserved for human review. ",
+                "Continuing with the remaining included abstracts.")
+        result<-NULL
+        break
+      }
       message("[W07] Invalid response for ",record_id,
               " (attempt ",attempt,"/5): ",error,
               ". Retrying with exact-source evidence instruction.")
@@ -385,7 +393,22 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
     message("[W07] Record ",progress_index," of ",length(id),": ",record_id,"; ",length(assigned)," mechanism(s)")
   }
   final<-readjl(outpath)
-  if(length(final)!=length(id))stop("W07 trial incomplete.")
+  if(length(final)!=length(id)) {
+    complete_ids<-vapply(final,function(x)x$record_id,character(1))
+    missing<-setdiff(id,complete_ids)
+    if(anyDuplicated(complete_ids)||any(!complete_ids%in%id))
+      stop("W07 partial output identity mismatch.")
+    partial<-c(provenance,list(status="TRIAL_PARTIAL",
+      records=length(final),target_records=length(id),
+      unresolved_record_ids=as.list(missing),
+      coding_sha256=sha(outpath)))
+    jsonlite::write_json(partial,file.path(dest,"summary.json"),
+                         pretty=TRUE,auto_unbox=TRUE)
+    message("[W07] Partial mechanism coding: ",length(final),"/",
+            length(id)," validated; ",length(missing),
+            " require separate review/recovery. Invalid responses preserved.")
+    return(invisible(dest))
+  }
   jsonlite::write_json(c(provenance,list(status="TRIAL_COMPLETE",
        records=length(final),coding_sha256=sha(outpath))),
     file.path(dest,"summary.json"),pretty=TRUE,auto_unbox=TRUE)
