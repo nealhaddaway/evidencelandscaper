@@ -261,9 +261,10 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
     # accepted record in the append-only coding.jsonl. Do not loosen checks.
     validate_result<-function(result){
       assigned<-NULL
+      if(!is.list(result)||is.null(result$record_id))
+        stop("W07 response is not a record-level JSON object: ",record_id)
       if(!identical(result$record_id,record_id))stop("W07 record ID mismatch.")
-      if(record_id%in%failed_ids)next
-    assigned<-vapply(result$mechanisms,function(x)x$mechanism_id,character(1))
+      assigned<-vapply(result$mechanisms,function(x)x$mechanism_id,character(1))
       if(any(!assigned %in% codes)||anyDuplicated(assigned))
         stop("W07 invalid or duplicate mechanism ID for ",record_id)
       if(!result$coding_status%in%c("coded","insufficient_information","no_supported_mechanism"))
@@ -403,6 +404,10 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
         "mechanism lacks an exact supporting excerpt, omit that mechanism ",
         "rather than inventing evidence. Obey the original JSON schema.")
     }
+    # An exhausted invalid answer has no accepted result. Never append
+    # JSON null to the validated checkpoint.
+    if(record_id%in%failed_ids)next
+    if(is.null(result))stop("[W07] Internal error: NULL validated response for ",record_id)
     assigned<-vapply(result$mechanisms,function(x)x$mechanism_id,character(1))
     cat(jsonlite::toJSON(result,auto_unbox=TRUE,null="null"),"\n",
         file=outpath,append=TRUE,sep="")
