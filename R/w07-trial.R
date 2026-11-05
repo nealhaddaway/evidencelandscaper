@@ -234,8 +234,20 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
     "\n\nReturn only the requested JSON object. Preserve the supplied record_id.")
   message("[W07] Progress: ",length(done_ids)," of ",length(id)," records completed; ",length(id)-length(done_ids)," remaining.")
   progress_index<-length(done_ids)
-  failed_ids<-character()
-  for(record_id in id[!id%in%done_ids]){
+  # Previously exhausted five-attempt records are a separately auditable
+  # unresolved set. They must not trigger another five paid calls on resume.
+  invalid_path<-file.path(dest,"invalid_responses.jsonl")
+  prior_invalid<-if(file.exists(invalid_path))readjl(invalid_path) else list()
+  archived_failures<-unique(vapply(Filter(function(x)
+    isTRUE(as.integer(x$attempt)==5L),prior_invalid),
+    function(x)as.character(x$record_id),character(1)))
+  archived_failures<-setdiff(archived_failures,done_ids)
+  if(length(archived_failures))
+    message("[W07] Preserving ",length(archived_failures),
+            " previously exhausted validation failure(s); ",
+            "no repeated model calls for these records.")
+  failed_ids<-archived_failures
+  for(record_id in id[!id%in%c(done_ids,archived_failures)]){
     z<-source[[record_id]]$canonical
     abstract<-if(!is.null(amended[[record_id]]))amended[[record_id]] else z$abstract
     record<-list(record_id=record_id,title=z$title,abstract=abstract,
