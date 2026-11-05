@@ -345,15 +345,22 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
         # httr2 HTTP errors do not always expose a readable response object.
         # Match explicit transient HTTP codes in the condition text as well.
         # Other HTTP errors (400/401/403/404/etc.) remain terminal.
+        # Explicit, fixed-string detection for transient HTTP errors.
+        # This avoids relying on httr2's response object or regex boundaries
+        # and is verifiable directly in a running R session.
+        transient_http<-any(vapply(
+          c(429L,500L,502L,503L,504L),
+          function(code) grepl(paste0("HTTP ",code),msg,fixed=TRUE),
+          logical(1)))
         retryable<-inherits(response,"curl_error") ||
           (!is.na(http_status)&&http_status%in%c(429L,500L,502L,503L,504L)) ||
-          grepl("\\bHTTP[[:space:]]+(429|500|502|503|504)\\b",
-                msg,ignore.case=TRUE,perl=TRUE) ||
+          transient_http ||
           grepl("timeout|timed out|connection reset|could not resolve host|failed to connect|operation timed out",
                 msg,ignore.case=TRUE)
         cat(jsonlite::toJSON(list(schema="w07-transport-error-v1",
           record_id=record_id,model=model,validation_attempt=attempt,
           transport_attempt=network_attempt,http_status=http_status,
+          retryable=retryable,transient_http=transient_http,
           message=msg,
           timestamp_utc=format(Sys.time(),tz="UTC",format="%Y-%m-%dT%H:%M:%SZ"),
           remote_completion_unknown=is.na(http_status)),auto_unbox=TRUE,null="null"),
