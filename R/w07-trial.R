@@ -342,8 +342,13 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
         http_status<-if(inherits(response,"httr2_http"))
           tryCatch(httr2::resp_status(response$response),
                    error=function(e)NA_integer_) else NA_integer_
+        # httr2 HTTP errors do not always expose a readable response object.
+        # Match explicit transient HTTP codes in the condition text as well.
+        # Other HTTP errors (400/401/403/404/etc.) remain terminal.
         retryable<-inherits(response,"curl_error") ||
           (!is.na(http_status)&&http_status%in%c(429L,500L,502L,503L,504L)) ||
+          grepl("\\bHTTP[[:space:]]+(429|500|502|503|504)\\b",
+                msg,ignore.case=TRUE,perl=TRUE) ||
           grepl("timeout|timed out|connection reset|could not resolve host|failed to connect|operation timed out",
                 msg,ignore.case=TRUE)
         cat(jsonlite::toJSON(list(schema="w07-transport-error-v1",
