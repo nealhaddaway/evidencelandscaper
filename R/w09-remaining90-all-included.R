@@ -1,4 +1,4 @@
-#' Prepare a full-text retrieval queue for every retained publication in the first 10%
+#' Prepare a full-text retrieval queue for every retained publication in the 45,284-record remaining 90%
 #'
 #' Uses the completed human-authoritative W04 screening snapshot and its
 #' checksum-matched W02 bibliographic source. This selection deliberately does
@@ -11,8 +11,7 @@
 #' identity review. Does not change previous W09 runs.
 #'
 #' @param map_path Ostara map directory, or NULL for the default map.
-#' @param w04_run Exact human-adjudicated remaining-90% W04 directory; NULL selects
-#'   the unique complete selected cohort. Never selects ambiguously.
+#' @param w04_run Exact human-adjudicated remaining-90% W04 directory (required).
 #' @return W09 run directory, invisibly.
 #' @export
 prepare_w09_remaining90_all_included <- function(map_path=NULL,w04_run=NULL) {
@@ -68,7 +67,7 @@ prepare_w09_remaining90_all_included <- function(map_path=NULL,w04_run=NULL) {
   source_ids<-vapply(source,function(z)
     as.character(z$identity$record_id),character(1))
   if(anyDuplicated(source_ids)||any(!ids%in%source_ids))
-    stop("First-10% retained IDs cannot be mapped uniquely to W02.")
+    stop("Remaining-90% retained IDs cannot be mapped uniquely to W02.")
   by_id<-setNames(source,source_ids)
   scalar<-function(z)if(is.null(z)||!length(z))"" else
     paste(as.character(unlist(z,use.names=FALSE)),collapse="; ")
