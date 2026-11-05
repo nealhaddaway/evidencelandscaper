@@ -144,3 +144,7 @@ export(prepare_w09_remaining90_all_included)
 export(retrieve_w09_remaining90_all_included)
 
 export(repair_w07_null_checkpoint)
+
+export(register_ostara_canonical_runs)
+
+export(read_ostara_canonical_runs)
