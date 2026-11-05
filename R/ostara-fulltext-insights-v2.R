@@ -42,7 +42,7 @@
     if(!is.character(mids)||anyDuplicated(mids)||any(!mids%in%codes))
       stop("W09 insights-v2 invalid or duplicate approved mechanism ID: ",i)
     causes<-character()
-    if(!grepl("^\[(PAGE|SECTION|TEXT BLOCK) [0-9]+\]$",x$source_anchor))
+    if(!grepl("^\\[(PAGE|SECTION|TEXT BLOCK) [0-9]+\\]$",x$source_anchor))
       causes<-c(causes,"invalid_source_anchor")
     at<-regexpr(x$source_anchor,fulltext,fixed=TRUE)[[1L]]
     if(at<1L)causes<-c(causes,"anchor_not_in_input")
@@ -50,7 +50,7 @@
       causes<-c(causes,"quote_not_exact_in_input")
     if(at>0L) {
       after<-substring(fulltext,at+nchar(x$source_anchor))
-      next_at<-regexpr("\[(?:PAGE|SECTION|TEXT BLOCK) [0-9]+\]",after,perl=TRUE)[[1L]]
+      next_at<-regexpr("\\[(?:PAGE|SECTION|TEXT BLOCK) [0-9]+\\]",after,perl=TRUE)[[1L]]
       segment<-if(next_at>0L)substr(after,1L,next_at-1L) else after
       if(!grepl(x$source_quote,segment,fixed=TRUE))
         causes<-c(causes,"quote_not_in_cited_anchor")
