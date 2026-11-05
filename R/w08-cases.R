@@ -12,11 +12,14 @@
 #' @param model OpenAI Responses model.
 #' @param map_path Local map root folder (defaults to the Ostara map).
 #' @param prompt_file Optional custom UTF-8 case-identification prompt.
+#' @param retry_partial Explicitly retry only unresolved records from a checksum-verified partial run.
 #' @return W08 pilot run directory, invisibly.
 #' @export
 trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
                             map_path=NULL,prompt_file=NULL,w04_run=NULL,
-                            provisional_retains=FALSE) {
+                            provisional_retains=FALSE,retry_partial=FALSE) {
+  if(!is.logical(retry_partial)||length(retry_partial)!=1L||is.na(retry_partial))
+    stop("retry_partial must be TRUE or FALSE.")
   if(!is.logical(provisional_retains)||length(provisional_retains)!=1L||
      is.na(provisional_retains))stop("provisional_retains must be TRUE or FALSE.")
   if(provisional_retains&&is.null(w04_run))
@@ -262,9 +265,23 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
       corrected$unresolved_record_ids<-as.list(unresolved)
       corrected$responses_sha256<-sha(out)
       jsonlite::write_json(corrected,partial_path,auto_unbox=TRUE,pretty=TRUE)
-      message("[W08] Reusing ",length(done)," validated records; ",
-        length(unresolved)," archived unvalidated record(s). No model calls.")
-      return(invisible(dest))
+      if(!retry_partial) {
+        message("[W08] Reusing ",length(done)," validated records; ",
+          length(unresolved)," archived unvalidated record(s). No model calls. ",
+          "Set retry_partial=TRUE to retry ONLY these unresolved records.")
+        return(invisible(dest))
+      }
+      message("[W08] RECOVERY: ",length(done)," validated records preserved; ",
+              length(unresolved)," failed records queued for retry.")
+      recovery_log<-file.path(dest,"partial_recovery_attempts.jsonl")
+      cat(jsonlite::toJSON(list(schema="w08-partial-recovery-v1",
+          source_summary_sha256=sha(partial_path),
+          validated_ledger_sha256=sha(out),
+          source_prompt_sha256=sha(file.path(dest,"prompt.txt")),
+          unresolved_record_ids=as.list(unresolved),
+          started_at_utc=format(Sys.time(),tz="UTC",format="%Y-%m-%dT%H:%M:%SZ")),
+          auto_unbox=TRUE,null="null"),"\n",
+          file=recovery_log,append=TRUE,sep="")
     }
   }
   message("[W08] Progress: ",length(done_ids)," of ",length(selected)," records completed; ",length(selected)-length(done_ids)," remaining.")
@@ -277,9 +294,20 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
     input<-list(record_id=record_id,title=can$title,abstract=abs,
                 keywords=if(!is.null(can$author_keywords))
                   can$author_keywords else can$keywords)
+    retry_prompt<-if(retry_partial)paste0(
+      prompt,
+      "\n\nFAILED-RECORD RECOVERY: Return a self-consistent case count and ",
+      "case_evidence_status. Every supporting_evidence field MUST be an ",
+      "exact, unmodified, continuous substring of the title or abstract ",
+      "shown in this request. Copy it verbatim, including punctuation, ",
+      "hyphens and spaces. Do not paraphrase, join separated passages, ",
+      "or cite external text. If no verbatim evidence supports a candidate, ",
+      "do not claim that candidate as a supported case. Use 'unclear' ",
+      "where the source cannot support a definite classification."
+    ) else prompt
     body<-list(model=model,store=FALSE,reasoning=list(effort="low"),
       input=list(
-        list(role="system",content=list(list(type="input_text",text=prompt))),
+        list(role="system",content=list(list(type="input_text",text=retry_prompt))),
         list(role="user",content=list(list(type="input_text",
           text=jsonlite::toJSON(input,auto_unbox=TRUE,null="null"))))),
       text=list(format=list(type="json_object")))
@@ -346,7 +374,7 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
       message("[W08] Invalid model response for ",record_id,
               "; retrying with explicit validation instruction (attempt ",attempt,"/5).")
       body$input[[1L]]$content[[1L]]$text<-paste0(
-        prompt,"\n\nRETRY VALIDATION: Ensure case_evidence_status and ",
+        retry_prompt,"\n\nRETRY VALIDATION: Ensure case_evidence_status and ",
         "number of cases agree: specific_case exactly 1, multiple_cases ",
         "at least 2, no_identifiable_case exactly 0, unclear any number ",
         "of potentially distinguishable candidates (including zero). ",
