@@ -259,12 +259,12 @@ trial_w08_cases <- function(n=20L,seed=20261023L,model="gpt-5.6-luna",
        identical(as.integer(old_summary$validated_records),as.integer(length(done))) &&
        setequal(as.character(archived_unresolved),unresolved) &&
        length(unresolved)>0L) {
-      corrected<-info
-      corrected$status<-"PILOT_PARTIAL"
-      corrected$validated_records<-length(done)
-      corrected$unresolved_record_ids<-as.list(unresolved)
-      corrected$responses_sha256<-sha(out)
-      jsonlite::write_json(corrected,partial_path,auto_unbox=TRUE,pretty=TRUE)
+      partial_record<-info
+      partial_record$status<-"PILOT_PARTIAL"
+      partial_record$validated_records<-length(done)
+      partial_record$unresolved_record_ids<-as.list(unresolved)
+      partial_record$responses_sha256<-sha(out)
+      jsonlite::write_json(partial_record,partial_path,auto_unbox=TRUE,pretty=TRUE)
       if(!retry_partial) {
         message("[W08] Reusing ",length(done)," validated records; ",
           length(unresolved)," archived unvalidated record(s). No model calls. ",
