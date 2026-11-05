@@ -148,3 +148,5 @@ export(repair_w07_null_checkpoint)
 export(register_ostara_canonical_runs)
 
 export(read_ostara_canonical_runs)
+export(extract_ostara_fulltext_insights_v2)
+export(run_ostara_downloaded_fulltext_insights)
