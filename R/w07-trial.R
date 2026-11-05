@@ -338,14 +338,19 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
           break
         }
         msg<-conditionMessage(response)
+        http_status<-if(inherits(response,"httr2_http"))
+          tryCatch(httr2::resp_status(response$response),
+                   error=function(e)NA_integer_) else NA_integer_
         retryable<-inherits(response,"curl_error") ||
+          (!is.na(http_status)&&http_status%in%c(429L,500L,502L,503L,504L)) ||
           grepl("timeout|timed out|connection reset|could not resolve host|failed to connect|operation timed out",
                 msg,ignore.case=TRUE)
         cat(jsonlite::toJSON(list(schema="w07-transport-error-v1",
           record_id=record_id,model=model,validation_attempt=attempt,
-          transport_attempt=network_attempt,message=msg,
+          transport_attempt=network_attempt,http_status=http_status,
+          message=msg,
           timestamp_utc=format(Sys.time(),tz="UTC",format="%Y-%m-%dT%H:%M:%SZ"),
-          remote_completion_unknown=TRUE),auto_unbox=TRUE,null="null"),
+          remote_completion_unknown=is.na(http_status)),auto_unbox=TRUE,null="null"),
           "\n",file=transport_log,append=TRUE,sep="")
         if(!retryable || network_attempt==3L)
           stop("[W07] Transport failure for ",record_id,
@@ -353,7 +358,7 @@ trial_w07 <- function(ontology_file=NULL, prompt_file=NULL, n=5L, model="gpt-5.6
             "Remote execution/charges cannot be determined: ",msg)
         message("[W07] Transient HTTP transport failure on ",record_id,
           ", retry ",network_attempt," of 2. Previous request's remote status unknown.")
-        Sys.sleep(c(5,15)[[network_attempt]])
+        Sys.sleep(c(10,30)[[network_attempt]])
       }
       texts<-unlist(lapply(resp$output,function(item)
         unlist(lapply(item$content,function(part)
