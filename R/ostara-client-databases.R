@@ -15,6 +15,11 @@ export_ostara_client_databases <- function(map_path=NULL,output_dir=NULL) {
     "client_databases",paste0("export-",format(Sys.time(),"%Y%m%d-%H%M%S")))
   if(dir.exists(output_dir)&&length(list.files(output_dir,all.files=TRUE,no..=TRUE)))
     stop("Export directory is not empty: ",output_dir)
+  if(!dir.exists(output_dir)&&
+     !dir.create(output_dir,recursive=TRUE,showWarnings=FALSE))
+    stop("Could not create client export directory: ",output_dir)
+  if(!dir.exists(output_dir))
+    stop("Client export directory is unavailable: ",output_dir)
   if(!requireNamespace("jsonlite",quietly=TRUE)||
      !requireNamespace("digest",quietly=TRUE))
     stop("Install jsonlite and digest.")
