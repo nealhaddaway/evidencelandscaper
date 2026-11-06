@@ -23,7 +23,7 @@ readjl<-function(path) {
 }
 # Decisions are versioned by publication and mechanism ledger checksum.
 record_key<-function(z)paste(sc(z$cohort),sc(z$record_id),
-                            sc(z$mechanism_ledger_sha256),sep="|")
+                            sc(z$mechanism_manifest_sha256),sep="|")
 keys<-vapply(data,record_key,character(1))
 if(anyDuplicated(keys))stop("Repeated review identity")
 load_decisions<-function() {
@@ -37,7 +37,7 @@ load_decisions<-function() {
 }
 decisions<-shiny::reactiveVal(load_decisions())
 current<-shiny::reactiveVal(1L)
-font_css<-HTML("body{font-family:system-ui, sans-serif;background:#f8fafb;}
+font_css<-shiny::HTML("body{font-family:system-ui, sans-serif;background:#f8fafb;}
   .review-panel{background:white;border:1px solid #e1e6ea;border-radius:9px;
     padding:17px;margin-bottom:12px;}
   .evidence{white-space:pre-wrap;background:#f3f5f7;border-left:3px solid #72889b;
