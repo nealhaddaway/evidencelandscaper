@@ -11,7 +11,7 @@
 #' @return Local reviewer directory, invisibly, on app exit.
 #' @export
 review_ostara_fulltext_case_discrepancies <- function(map_path=NULL,
-                                                       mechanism_runs=NULL) {
+                                                       mechanism_runs=NULL,launch=TRUE) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   root<-file.path(map_path,"runs","W09")
@@ -185,6 +185,7 @@ review_ostara_fulltext_case_discrepancies <- function(map_path=NULL,
     }
   }
   if(!file.exists(queue_file))writeLines(unname(lines),queue_file,useBytes=TRUE)
+  if(!isTRUE(launch))return(invisible(list(queue_file=queue_file,review_dir=review_dir,records=length(out),mechanism_runs=chosen)))
   script<-system.file("ostara","case_discrepancy_app.R",
                       package="evidencelandscaper")
   if(!nzchar(script))stop("Packaged OSTARA Shiny reviewer not installed.")
