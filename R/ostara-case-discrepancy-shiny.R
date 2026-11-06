@@ -128,6 +128,12 @@ review_ostara_fulltext_case_discrepancies <- function(map_path=NULL,
     ids<-vapply(entries,function(x)sc(x$record_id),character(1))
     if(anyDuplicated(ids))stop("Duplicate full-text mechanism IDs: ",dir)
     statuses_df<-statuses[[cohort]]
+    w08_manifest<-get_manifest(file.path(w08_dirs[[cohort]],"manifest.json"))
+    w08_selected_ids<-as.character(unlist(w08_manifest$selected_record_ids,
+                                            use.names=FALSE))
+    if(anyDuplicated(w08_selected_ids)||
+       any(!statuses_df$record_id%in%w08_selected_ids))
+      stop("W08 human classifications are inconsistent with selected records: ",cohort)
     queue_source<-file.path(sc(m$source_w09),"retrieval_queue.csv")
     if(!file.exists(queue_source)||!identical(sha(queue_source),
                                             sc(m$w09_queue_sha256)))
@@ -139,10 +145,14 @@ review_ostara_fulltext_case_discrepancies <- function(map_path=NULL,
       if(!identical(st,"case_present"))next
       id<-sc(z$record_id)
       row<-match(id,statuses_df$record_id)
-      if(is.na(row))stop("Full-text ID absent from human W08: ",id)
-      old<-sc(statuses_df$final_case_status[[row]])
+      # W09 included records can extend beyond W08's sampled or validated
+      # population. A missing W08 classification is NOT a negative decision.
+      # Distinguish selected-but-unvalidated from never selected at W08.
+      old<-if(!is.na(row))sc(statuses_df$final_case_status[[row]]) else
+        if(id%in%w08_selected_ids)"unvalidated_W08" else "not_assessed_W08"
       if(old%in%c("specific_case","multiple_cases"))next
-      if(!old%in%c("no_identifiable_case","unclear","unvalidated_W08"))
+      if(!old%in%c("no_identifiable_case","unclear",
+                   "unvalidated_W08","not_assessed_W08"))
         stop("Unexpected W08 status for full-text new case: ",old)
       qi<-match(id,q$record_id)
       if(is.na(qi))stop("Full-text ID absent from retrieval queue: ",id)
