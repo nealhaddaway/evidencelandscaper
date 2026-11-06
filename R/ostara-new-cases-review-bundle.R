@@ -95,23 +95,32 @@ export_ostara_new_case_review <- function(destination_zip,map_path=NULL) {
     w04<-m$source_w04
     layer_dir<-if(identical(m$source_w04_layer,"human_authoritative"))
       "human_authoritative" else "finalised"
-    sumfile<-file.path(w04,layer_dir,"summary.json")
-    if(file.exists(sumfile)) {
+    if(identical(layer_dir,"human_authoritative")) {
+      human<- .w04_latest_authoritative(w04)
+      if(is.null(human)||!isTRUE(human$complete))
+        stop("Authoritative W04 screening snapshot missing for ",cohort)
+      w04sum<-human$summary
+      if(!identical(sha(human$layer),m$source_w04_sha256))
+        stop("W04 screening provenance differs from W08: ",cohort)
+    } else {
+      sumfile<-file.path(w04,layer_dir,"summary.json")
+      if(!file.exists(sumfile))stop("W04 screening summary missing: ",sumfile)
       w04sum<-j(sumfile)
-      if(isTRUE(w04sum$reconciled_abstracts)) {
-        paths<-list.dirs(file.path(w04,"abstract_rescreens"),
-                         recursive=FALSE,full.names=TRUE)
-        paths<-paths[file.exists(file.path(paths,"manifest.json"))]
-        if(length(paths)!=1L)
-          stop("Cannot identify corrected W04 abstracts for ",cohort)
-        csv<-file.path(paths[[1L]],"inputs","submitted_abstracts.csv")
-        corrected<-utils::read.csv(csv,stringsAsFactors=FALSE,
-                                   fileEncoding="UTF-8-BOM")
-        if(anyDuplicated(corrected$record_id))
-          stop("Duplicate corrected W04 abstract IDs.")
-        corrections<-setNames(as.list(corrected$abstract),
-                              corrected$record_id)
-      }
+    }
+    if(isTRUE(w04sum$reconciled_abstracts)) {
+      paths<-list.dirs(file.path(w04,"abstract_rescreens"),
+                       recursive=FALSE,full.names=TRUE)
+      paths<-paths[file.exists(file.path(paths,"manifest.json"))]
+      if(length(paths)!=1L)
+        stop("Cannot identify corrected W04 abstracts for ",cohort)
+      csv<-file.path(paths[[1L]],"inputs","submitted_abstracts.csv")
+      if(!file.exists(csv))stop("W04 corrected abstracts missing: ",csv)
+      corrected<-utils::read.csv(csv,stringsAsFactors=FALSE,
+                                 fileEncoding="UTF-8-BOM")
+      if(anyDuplicated(corrected$record_id))
+        stop("Duplicate corrected W04 abstract IDs.")
+      corrections<-setNames(as.list(corrected$abstract),
+                            corrected$record_id)
     }
     r<-mechanism[[cohort]]
     meta<-j(file.path(r,"manifest.json"))
