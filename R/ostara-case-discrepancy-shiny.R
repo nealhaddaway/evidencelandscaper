@@ -134,6 +134,30 @@ review_ostara_fulltext_case_discrepancies <- function(map_path=NULL,
     if(anyDuplicated(w08_selected_ids)||
        any(!statuses_df$record_id%in%w08_selected_ids))
       stop("W08 human classifications are inconsistent with selected records: ",cohort)
+    # Do not create a fabricated W08 status. If the source is not found,
+    # report whether it is present in the other W08 cohort or its selection
+    # manifest; this identifies incorrect cohort assignment or an incomplete
+    # human snapshot before a colleague-review ZIP can be exported.
+    missing_ids<-setdiff(ids,as.character(statuses_df$record_id))
+    if(length(missing_ids)) {
+      other<-if(identical(cohort,"first10"))"remaining90" else "first10"
+      other_ids<-as.character(statuses[[other]]$record_id)
+      diagnosis<-data.frame(
+        record_id=missing_ids,
+        mechanism_cohort=cohort,
+        in_this_W08_selection=missing_ids%in%w08_selected_ids,
+        in_other_W08_classifications=missing_ids%in%other_ids,
+        in_other_W08_selection=missing_ids%in%as.character(unlist(
+          get_manifest(file.path(w08_dirs[[other]],"manifest.json"))$selected_record_ids,
+          use.names=FALSE)),
+        stringsAsFactors=FALSE)
+      report<-file.path(root,"fulltext_case_discrepancy_W08_match_diagnostics.csv")
+      utils::write.csv(diagnosis,report,row.names=FALSE)
+      stop("Full-text mechanism records are missing from the matched W08 ",
+           "classification table. This is a source/cohort reconciliation ",
+           "error, not evidence that W08 never assessed them. ",
+           "Diagnostic CSV: ",report,". First ID: ",missing_ids[[1L]])
+    }
     queue_source<-file.path(sc(m$source_w09),"retrieval_queue.csv")
     if(!file.exists(queue_source)||!identical(sha(queue_source),
                                             sc(m$w09_queue_sha256)))
@@ -145,14 +169,10 @@ review_ostara_fulltext_case_discrepancies <- function(map_path=NULL,
       if(!identical(st,"case_present"))next
       id<-sc(z$record_id)
       row<-match(id,statuses_df$record_id)
-      # W09 included records can extend beyond W08's sampled or validated
-      # population. A missing W08 classification is NOT a negative decision.
-      # Distinguish selected-but-unvalidated from never selected at W08.
-      old<-if(!is.na(row))sc(statuses_df$final_case_status[[row]]) else
-        if(id%in%w08_selected_ids)"unvalidated_W08" else "not_assessed_W08"
+      if(is.na(row))stop("W08 matching invariant failed for ",id)
+      old<-sc(statuses_df$final_case_status[[row]])
       if(old%in%c("specific_case","multiple_cases"))next
-      if(!old%in%c("no_identifiable_case","unclear",
-                   "unvalidated_W08","not_assessed_W08"))
+      if(!old%in%c("no_identifiable_case","unclear","unvalidated_W08"))
         stop("Unexpected W08 status for full-text new case: ",old)
       qi<-match(id,q$record_id)
       if(is.na(qi))stop("Full-text ID absent from retrieval queue: ",id)
