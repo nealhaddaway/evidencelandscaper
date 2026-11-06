@@ -111,8 +111,9 @@ export_ostara_client_databases <- function(map_path=NULL,output_dir=NULL) {
     bycode<-split(ont,ont$mechanism_id)
     assessments<-jl(ledger)
     ids<-vapply(assessments,function(z)sc(z$record_id),character(1))
-    if(anyDuplicated(ids)||any(!ids%in%publications$record_id))
-      stop("Invalid FT mechanism publication IDs: ",d)
+    if(anyDuplicated(ids)||any(!ids%in%publications$record_id)||
+       any(publications$cohort[match(ids,publications$record_id)]!=cohort))
+      stop("Invalid or cross-cohort FT mechanism publication IDs: ",d)
     for(z in assessments) {
       id<-sc(z$record_id)
       for(v in z$mechanism_inventory) {
@@ -176,8 +177,9 @@ export_ostara_client_databases <- function(map_path=NULL,output_dir=NULL) {
       stop("Unexpected Insights checkpoint schema: ",d)
     rs<-jl(file.path(d,"insights_assessments.jsonl"))
     ids<-vapply(rs,function(z)sc(z$record_id),character(1))
-    if(anyDuplicated(ids)||any(!ids%in%publications$record_id))
-      stop("Invalid Insights record IDs: ",d)
+    if(anyDuplicated(ids)||any(!ids%in%publications$record_id)||
+       any(publications$cohort[match(ids,publications$record_id)]!=cohort))
+      stop("Invalid or cross-cohort Insights record IDs: ",d)
     for(z in rs) {
       id<-sc(z$record_id)
       insight_status_rows[[length(insight_status_rows)+1L]]<-c(
@@ -283,6 +285,8 @@ export_ostara_client_databases <- function(map_path=NULL,output_dir=NULL) {
     }
   }
   cases<-rows_df(case_rows,ccols)
+  if(anyDuplicated(cases$case_id))
+    stop("Duplicate case IDs after checkpoint consolidation.")
   # W07 candidate proposals: archived full-study coding runs, not pilots.
   # Keep original source-level rows and preserve duplicate hypotheses.
   candidate_cols<-c("candidate_id","record_id","cohort","source_stage",
@@ -372,6 +376,55 @@ export_ostara_client_databases <- function(map_path=NULL,output_dir=NULL) {
       nrow(candidates),length(chosen_ids),length(insight_status_rows)),
     stringsAsFactors=FALSE)
   paths$summary<-writeout("ostara_export_summary.csv",summary)
+  # Export the question mapping alongside the adjacent answer/evidence columns.
+  case_field_rows<-unlist(lapply(case_sources,function(src)
+    lapply(seq_len(nrow(src$spec)),function(i) {
+      x<-src$spec[i,,drop=FALSE]
+      c(field_id=sc(x$field_id),question=sc(x$Question),
+        definition=if("Definition"%in%names(x))sc(x$Definition) else "",
+        answer_form=if("Answer_form"%in%names(x))sc(x$Answer_form) else "",
+        extraction_schema_sha256=sc(src$manifest$csv_sha256))
+    })),recursive=FALSE)
+  case_field_rows<-case_field_rows[!duplicated(vapply(case_field_rows,
+    function(z)paste(z,collapse="\u001f"),character(1)))]
+  paths$case_codebook<-writeout("ostara_case_field_codebook.csv",
+    rows_df(case_field_rows,c("field_id","question","definition",
+                              "answer_form","extraction_schema_sha256")))
+  # A plain-language summary is supplied without altering source checkpoints.
+  readme<-c(
+    "OSTARA CLIENT EVIDENCE DATABASE EXPORT",
+    "",
+    "This is a snapshot of saved assessments; no new model calls were made.",
+    "The following files use record_id to link to ostara_publications.csv.",
+    "",
+    "ostara_cases_with_adjacent_evidence.csv:",
+    "  One row per case. Every field value is immediately followed by its",
+    "  verbatim evidence quotation / source anchor, then reporting status.",
+    "ostara_fulltext_mechanisms_with_adjacent_evidence.csv:",
+    "  One row per publication and approved mechanism code; coded status is",
+    "  immediately followed by evidence quotation and source anchor.",
+    "ostara_fulltext_insights_with_adjacent_evidence.csv:",
+    "  One row per insight; insight summary is immediately followed by evidence",
+    "  quotation and source anchor.",
+    "ostara_candidate_mechanisms_source.csv:",
+    "  Source-level candidate proposals from saved W07 full runs and",
+    "  the pinned full-text mechanism inventories, NOT yet harmonised.",
+    "ostara_candidate_mechanisms_harmonisation_review.csv:",
+    "  Review worksheet only; pending decisions are not final.",
+    "ostara_publications.csv:",
+    "  Linking register, including case and Insights assessment status.",
+    "",
+    "WARNING: A successful export does not guarantee all selected full texts",
+    "have completed every assessment; inspect publication statuses.",
+    "Case checkpoint selection: latest ledger per publication, including",
+    "historical and supplementary extraction runs; inspect source_run.",
+    "The candidate proposal inventory does not assert human harmonisation.",
+    "Evidence flags in source JSONL are not automatically verified.",
+    "No source full-text PDFs, XML or licensed abstracts are redistributed.",
+    "See ostara_export_source_manifest.csv and README_provenance.json."
+  )
+  writeLines(readme,file.path(output_dir,"README.txt"),useBytes=TRUE)
+  paths$readme<-file.path(output_dir,"README.txt")
   metadata<-list(schema="ostara-client-databases-export-v1",
     exported_at_utc=format(Sys.time(),"%Y-%m-%dT%H:%M:%SZ",tz="UTC"),
     source_stage="saved_checkpoint_exports_without_new_model_calls",
