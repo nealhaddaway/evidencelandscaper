@@ -1,12 +1,24 @@
 #!/usr/bin/env Rscript
 # Packaged Shiny human-review app for full-text-only OSTARA case candidates.
 args<-commandArgs(trailingOnly=TRUE)
-if(length(args)!=2L)stop("Usage: Rscript case_discrepancy_app.R queue.jsonl review_dir")
+if(length(args)!=2L) {
+  # Portable ZIP: shiny::runApp() sets the working directory to the bundle.
+  args<-c(file.path("data","review_queue.jsonl"),file.path("data","reviewer_state"))
+  dir.create(args[[2L]],recursive=TRUE,showWarnings=FALSE)
+}
+
 for(p in c("shiny","jsonlite","digest"))
   if(!requireNamespace(p,quietly=TRUE))
     stop("Install the R package: ",p)
 queue_file<-normalizePath(args[[1L]],mustWork=TRUE)
 state<-normalizePath(args[[2L]],mustWork=TRUE)
+bundle_manifest<-file.path(dirname(dirname(queue_file)),"manifest.json")
+if(file.exists(bundle_manifest)) {
+  manifest<-jsonlite::fromJSON(bundle_manifest,simplifyVector=FALSE)
+  actual<-digest::digest(file=queue_file,algo="sha256",serialize=FALSE)
+  if(!identical(manifest$queue_sha256,actual))
+    stop("The ZIP review queue has been changed or corrupted.")
+}
 sc<-function(x)if(is.null(x)||!length(x))"" else
   paste(as.character(unlist(x,use.names=FALSE)),collapse="; ")
 lines<-readLines(queue_file,warn=FALSE,encoding="UTF-8")
@@ -65,7 +77,8 @@ ui<-shiny::fluidPage(
         shiny::h4("Exports"),
         shiny::downloadButton("approved","Approved W09 IDs"),
         shiny::tags$p("Only explicitly accepted publications are exported."),
-        shiny::downloadButton("all_decisions","All human decisions")
+        shiny::downloadButton("all_decisions","All human decisions"),
+        shiny::downloadButton("return_json","Return adjudication JSON")
       )
     ),
     shiny::column(9,
@@ -251,6 +264,26 @@ server<-function(input,output,session) {
                               Sys.Date(),".csv"),
     content=function(file)utils::write.csv(
       export_table(TRUE),file,row.names=FALSE,na="")
+  )
+  output$return_json<-shiny::downloadHandler(
+    filename=function()"ostara_case_discrepancy_adjudications.json",
+    content=function(file) {
+      es<-decisions()
+      entries<-lapply(seq_along(data),function(i) {
+        e<-es[[keys[[i]]]]
+        if(is.null(e)||sc(e$decision)=="pending")return(NULL)
+        list(record_id=ids[[i]],cohort=sc(data[[i]]$cohort),
+          mechanism_manifest_sha256=sc(data[[i]]$mechanism_manifest_sha256),
+          decision=sc(e$decision),notes=sc(e$notes),reviewer=sc(e$reviewer),
+          timestamp_utc=sc(e$timestamp_utc))
+      })
+      entries<-Filter(Negate(is.null),entries)
+      payload<-list(schema="ostara-ft-case-discrepancy-adjudications-v1",
+        queue_sha256=queue_sha,records=entries,
+        exported_at_utc=format(Sys.time(),"%Y-%m-%dT%H:%M:%SZ",tz="UTC"))
+      jsonlite::write_json(payload,file,pretty=TRUE,auto_unbox=TRUE,
+                           null="null")
+    }
   )
   output$all_decisions<-shiny::downloadHandler(
     filename=function()paste0("ostara-case-review-all-",
