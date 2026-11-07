@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSTARA | Explore collective action by commodity</title>
+<style>
+:root{--ink:#2a3932;--muted:#65756d;--bg:#f8f8f4;--line:#dce4dc;--accent:#805a43;--on:#edf0e9;--paper:#fffdf7}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 system-ui,-apple-system,Arial,sans-serif}
+a{color:#835338}button,input,select{font:inherit}button{cursor:pointer}
+.top{background:var(--paper);border-bottom:1px solid var(--line);padding:18px max(22px,calc((100vw - 1320px)/2))}
+.top .eyebrow,.eyebrow{font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:750;color:var(--accent)}
+.top h1{font:clamp(29px,3.2vw,43px)/1.1 Georgia,serif;margin:7px 0}.top p{margin:0;color:var(--muted);max-width:770px}
+nav{float:right;font-size:12px;display:flex;gap:17px;align-items:center}
+main{max-width:1320px;padding:26px 22px 80px;margin:auto}
+.section-header{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:0 0 15px}
+.section-header h2{font:26px Georgia,serif;margin:0}.hint,.muted{color:var(--muted);font-size:12px}
+#commodity-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:13px;margin:15px 0 31px}
+.crop-card{position:relative;background:var(--paper);border:1px solid #d9e0d7;border-radius:10px;min-height:185px;padding:10px 8px 13px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px;transition:border-color .15s,transform .15s,box-shadow .15s;color:var(--ink)}
+.crop-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px #26372a14}.crop-card.selected{border:2px solid var(--accent);padding:9px 7px 12px;background:#f8f3e9}
+.crop-card .check{display:none;position:absolute;right:7px;top:7px;color:var(--accent);font-weight:800}.crop-card.selected .check{display:block}
+.crop-image{height:125px;width:112px;display:flex;justify-content:center;align-items:center;overflow:hidden;background:#faf8f1}
+.crop-image img{height:100%;width:100%;object-fit:contain;filter:saturate(.72) contrast(.95)}
+.crop-image.no-art{background:#f1f0e9;border-radius:3px}.no-art .initial{font:36px Georgia,serif;color:#819083}
+.crop-label{font-weight:650;font-size:13px}.crop-count{font-size:11px;color:var(--muted)}
+#explorer{border-top:1px solid var(--line);padding-top:25px}
+.filters{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:11px;margin:17px 0}
+.filter label{display:block;color:var(--muted);font-size:11px;margin-bottom:5px;font-weight:700}
+.filter select,.search{width:100%;border:1px solid #cdd9d1;background:#fff;border-radius:6px;padding:10px 9px;min-width:0;color:var(--ink)}
+.actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:14px 0}
+.secondary{background:transparent;border:1px solid var(--line);border-radius:6px;padding:8px 11px;color:var(--ink)}
+#search{max-width:400px}.results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.case-card{background:#fff;border:1px solid var(--line);border-radius:9px;padding:18px 19px;display:flex;flex-direction:column;gap:9px}
+.case-card h3{font:21px/1.2 Georgia,serif;margin:0}.case-card p{margin:0;color:#40524a;font-size:13px}
+.tags{display:flex;flex-wrap:wrap;gap:6px}.tag{font-size:11px;border:1px solid var(--line);background:#f1f4ee;padding:3px 8px;border-radius:20px;color:#476052}
+.case-card .bottom{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:10px;gap:10px}
+.explore{background:#385547;color:white;border:0;border-radius:6px;padding:9px 12px;font-weight:700;font-size:12px}
+.explore:hover{background:#273e33}
+.empty{grid-column:1/-1;padding:28px;border:1px dashed #bdcfc0;border-radius:9px;color:var(--muted)}
+#overlay{position:fixed;inset:0;background:#1c2926aa;z-index:20;display:none;justify-content:flex-end}
+#overlay.open{display:flex}
+.panel{width:min(720px,100vw);height:100%;background:white;display:flex;flex-direction:column;box-shadow:-12px 0 35px #1e272333}
+.panel-head{padding:22px 26px 14px;border-bottom:1px solid var(--line);flex-shrink:0}
+.panel-head h2{font:28px Georgia,serif;margin:7px 0}.panel-head .buttons{display:flex;justify-content:space-between;gap:9px;align-items:center}
+.panel-scroll{overflow-y:auto;padding:17px 27px 35px}
+.field{padding:13px 0;border-bottom:1px solid #e5ebe5}
+.field-name{font-size:12px;font-weight:720}.field-value{white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0;font-size:13px}
+.evidence{border-left:3px solid #bdcbbd;padding:9px 11px;background:#f5f7f3;white-space:pre-wrap;overflow-wrap:anywhere;color:#516358;font-size:12px}
+.status{font-size:11px;color:var(--muted)}
+details.group{border-bottom:1px solid var(--line)}details.group summary{font-weight:720;padding:15px 0;cursor:pointer;font-size:14px}
+blockquote{margin:0}.source{font-size:12px;color:var(--muted);line-height:1.65}
+#illustration-note{font-size:11px;color:var(--muted);margin-top:-18px;margin-bottom:28px}
+@media(max-width:1050px){.filters{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:680px){.top{padding:16px}.top nav{float:none;margin-bottom:8px}.top h1{font-size:30px}main{padding:20px 14px}.results{grid-template-columns:1fr}.filters{grid-template-columns:repeat(2,1fr)}#commodity-grid{grid-template-columns:repeat(auto-fill,minmax(115px,1fr));gap:9px}.crop-card{min-height:166px}.crop-image{height:102px;width:102px}.panel-head{padding:15px}.panel-scroll{padding:12px 17px}#search{max-width:100%}}
+</style></head><body>
+<header class="top"><nav><span>Commodity case explorer</span><a id="atlas-link" href="#" style="display:none">Geographic evidence atlas</a></nav>
+<div class="eyebrow">OSTARA / COLLECTIVE ACTION</div>
+<h1>Explore the evidence by commodity</h1>
+<p>Discover reported collective-action cases in agricultural, livestock and forest-product supply chains. Choose one or more commodities, refine the results, and open the complete evidence behind each case.</p></header>
+<main><section><div class="section-header"><h2>Choose commodities</h2><span class="hint">Select several or leave all unselected</span></div>
+<div id="commodity-grid" aria-label="Commodity selection"></div>
+<div id="illustration-note">Historical botanical artwork is sourced where verified. Missing illustrations remain text-labelled rather than being replaced by generated images.</div>
+</section>
+<section id="explorer"><div class="section-header"><h2>Explore cases</h2><span id="counts" class="hint"></span></div>
+<div class="filters">
+<div class="filter"><label for="stage">Supply-chain stage</label><select id="stage"><option value="">All stages</option></select></div>
+<div class="filter"><label for="country">Country</label><select id="country"><option value="">All countries</option></select></div>
+<div class="filter"><label for="status">Case status</label><select id="status"><option value="">All statuses</option></select></div>
+<div class="filter"><label for="level">Collective-action level</label><select id="level"><option value="">All levels</option></select></div>
+<div class="filter"><label for="interest">Shared interest</label><select id="interest"><option value="">All interests</option></select></div>
+</div>
+<div class="actions"><input class="search" id="search" type="search" placeholder="Search case names, publications and descriptions" aria-label="Search cases">
+<button class="secondary" id="clear">Clear selections</button></div>
+<div class="results" id="results" aria-live="polite"></div></section>
+</main>
+<div id="overlay" role="dialog" aria-modal="true" aria-label="Full extracted case">
+<div class="panel"><div class="panel-head"><div class="buttons"><span class="eyebrow">FULL CASE RECORD / SOURCE-ANCHORED EXTRACTION</span><button class="secondary" id="close">Close ×</button></div>
+<h2 id="detail-title"></h2><div class="tags" id="detail-tags"></div>
+<div class="actions"><button class="secondary" id="toggle-evidence">Hide all evidence</button><button class="secondary" id="toggle-missing">Show unreported fields</button></div></div>
+<div id="detail-body" class="panel-scroll"></div></div></div>
+<script id="data" type="application/json">__DATA__</script>
+<script>
+"use strict";
+const data=JSON.parse(document.getElementById("data").textContent);
+const cases=data.cases||[], art=data.artwork||{}, library=data.commodities||[];
+const $=id=>document.getElementById(id);
+const escapeHtml=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;":"&quot;","'":"&#39;"}[c]));
+const selected=new Set();const filterIds=["stage","country","status","level","interest"];
+let active=null,showEvidence=true,showMissing=false,lastFocus=null;
+if(data.atlas_url){const el=$("atlas-link");el.href=data.atlas_url;el.style.display="inline";}
+function uniq(a){return [...new Set(a.filter(Boolean))].sort((a,b)=>a.localeCompare(b))}
+function fieldvals(c,k){return c.facets?.[k]||[]}
+function selectedPass(c){return !selected.size||fieldvals(c,"commodity").some(x=>selected.has(x))}
+function fieldPass(c,except){return filterIds.every(k=>k===except||!$(k).value||fieldvals(c,k).includes($(k).value))}
+function searchPass(c){const q=$("search").value.trim().toLowerCase();return !q||[c.name,c.title,c.description,c.case_id,c.record_id,...c.fields.map(f=>f.value)].join(" ").toLowerCase().includes(q)}
+function matches(c){return selectedPass(c)&&fieldPass(c,null)&&searchPass(c)}
+function syncOptions(){
+ for(const k of filterIds){
+ const sel=$(k),val=sel.value;
+ const eligible=cases.filter(c=>selectedPass(c)&&fieldPass(c,k)&&searchPass(c));
+ const values=uniq(eligible.flatMap(c=>fieldvals(c,k)));
+ while(sel.options.length>1)sel.remove(1);
+ for(const v of values){const count=eligible.filter(c=>fieldvals(c,k).includes(v)).length;sel.add(new Option(v+" ("+count+")",v));}
+ sel.value=values.includes(val)?val:"";
+ }
+}
+function makeArtwork(commodity){
+ const a=art[commodity],wrap=document.createElement("span");wrap.className="crop-image";
+ if(a?.url){
+   const img=document.createElement("img");
+   img.loading="lazy";img.alt="Historical illustration of "+commodity;
+   img.src=a.url;img.onerror=()=>{wrap.classList.add("no-art");wrap.replaceChildren();let t=document.createElement("span");t.className="initial";t.textContent=commodity.slice(0,1);wrap.append(t);};
+   wrap.append(img);
+ }else{
+   wrap.classList.add("no-art");let t=document.createElement("span");t.className="initial";t.textContent=commodity.slice(0,1);wrap.append(t);
+ }
+ return wrap;
+}
+function drawTiles(){
+ const grid=$("commodity-grid");grid.replaceChildren();
+ for(const commodity of library){
+  const btn=document.createElement("button");btn.type="button";btn.className="crop-card"+(selected.has(commodity)?" selected":"");
+  btn.setAttribute("aria-pressed",selected.has(commodity)?"true":"false");
+  const check=document.createElement("span");check.className="check";check.textContent="✓";
+  const label=document.createElement("span");label.className="crop-label";label.textContent=commodity;
+  const count=document.createElement("span");count.className="crop-count";
+  count.textContent=cases.filter(c=>fieldvals(c,"commodity").includes(commodity)).length+" cases";
+  btn.append(check,makeArtwork(commodity),label,count);
+  btn.onclick=()=>{if(selected.has(commodity))selected.delete(commodity);else selected.add(commodity);syncOptions();render();};
+  grid.append(btn);
+ }
+}
+function tags(c){return [...fieldvals(c,"commodity").slice(0,3),...fieldvals(c,"country").slice(0,2),...fieldvals(c,"stage").slice(0,2),...fieldvals(c,"status").slice(0,1)]}
+function render(){
+ syncOptions();drawTiles();
+ const filtered=cases.filter(matches),root=$("results");root.replaceChildren();
+ $("counts").textContent=filtered.length+" cases · "+new Set(filtered.map(c=>c.record_id)).size+" publications";
+ if(!filtered.length){
+  const empty=document.createElement("div");empty.className="empty";
+  empty.textContent="No cases match these selections. Remove a filter or choose another commodity.";root.append(empty);return;
+ }
+ for(const c of filtered){
+  const box=document.createElement("article");box.className="case-card";
+  const title=document.createElement("h3");title.textContent=c.name;
+  const pills=document.createElement("div");pills.className="tags";
+  for(const x of tags(c)){const tag=document.createElement("span");tag.className="tag";tag.textContent=x;pills.append(tag);}
+  const summary=document.createElement("p");summary.textContent=c.description||"No case description reported in the structured extraction.";
+  const bottom=document.createElement("div");bottom.className="bottom";
+  const source=document.createElement("span");source.className="muted";source.textContent=c.title;
+  const go=document.createElement("button");go.className="explore";go.textContent="Explore full case ↗";
+  go.onclick=()=>openCase(c);bottom.append(source,go);box.append(title,pills,summary,bottom);root.append(box);
+ }
+}
+const groupNames=["Overview and geography","Actors and participation","Organisation and governance","Activities and supply chain","Resources and outcomes","Enablers, barriers and lessons","Other extracted fields"];
+function groupFor(q){
+ if(/(country|countries|geograph|where did|location|crop|commodit|production system|status|scale|level|case name|case description)/i.test(q))return groupNames[0];
+ if(/(actor|participant|stakeholder|membership|shared interest)/i.test(q))return groupNames[1];
+ if(/(govern|decision|organis|coordinat|institution|leadership)/i.test(q))return groupNames[2];
+ if(/(activit|supply.chain|value.chain|implementation|transport|processing|market)/i.test(q))return groupNames[3];
+ if(/(resource|incentive|funding|finance|benefit|outcome|impact|cost)/i.test(q))return groupNames[4];
+ if(/(barrier|enabler|challenge|lesson|constraint|opportunit)/i.test(q))return groupNames[5];
+ return groupNames[6];
+}
+function openCase(c){
+ active=c;lastFocus=document.activeElement;showEvidence=true;showMissing=false;
+ $("detail-title").textContent=c.name;$("toggle-evidence").textContent="Hide all evidence";$("toggle-missing").textContent="Show unreported fields";
+ $("detail-tags").replaceChildren();
+ for(const x of tags(c)){const tag=document.createElement("span");tag.className="tag";tag.textContent=x;$("detail-tags").append(tag);}
+ drawDetail();$("overlay").classList.add("open");document.body.style.overflow="hidden";$("close").focus();
+}
+function drawDetail(){
+ if(!active)return;const c=active,body=$("detail-body");
+ let html='<p class="source"><b>Publication:</b> '+escapeHtml(c.title);
+ if(c.doi_url&&/^https:\\/\\/doi\\.org\\//.test(c.doi_url))html+=' · <a href="'+escapeHtml(c.doi_url)+'" target="_blank" rel="noopener noreferrer">DOI</a>';
+ html+='<br><b>Case ID:</b> '+escapeHtml(c.case_id)+' · <b>Record ID:</b> '+escapeHtml(c.record_id)+'</p>';
+ if(c.assessment_reason)html+='<p class="source"><b>Case assessment:</b> '+escapeHtml(c.assessment_reason)+'</p>';
+ const grouped=new Map(groupNames.map(g=>[g,[]]));
+ for(const f of c.fields)grouped.get(groupFor(f.question)).push(f);
+ for(const [name,fields] of grouped){
+  const visible=fields.filter(f=>showMissing||f.status!=="not_reported");
+  if(!visible.length)continue;
+  html+='<details class="group" '+(name===groupNames[0]?'open':'')+'><summary>'+escapeHtml(name)+' ('+visible.length+')</summary>';
+  for(const f of visible){
+    const val=f.status==="not_reported"?"Not reported":f.status==="explicitly_none"?"Explicitly none":f.display_value||f.value||"No value provided";
+    html+='<div class="field"><div class="field-name">'+escapeHtml(f.question)+'</div><div class="field-value">'+escapeHtml(val)+'</div>';
+    if(showEvidence&&f.evidence)html+='<blockquote class="evidence">'+escapeHtml(f.evidence)+'</blockquote>';
+    if(f.status!=="reported")html+='<div class="status">Reporting status: '+escapeHtml(f.status)+'</div>';
+    html+='</div>';
+  }
+  html+='</details>';
+ }
+ if(c.boundary_uncertainty)html+='<p class="source"><b>Case boundary uncertainty:</b> '+escapeHtml(c.boundary_uncertainty)+'</p>';
+ if(c.cohort)html+='<p class="source"><b>Extraction cohort:</b> '+escapeHtml(c.cohort)+'</p>';
+ body.innerHTML=html;
+}
+function closeDetail(){$("overlay").classList.remove("open");document.body.style.overflow="";active=null;lastFocus?.focus();}
+$("close").onclick=closeDetail;
+$("overlay").addEventListener("click",e=>{if(e.target===$("overlay"))closeDetail()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&active)closeDetail()});
+$("toggle-evidence").onclick=()=>{showEvidence=!showEvidence;$("toggle-evidence").textContent=showEvidence?"Hide all evidence":"Show all evidence";drawDetail()};
+$("toggle-missing").onclick=()=>{showMissing=!showMissing;$("toggle-missing").textContent=showMissing?"Hide unreported fields":"Show unreported fields";drawDetail()};
+$("clear").onclick=()=>{selected.clear();$("search").value="";filterIds.forEach(k=>$(k).value="");render()};
+$("search").addEventListener("input",render);
+filterIds.forEach(k=>$(k).addEventListener("change",render));
+render();
+</script></body></html>
