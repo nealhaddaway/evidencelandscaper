@@ -205,6 +205,23 @@ export_ostara_commodity_case_explorer <- function(
       url="https://commons.wikimedia.org/wiki/Special:FilePath/K%C3%B6hler%27s_Medizinal-Pflanzen_in_naturgetreuen_Abbildungen_mit_kurz_erl%C3%A4uterndem_Texte_-_Vol._3_-_Plate_78.jpg?width=320",
       source="https://commons.wikimedia.org/wiki/File:K%C3%B6hler%27s_Medizinal-Pflanzen_in_naturgetreuen_Abbildungen_mit_kurz_erl%C3%A4uterndem_Texte_-_Vol._3_-_Plate_78.jpg",
       creator="Köhler's Medizinal-Pflanzen",rights="Public domain"))
+  # Additional checked historical plates from the same Köhler series.
+  add_plate<-function(commodity,stem) {
+    file<-paste0(stem,".jpg")
+    url<-paste0("https://commons.wikimedia.org/wiki/Special:FilePath/",
+      utils::URLencode(file,reserved=TRUE),"?width=320")
+    source<-paste0("https://commons.wikimedia.org/wiki/File:",
+      utils::URLencode(file,reserved=TRUE))
+    image_manifest[[commodity]]<<-list(url=url,source=source,
+      creator="Köhler's Medizinal-Pflanzen",rights="Public domain")
+  }
+  add_plate("Tea","Camellia sinensis - Köhler–s Medizinal-Pflanzen-025")
+  add_plate("Cassava","Manihot esculenta - Köhler–s Medizinal-Pflanzen-090")
+  add_plate("Cotton","Gossypium barbadense - Köhler–s Medizinal-Pflanzen-068")
+  add_plate("Rice","Oryza sativa - Köhler–s Medizinal-Pflanzen-232")
+  add_plate("Rubber","Hevea brasiliensis - Köhler–s Medizinal-Pflanzen-071")
+  add_plate("Sugarcane","Saccharum officinarum - Köhler–s Medizinal-Pflanzen-125")
+  add_plate("Palm oil","Elaeis guineensis - Köhler–s Medizinal-Pflanzen-056")
   image_manifest<-image_manifest[names(image_manifest)%in%all_commodities]
   payload<-list(schema="ostara-commodity-explorer-v1",cases=rows,
     commodities=all_commodities,artwork=image_manifest,
