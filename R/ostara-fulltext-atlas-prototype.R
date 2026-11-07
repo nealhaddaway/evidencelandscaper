@@ -60,6 +60,7 @@ export_ostara_fulltext_atlas_prototype <- function(
              "evidence_quote","evidence_anchor")%in%names(mechanisms)))
     stop("Mechanism database missing required columns.")
   field_cols<-grep("^field_[0-9]{3} :: ",names(cases),value=TRUE)
+  field_cols<-field_cols[!grepl(" \\[(evidence|reporting status)\\]$",field_cols)]
   if(!length(field_cols))
     stop("No field_### :: Question columns found in case database.")
   for(f in field_cols) {
