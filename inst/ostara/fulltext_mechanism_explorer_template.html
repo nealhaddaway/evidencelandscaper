@@ -1,0 +1,103 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OSTARA | Full-text mechanism explorer</title><style>
+:root{--dark:#193a32;--green:#176957;--line:#dce5df;--muted:#65766e;--bg:#f6f8f5}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font:14px/1.55 system-ui,sans-serif;color:var(--dark)}
+header{background:#183d34;color:white;padding:28px max(22px,calc((100vw - 1240px)/2))}h1{font:clamp(28px,4vw,43px)/1.14 Georgia,serif;margin:7px 0}
+header p{max-width:920px;color:#d8e6df;margin:0}main{max-width:1240px;margin:auto;padding:24px 22px 50px}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:20px}
+.stat,.panel,.mech{border:1px solid var(--line);border-radius:10px;background:white}.stat{padding:15px}.stat strong{display:block;font-size:27px}.stat small{color:var(--muted)}
+.controls{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:11px;background:white;padding:15px;border:1px solid var(--line);border-radius:10px}
+label{font-size:12px;font-weight:700;color:var(--muted)}input,select{display:block;width:100%;padding:9px;border-radius:6px;border:1px solid #c8d8cd;margin-top:5px;background:white;color:var(--dark)}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.tabs button{border:1px solid var(--line);padding:10px 14px;border-radius:7px;color:var(--dark);background:white;cursor:pointer}.tabs button.active{background:var(--green);color:white}
+.panel{padding:20px;margin-bottom:15px}h2{font:26px Georgia,serif;margin:0 0 10px}h3{font:20px Georgia,serif;margin:0 0 7px}
+.note{color:var(--muted);font-size:12px}.mech{margin:13px 0;padding:15px}.mech summary{font-weight:750;cursor:pointer}
+.id{font:12px ui-monospace,monospace;color:var(--green);margin-right:9px}.chips{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}.chip{font-size:11px;background:#edf3ef;padding:3px 9px;border-radius:18px}
+.countgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin-top:12px}.count{border-radius:6px;background:#f0f4f0;text-align:center;padding:8px 5px}.count strong{display:block;font-size:17px}.count small{font-size:10px;color:var(--muted)}
+.evidence{border-left:3px solid #a6bcae;padding:10px 12px;margin:9px 0;background:#f5f7f3;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+.record{border-top:1px solid #e4ece5;padding:12px 0}.record strong{font-size:13px}.record .meta{font-size:11px;color:var(--muted)}button.show{border:1px solid var(--line);border-radius:6px;background:white;padding:8px 11px;margin-top:9px;cursor:pointer}
+.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse}th,td{padding:9px;border-bottom:1px solid #e3ebe4;text-align:left}th{font-size:12px}
+footer{max-width:1240px;margin:auto;color:var(--muted);font-size:12px;padding:0 22px 30px}
+@media(max-width:800px){.summary{grid-template-columns:repeat(2,1fr)}.controls{grid-template-columns:repeat(2,1fr)}.countgrid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:500px){.controls{grid-template-columns:1fr}.countgrid{grid-template-columns:repeat(2,1fr)}}
+</style></head><body>
+<header><div style="letter-spacing:.14em;font-size:11px;color:#a9d6c1">OSTARA / FULL-TEXT EVIDENCE</div><h1>Collective-action mechanism explorer</h1>
+<p>Explore the approved three-level mechanism ontology and source-anchored full-text assessments. Mechanism assignments describe publications, not necessarily individual extracted cases.</p></header>
+<main><div id="summary" class="summary"></div>
+<div class="controls"><label>Search mechanisms and publications<input id="search" type="search" placeholder="Mechanism, definition, title, record ID…"></label>
+<label>Collective-action type<select id="type"><option value="">All types</option></select></label>
+<label>High-level mechanism<select id="high"><option value="">All mechanisms</option></select></label>
+<label>Full-text status<select id="status"><option value="">All statuses</option><option value="implemented_case">Implemented</option><option value="mentioned_only">Mentioned only</option><option value="proposed_only">Proposed only</option><option value="unclear">Unclear</option><option value="not_identified">Not identified</option></select></label></div>
+<div class="tabs"><button data-tab="ontology" class="active">Approved ontology</button><button data-tab="inventory">Evidence by publication</button><button data-tab="candidates">Novel mechanism candidates</button><button data-tab="methods">Methods and provenance</button></div>
+<div id="body"></div></main>
+<footer>Counts are publication-level statuses among available full texts assessed in the approved inventory runs. They are not counts of independent cases, effectiveness, or prevalence. Proposed novel mechanisms have not been added to the approved ontology.</footer>
+<script id="data" type="application/json">__OSTARA_MECHANISM_DATA__</script>
+<script>
+(function(){"use strict";
+const d=JSON.parse(document.getElementById("data").textContent),$=id=>document.getElementById(id);
+const esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fs=x=>String(x??"").toLowerCase();
+const statuses=["implemented_case","mentioned_only","proposed_only","unclear","not_identified"];
+const short={implemented_case:"Implemented",mentioned_only:"Mentioned only",proposed_only:"Proposed only",unclear:"Unclear",not_identified:"Not identified"};
+const pubs=new Map((d.publications||[]).map(x=>[x.record_id,x]));
+let tab="ontology";
+function stat(v,t){return '<div class="stat"><strong>'+esc(v)+'</strong><small>'+esc(t)+'</small></div>'}
+$("summary").innerHTML=stat(d.ontology.length,"Approved codes")+stat(new Set(d.assessments.map(x=>x.record_id)).size,"Assessed full texts")+stat(d.assessments.filter(x=>x.status==="implemented_case").length,"Implemented publication-code assignments")+stat(d.candidates.length,"Novel proposals (not harmonised)");
+const unique=a=>[...new Set(a)].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+for(const [id,items] of [["type",unique(d.ontology.map(x=>x.collective_action_type))],["high",unique(d.ontology.map(x=>x.high_level_mechanism))]]){
+ for(const value of items){const opt=document.createElement("option");opt.value=value;opt.textContent=value;$(id).append(opt);}
+}
+const byid=new Map(d.ontology.map(x=>[x.mechanism_id,x]));
+const find=()=>$("search").value.trim().toLowerCase();
+const filterMech=m=>(!$("type").value||m.collective_action_type===$("type").value)&&(!$("high").value||m.high_level_mechanism===$("high").value);
+const filterAssessment=x=>(!$("status").value||x.status===$("status").value);
+function matchingAssessment(x,m){const pub=pubs.get(x.record_id)||{},q=find();return filterAssessment(x)&&(!q||fs([m.mechanism_id,m.fine_level_mechanism,m.definition,m.high_level_mechanism,pub.title,pub.doi,x.record_id].join(" ")).includes(q));}
+function evidenceRow(x){const p=pubs.get(x.record_id)||{},doi=String(p.doi||"").replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,"");const doiUrl=/^10\.\d{4,9}\//.test(doi)?"https://doi.org/"+encodeURIComponent(doi).replace("%2F","/"):"";
+let out='<div class="record"><strong>'+esc(p.title||x.record_id)+'</strong><div class="meta">'+esc(x.record_id)+' · '+esc(short[x.status]||x.status)+(doiUrl?' · <a target="_blank" rel="noopener noreferrer" href="'+esc(doiUrl)+'">DOI</a>':"")+'</div>';
+if(x.source_quote)out+='<div class="evidence">'+esc(x.source_quote)+(x.source_anchor?'<div class="meta">Source: '+esc(x.source_anchor)+'</div>':"")+'</div>';
+if(x.evidence_review_required)out+='<div class="meta">Evidence review flagged in original extraction</div>';
+return out+'</div>';}
+function renderOntology(){
+const q=find();let html='<div class="panel"><h2>Approved mechanism ontology</h2><p class="note">The 30 approved mechanism codes are preserved. Counts show the assessment status of distinct full-text publications for each code, not case counts. Click to inspect reported evidence.</p>';
+const groups=unique(d.ontology.map(x=>x.collective_action_type));
+let total=0;
+for(const group of groups){
+ const mechanisms=d.ontology.filter(m=>m.collective_action_type===group&&filterMech(m)&&(!q||fs([m.mechanism_id,m.fine_level_mechanism,m.definition,m.high_level_mechanism,group].join(" ")).includes(q)||d.assessments.some(x=>x.mechanism_id===m.mechanism_id&&matchingAssessment(x,m))));
+ if(!mechanisms.length)continue;
+ html+='<h3>'+esc(group)+'</h3>';
+ for(const m of mechanisms){total++;
+ const matches=d.assessments.filter(x=>x.mechanism_id===m.mechanism_id&&matchingAssessment(x,m));
+ const counts=Object.fromEntries(statuses.map(s=>[s,d.assessments.filter(x=>x.mechanism_id===m.mechanism_id&&x.status===s).length]));
+ html+='<details class="mech"><summary><span class="id">'+esc(m.mechanism_id)+'</span>'+esc(m.fine_level_mechanism)+'</summary><div class="chips"><span class="chip">'+esc(m.high_level_mechanism)+'</span></div><p>'+esc(m.definition)+'</p><div class="countgrid">'+statuses.map(s=>'<div class="count"><strong>'+counts[s]+'</strong><small>'+esc(short[s])+'</small></div>').join("")+'</div>';
+ if(matches.length){html+='<details><summary>Publication assessments ('+matches.length+')</summary>'+matches.map(evidenceRow).join("")+'</details>'}else html+='<p class="note">No matching publication assessments.</p>';
+ html+='</details>';
+ }
+}
+html+=total?'':'<p class="note">No matching mechanisms.</p>';
+$("body").innerHTML=html+'</div>';}
+function renderInventory(){
+let rows=d.assessments.filter(x=>{const m=byid.get(x.mechanism_id);return m&&filterMech(m)&&matchingAssessment(x,m)});
+const q=find();rows.sort((a,b)=>a.mechanism_id.localeCompare(b.mechanism_id)||a.record_id.localeCompare(b.record_id));
+let html='<div class="panel"><h2>Full-text publication assessments</h2><p class="note">One assessment per publication and approved mechanism. Every code is assessed for each completed full text. Evidence quotations and anchors accompany non-absent statuses.</p><p class="note">'+rows.length+' matching assessments</p>';
+const page=rows.slice(0,250);
+for(const x of page){const m=byid.get(x.mechanism_id);html+='<details class="mech"><summary><span class="id">'+esc(x.mechanism_id)+'</span>'+esc(m.fine_level_mechanism)+' · '+esc(short[x.status])+'</summary>'+evidenceRow(x)+'</details>'}
+if(rows.length>250)html+='<p class="note">Showing first 250 results. Narrow your filters to view additional assessments.</p>';
+$("body").innerHTML=html+'</div>';}
+function renderCandidates(){
+const q=find();const rows=d.candidates.filter(x=>!q||fs([x.record_id,x.proposed_label,x.working_definition,x.closest_existing_mechanism_id].join(" ")).includes(q));
+let html='<div class="panel"><h2>Proposed novel mechanisms</h2><p class="note">Unharmonised full-text novelty proposals. Suggestions may duplicate each other or map onto existing approved mechanisms. They are not approved additions.</p>';
+for(const x of rows){const p=pubs.get(x.record_id)||{};html+='<details class="mech"><summary>'+esc(x.proposed_label||"Unnamed proposal")+'</summary><p>'+esc(x.working_definition)+'</p><p class="note">Source: '+esc(p.title||x.record_id)+' · '+esc(x.cohort)+' · Support: '+esc(x.support_status)+' · Closest approved mechanism: '+esc(x.closest_existing_mechanism_id||"Not assigned")+'</p>';
+if(x.evidence_quote)html+='<div class="evidence">'+esc(x.evidence_quote)+'<div class="meta">'+esc(x.evidence_anchor)+'</div></div>';
+html+='</details>'}
+if(!rows.length)html+='<p>No matching candidates.</p>';
+$("body").innerHTML=html+'</div>';}
+function renderMethods(){
+let html='<div class="panel"><h2>Methodology and provenance</h2><p>Two approved full-text mechanism inventories (first 10% and remaining 90%) were exported from saved OSTARA W09 assessments using the approved 30-mechanism ontology. Full-text availability limits coverage; unassessed publications are not counted as negative findings.</p><p>Mechanism status <code>implemented_case</code> indicates implementation reported in the publication, not evidence that a mechanism can be assigned to a specific extracted case. <code>not_identified</code> applies only to assessed full texts.</p><p>Candidate mechanisms are unharmonised novelty proposals. No effectiveness or prevalence interpretation is warranted.</p>';
+for(const x of (d.provenance||[]))html+='<p class="note">Source: '+esc(x.source_file)+' · SHA-256: '+esc(x.sha256)+'</p>';
+$("body").innerHTML=html+'</div>';}
+const renders={ontology:renderOntology,inventory:renderInventory,candidates:renderCandidates,methods:renderMethods};
+function render(){renders[tab]();}
+document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;document.querySelectorAll("[data-tab]").forEach(t=>t.classList.toggle("active",t===b));render();});
+for(const id of ["search","type","high","status"])$(id).addEventListener(id==="search"?"input":"change",render);
+render();
+})();
+</script></body></html>
