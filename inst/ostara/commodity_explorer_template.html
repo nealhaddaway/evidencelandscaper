@@ -79,14 +79,16 @@ blockquote{margin:0}.source{font-size:12px;color:var(--muted);line-height:1.65}
 <script>
 "use strict";
 const data=JSON.parse(document.getElementById("data").textContent);
-const cases=data.cases||[], art=data.artwork||{}, library=data.commodities||[];
+const cases=Array.isArray(data.cases)?data.cases:(data.cases?[data.cases]:[]);
+const art=data.artwork||{};
+const library=Array.isArray(data.commodities)?data.commodities:(data.commodities?[data.commodities]:[]);
 const $=id=>document.getElementById(id);
 const escapeHtml=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const selected=new Set();const filterIds=["stage","country","status","level","interest"];
 let active=null,showEvidence=true,showMissing=false,lastFocus=null;
 if(data.atlas_url){const el=$("atlas-link");el.href=data.atlas_url;el.style.display="inline";}
 function uniq(a){return [...new Set(a.filter(Boolean))].sort((a,b)=>a.localeCompare(b))}
-function fieldvals(c,k){return c.facets?.[k]||[]}
+function fieldvals(c,k){const v=c.facets?.[k];return Array.isArray(v)?v:(v?[v]:[])}
 function selectedPass(c){return !selected.size||fieldvals(c,"commodity").some(x=>selected.has(x))}
 function fieldPass(c,except){return filterIds.every(k=>k===except||!$(k).value||fieldvals(c,k).includes($(k).value))}
 function searchPass(c){const q=$("search").value.trim().toLowerCase();return !q||[c.name,c.title,c.description,c.case_id,c.record_id,...c.fields.map(f=>f.value)].join(" ").toLowerCase().includes(q)}
