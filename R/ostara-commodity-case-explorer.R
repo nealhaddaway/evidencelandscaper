@@ -258,6 +258,7 @@ export_ostara_commodity_case_explorer <- function(
   if(is.null(output_dir)) {
     key<-substr(digest::digest(c(
       vapply(input_paths,sha_file,character(1)),sha_file(tpl),
+      digest::digest(html,algo="sha256"),
       if(is.null(atlas_url))"" else as.character(atlas_url)),
       algo="sha256"),1L,12L)
     output_dir<-file.path(map_path,"reports","commodity_case_explorer",key)
