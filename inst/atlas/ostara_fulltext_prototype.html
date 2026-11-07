@@ -42,7 +42,7 @@ details.group{border-bottom:1px solid var(--edge)}details.group>summary{padding:
 <div id="list"></div>
 </aside>
 <section id="maparea"><svg id="world" viewBox="0 0 1000 510" role="img" aria-label="World map with verified case locations"><rect width="1000" height="510" fill="#eaf0e9"/><g>__MAP_PATHS__</g><g id="markers"></g></svg>
-<div id="mapnotice">Verified coordinates only · cases without coordinates remain in the list</div>
+<div id="mapnotice">Approximate gazetteer locations · country-level points are not initiative locations</div>
 <article id="detail" aria-label="Case details"><div id="detailHead"><button class="close" id="closeDetail">Close ×</button><div class="section-caption">Case evidence</div><h2 id="caseTitle"></h2><div id="caseMeta" class="meta"></div><div class="toolbar"><button class="secondary-btn" id="toggleEvidence">Hide all evidence</button><button class="secondary-btn" id="toggleMissing">Show unreported fields</button></div></div><div id="detailBody"></div></article>
 </section></main>
 <script id="atlas-data" type="application/json">__ATLAS_DATA__</script>
@@ -69,7 +69,7 @@ const required=headings.slice(0,6), advanced=headings.slice(6);
 const fieldMatches=(f,regex)=>regex.test(f.question||"");
 const facetValues=(c,f)=>{
  if(f[0]==="mechanism")return (c.mechanisms||[]).map(m=>m.label).filter(Boolean);
- return [...new Set(c.fields.filter(x=>fieldMatches(x,f[2])&&x.status==="reported").flatMap(x=>values(x.value)))];
+ return [...new Set(c.fields.filter(x=>fieldMatches(x,f[2])&&x.status==="reported").flatMap(x=>values(x.display_value??x.value)))];
 };
 const options={};
 const selected={};
@@ -118,7 +118,7 @@ function drawDetail(){
  if(!visible.length)continue;
  html+='<details class="group" '+(name==="Overview and geography"?"open":"")+'><summary>'+esc(name)+' · '+visible.length+' fields</summary>';
  for(const f of visible){
- const val=f.status==="not_reported"?"Not reported":f.status==="explicitly_none"?"Explicitly none":f.value||"Reported (no displayed value)";
+ const val=f.status==="not_reported"?"Not reported":f.status==="explicitly_none"?"Explicitly none":f.display_value||f.value||"Reported (no displayed value)";
  html+='<div class="field"><div class="question">'+esc(f.question)+'</div><div class="answer'+(f.status==="not_reported"?" missing":"")+'">'+esc(val)+'</div>';
  if(showEvidence&&f.evidence)html+='<div class="evidence">'+esc(f.evidence)+'</div>';
  if(f.status!=="reported")html+='<div class="anchor">Reporting status: '+esc(f.status)+'</div>';
@@ -141,7 +141,7 @@ $("reset").onclick=()=>{$("search").value="";Object.values(options).forEach(x=>x
 $("search").addEventListener("input",render);
 function filtersPass(c){
  const query=$("search").value.trim().toLowerCase();
- const haystack=[c.title,c.display_name,c.record_id,c.case_id,...c.fields.map(f=>f.value)].join(" ").toLowerCase();
+ const haystack=[c.title,c.display_name,c.record_id,c.case_id,...c.fields.flatMap(f=>[f.value,f.display_value])].join(" ").toLowerCase();
  return (!query||haystack.includes(query))&&headings.every(f=>!options[f[0]].value||facetValues(c,f).includes(options[f[0]].value));
 }
 function renderMarkers(){
