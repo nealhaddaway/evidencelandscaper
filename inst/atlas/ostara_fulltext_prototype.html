@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OSTARA | Full-text case evidence atlas prototype</title>
+<style>
+:root{--ink:#243a34;--muted:#687b70;--edge:#dce5dd;--bg:#f5f7f3;--accent:#b96040}
+*{box-sizing:border-box}body{margin:0;color:var(--ink);background:var(--bg);font:14px/1.48 system-ui,-apple-system,sans-serif}
+header{height:105px;background:#fff;padding:16px 25px;border-bottom:1px solid var(--edge)}
+header h1{font:30px Georgia,serif;margin:1px 0 3px}header small{color:var(--muted)}
+main{height:calc(100vh - 105px);min-height:500px;display:grid;grid-template-columns:330px minmax(0,1fr)}
+aside{background:#fff;border-right:1px solid var(--edge);overflow:auto;padding:18px 19px}
+h2{font:23px Georgia,serif;margin:0 0 8px}h3{font:18px Georgia,serif;margin:0}
+label{display:block;font-size:12px;font-weight:650;margin:9px 0 3px}
+input,select,button{font:inherit}input,select{width:100%;background:#fff;border:1px solid #cad6ce;border-radius:6px;padding:9px}
+select{max-width:100%}.section-caption{font-size:11px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase;font-weight:750}
+button{cursor:pointer}.secondary-btn{background:#fff;border:1px solid var(--edge);padding:7px 10px;border-radius:5px;color:var(--ink)}
+.toolbar{display:flex;align-items:center;gap:8px;justify-content:space-between;margin:13px 0 8px}
+#count{font-size:12px;color:var(--muted)}#list{margin-top:9px}.item{width:100%;border:0;border-top:1px solid var(--edge);background:#fff;text-align:left;padding:11px 3px;display:block;color:var(--ink)}
+.item:hover,.item.active{background:#f0f5ef}.item strong{display:block;font-size:13px}.item small{display:block;color:var(--muted);margin-top:3px}
+#maparea{position:relative;overflow:hidden;background:#eaf0e9}#world{width:100%;height:100%;display:block}
+.land{stroke:#a9bdb0;stroke-width:.7;fill:none}.graticule{stroke:#d7e5d9;stroke-width:.65}
+.marker{fill:var(--accent);stroke:#fff;stroke-width:1.4;cursor:pointer}.marker.active{fill:#e5a329;stroke:var(--ink);stroke-width:2.3}
+#mapnotice{position:absolute;left:15px;bottom:12px;background:#fffffff0;padding:8px 11px;border:1px solid var(--edge);border-radius:7px;font-size:12px;color:var(--muted)}
+#detail{position:absolute;right:12px;top:12px;bottom:12px;width:min(565px,calc(100% - 24px));background:#fff;border:1px solid var(--edge);box-shadow:0 9px 35px #243a3426;border-radius:10px;display:none;overflow:hidden;z-index:4}
+#detail.open{display:flex;flex-direction:column}#detailHead{padding:18px 20px 13px;border-bottom:1px solid var(--edge)}
+#detailBody{overflow-y:auto;padding:12px 20px 30px}#detailHead .close{float:right;border:0;background:#edf1ed;border-radius:5px;padding:5px 9px}
+.meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}.chip{background:#edf2ed;border:1px solid #dbe5dc;border-radius:15px;padding:3px 9px;font-size:11px}
+.field{padding:11px 0;border-bottom:1px solid #e7ede8}.question{font-weight:650;font-size:12px}.answer{margin:4px 0 7px;white-space:pre-wrap;overflow-wrap:anywhere}
+.evidence{background:#f5f7f4;border-left:3px solid #d0dbd0;padding:9px 11px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.anchor{font-size:11px;color:var(--muted);margin-top:3px}.missing{color:var(--muted);font-style:italic}
+details.group{border-bottom:1px solid var(--edge)}details.group>summary{padding:14px 3px;font-weight:700;cursor:pointer;list-style-position:inside}
+.smalltext{font-size:12px;color:var(--muted)}a{color:#995037}
+#advanced{margin:12px 0}#advanced summary{cursor:pointer;font-weight:650}#advanced label{margin-top:8px}
+@media(max-width:850px){header{height:auto}main{display:flex;flex-direction:column-reverse;height:auto}aside{max-height:42vh}#maparea{height:56vh;min-height:350px}#detail{width:calc(100% - 16px);left:8px;right:8px;top:8px;bottom:8px}}
+</style></head><body>
+<header><small>OSTARA / FULL-TEXT EVIDENCE ATLAS · PROTOTYPE</small><h1>Collective action evidence atlas</h1><small id="summary">Structured case evidence from the current W09 extraction schema</small></header>
+<main><aside>
+<div class="section-caption">Explore cases</div>
+<label for="search">Search cases and articles</label><input id="search" type="search" placeholder="Keywords, articles, crops…">
+<div id="filters"></div>
+<details id="advanced"><summary>More filters</summary><div id="advancedFilters"></div></details>
+<div class="toolbar"><span id="count"></span><button class="secondary-btn" id="reset">Reset filters</button></div>
+<div id="list"></div>
+</aside>
+<section id="maparea"><svg id="world" viewBox="0 0 1000 510" role="img" aria-label="World map with verified case locations"><rect width="1000" height="510" fill="#eaf0e9"/><g>__MAP_PATHS__</g><g id="markers"></g></svg>
+<div id="mapnotice">Verified coordinates only · cases without coordinates remain in the list</div>
+<article id="detail" aria-label="Case details"><div id="detailHead"><button class="close" id="closeDetail">Close ×</button><div class="section-caption">Case evidence</div><h2 id="caseTitle"></h2><div id="caseMeta" class="meta"></div><div class="toolbar"><button class="secondary-btn" id="toggleEvidence">Hide all evidence</button><button class="secondary-btn" id="toggleMissing">Show unreported fields</button></div></div><div id="detailBody"></div></article>
+</section></main>
+<script id="atlas-data" type="application/json">__ATLAS_DATA__</script>
+<script>
+"use strict";
+const payload=JSON.parse(document.getElementById("atlas-data").textContent);
+const cases=payload.cases||[];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeurl=s=>/^https:\/\/(doi\.org|scholar\.google\.com)\//.test(s||"")?s:"";
+const values=v=>Array.isArray(v)?v.map(String):String(v??"").split(/\s*\|\s*|;|\n/).map(x=>x.trim()).filter(Boolean);
+const headings=[
+ ["country","Country",/(country|countries|geograph)/i],
+ ["crop","Crop / commodity",/(crop|commodit|product|livestock|species)/i],
+ ["stage","Supply-chain stage",/(supply.chain stage|value.chain stage)/i],
+ ["level","Collective-action level",/(level at which|scale of collective|level of collective)/i],
+ ["status","Case status",/(status of (the )?(case|initiative)|what is the status|current status)/i],
+ ["interest","Shared interest",/(shared interest|shared risk|shared cost|shared benefit)/i],
+ ["actors","Actors / participants",/(actor|participant|stakeholder)/i],
+ ["governance","Governance",/(governance|decision.making|coordination)/i],
+ ["mechanism","Mechanism (publication-level)",/\bmechanism\b/i]
+];
+const required=headings.slice(0,6), advanced=headings.slice(6);
+const fieldMatches=(f,regex)=>regex.test(f.question||"");
+const facetValues=(c,f)=>{
+ if(f[0]==="mechanism")return (c.mechanisms||[]).map(m=>m.label).filter(Boolean);
+ return [...new Set(c.fields.filter(x=>fieldMatches(x,f[2])&&x.status==="reported").flatMap(x=>values(x.value)))];
+};
+const options={};
+const selected={};
+function addFilter(f,target){
+ const vals=[...new Set(cases.flatMap(c=>facetValues(c,f)))].sort((a,b)=>a.localeCompare(b));
+ const wrap=document.createElement("div");
+ const label=document.createElement("label");label.textContent=f[1];label.htmlFor="filter-"+f[0];
+ const select=document.createElement("select");select.id="filter-"+f[0];
+ select.innerHTML='<option value="">All</option>'+vals.map(v=>'<option value="'+esc(v)+'">'+esc(v)+"</option>").join("");
+ select.addEventListener("change",()=>render());
+ wrap.append(label,select);$(target).appendChild(wrap);options[f[0]]=select;
+ if(!vals.length){select.disabled=true;label.title="No matching structured field values in the current extraction";}
+}
+required.forEach(f=>addFilter(f,"filters"));
+advanced.forEach(f=>addFilter(f,"advancedFilters"));
+let active=null,showEvidence=true,showMissing=false;
+const groupFor=q=>{
+ if(/(where|country|location|crop|commodit|production system|status|scale|level|case name|case description)/i.test(q))return "Overview and geography";
+ if(/(actor|participant|stakeholder|membership|shared interest)/i.test(q))return "Actors and participation";
+ if(/(govern|decision|organis|coordinat|institution|leadership)/i.test(q))return "Organisation and governance";
+ if(/(activit|supply.chain|value.chain|implementation|transport|processing|market)/i.test(q))return "Activities and supply chain";
+ if(/(resource|incentive|funding|finance|benefit|outcome|impact|cost)/i.test(q))return "Resources and outcomes";
+ if(/(barrier|enabler|challenge|lesson|constraint|opportunit)/i.test(q))return "Enablers, barriers and lessons";
+ return "Other extracted fields";
+};
+const groupOrder=["Overview and geography","Actors and participation","Organisation and governance","Activities and supply chain","Resources and outcomes","Enablers, barriers and lessons","Other extracted fields"];
+function openCase(c){
+ active=c;showEvidence=true;showMissing=false;
+ $("toggleEvidence").textContent="Hide all evidence";$("toggleMissing").textContent="Show unreported fields";
+ $("caseTitle").textContent=c.display_name||"Extracted case";
+ const tags=[c.cohort==="first10"?"First 10%":"Remaining 90%",...facetValues(c,headings[0]).slice(0,2),...facetValues(c,headings[1]).slice(0,2)];
+ $("caseMeta").innerHTML=tags.filter(Boolean).map(t=>'<span class="chip">'+esc(t)+"</span>").join("");
+ drawDetail();$("detail").classList.add("open");renderMarkers();
+}
+function drawDetail(){
+ if(!active)return;
+ const c=active;
+ const groups=new Map(groupOrder.map(g=>[g,[]]));
+ for(const f of c.fields)groups.get(groupFor(f.question)).push(f);
+ let html='<p class="smalltext"><b>Publication:</b> '+esc(c.title||"Not available");
+ const doi=safeurl(c.doi_url);if(doi)html+=' · <a href="'+esc(doi)+'" target="_blank" rel="noopener noreferrer">DOI</a>';
+ html+='</p><p class="smalltext"><b>Case ID:</b> '+esc(c.case_id)+'<br><b>Record ID:</b> '+esc(c.record_id)+'</p>';
+ if(c.assessment_reason)html+='<p class="smalltext"><b>Case assessment:</b> '+esc(c.assessment_reason)+'</p>';
+ for(const [name,fs] of groups){
+ const visible=fs.filter(f=>showMissing||f.status==="reported"||f.status==="explicitly_none");
+ if(!visible.length)continue;
+ html+='<details class="group" '+(name==="Overview and geography"?"open":"")+'><summary>'+esc(name)+' · '+visible.length+' fields</summary>';
+ for(const f of visible){
+ const val=f.status==="not_reported"?"Not reported":f.status==="explicitly_none"?"Explicitly none":f.value||"Reported (no displayed value)";
+ html+='<div class="field"><div class="question">'+esc(f.question)+'</div><div class="answer'+(f.status==="not_reported"?" missing":"")+'">'+esc(val)+'</div>';
+ if(showEvidence&&f.evidence)html+='<div class="evidence">'+esc(f.evidence)+'</div>';
+ if(f.status!=="reported")html+='<div class="anchor">Reporting status: '+esc(f.status)+'</div>';
+ html+='</div>';
+ }
+ html+='</details>';
+ }
+ if(c.mechanisms&&c.mechanisms.length){
+ html+='<details class="group"><summary>Publication-level mechanisms · '+c.mechanisms.length+'</summary><p class="smalltext">Identified in the publication; not necessarily attributable to this individual case.</p>';
+ for(const m of c.mechanisms)html+='<div class="field"><div class="question">'+esc(m.code+" · "+m.label)+'</div><div class="answer">'+esc(m.status)+'</div>'+(showEvidence&&m.evidence?'<div class="evidence">'+esc(m.evidence)+'</div>':"")+'</div>';
+ html+='</details>';
+ }
+ if(c.boundary_uncertainty)html+='<p class="smalltext"><b>Case boundary uncertainty:</b> '+esc(c.boundary_uncertainty)+'</p>';
+ $("detailBody").innerHTML=html;
+}
+$("closeDetail").onclick=()=>{$("detail").classList.remove("open");active=null;renderMarkers()};
+$("toggleEvidence").onclick=()=>{showEvidence=!showEvidence;$("toggleEvidence").textContent=showEvidence?"Hide all evidence":"Show all evidence";drawDetail()};
+$("toggleMissing").onclick=()=>{showMissing=!showMissing;$("toggleMissing").textContent=showMissing?"Hide unreported fields":"Show unreported fields";drawDetail()};
+$("reset").onclick=()=>{$("search").value="";Object.values(options).forEach(x=>x.value="");render()};
+$("search").addEventListener("input",render);
+function filtersPass(c){
+ const query=$("search").value.trim().toLowerCase();
+ const haystack=[c.title,c.display_name,c.record_id,c.case_id,...c.fields.map(f=>f.value)].join(" ").toLowerCase();
+ return (!query||haystack.includes(query))&&headings.every(f=>!options[f[0]].value||facetValues(c,f).includes(options[f[0]].value));
+}
+function renderMarkers(){
+ const g=$("markers");g.replaceChildren();
+ const ns="http://www.w3.org/2000/svg";let n=0;
+ for(const c of cases.filter(filtersPass)){
+ const k=c.coordinates;if(!k||k.latitude==null||k.longitude==null)continue;
+ const lat=Number(k.latitude),lon=Number(k.longitude);
+ if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)continue;
+ const m=document.createElementNS(ns,"circle");m.setAttribute("cx",500+lon*1000/360);
+ m.setAttribute("cy",255-lat*510/180);m.setAttribute("r",active?.case_id===c.case_id?"8":"5");
+ m.setAttribute("class","marker"+(active?.case_id===c.case_id?" active":""));
+ m.setAttribute("tabindex","0");m.setAttribute("aria-label",c.display_name);
+ m.addEventListener("click",()=>openCase(c));m.addEventListener("keydown",e=>{if(e.key==="Enter")openCase(c)});
+ g.appendChild(m);n++;
+ }
+ return n;
+}
+function render(){
+ const shown=cases.filter(filtersPass);
+ $("list").replaceChildren();
+ for(const c of shown){
+ const item=document.createElement("button");item.className="item"+(active?.case_id===c.case_id?" active":"");
+ const name=document.createElement("strong");name.textContent=c.display_name||c.case_id;
+ const small=document.createElement("small");small.textContent=[c.title,c.cohort==="first10"?"First 10%":"Remaining 90%"].filter(Boolean).join(" · ");
+ item.append(name,small);item.onclick=()=>openCase(c);$("list").append(item);
+ }
+ const n=renderMarkers();$("count").textContent=shown.length+" cases · "+n+" mapped";
+ $("summary").textContent=cases.length+" case observations · "+payload.publications+" publications · "+payload.fields+" schema fields";
+}
+render();
+</script></body></html>
