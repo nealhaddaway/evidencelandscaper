@@ -222,6 +222,22 @@ export_ostara_commodity_case_explorer <- function(
   add_plate("Rubber","Hevea brasiliensis - Köhler–s Medizinal-Pflanzen-071")
   add_plate("Sugarcane","Saccharum officinarum - Köhler–s Medizinal-Pflanzen-125")
   add_plate("Palm oil","Elaeis guineensis - Köhler–s Medizinal-Pflanzen-056")
+  # Different historic sources where a Köhler plate is unavailable.
+  add_other_plate<-function(commodity,file,creator,rights) {
+    image_manifest[[commodity]]<<-list(
+      url=paste0("https://commons.wikimedia.org/wiki/Special:FilePath/",
+        utils::URLencode(file,reserved=TRUE),"?width=320"),
+      source=paste0("https://commons.wikimedia.org/wiki/File:",
+        utils::URLencode(file,reserved=TRUE)),
+      creator=creator,rights=rights)
+  }
+  add_other_plate("Bananas","Musa paradisiaca Blanco1.88-cropped.jpg",
+    "Francisco Manuel Blanco, Flora de Filipinas (1880s)","Public domain")
+  add_other_plate("Soybeans","Soja d'Étampes Vilmorin-Andrieux 1883.png",
+    "Vilmorin-Andrieux, Les Plantes potagères (1883)","Public domain")
+  cattle_file<-"Bos taurus Kaapse koe en kalf Caapse koey en kalf (titel op object), RP-T-1914-17-184.jpg"
+  add_other_plate("Beef",cattle_file,"Rijksmuseum, 1778","CC0")
+  add_other_plate("Dairy",cattle_file,"Rijksmuseum, 1778","CC0")
   image_manifest<-image_manifest[names(image_manifest)%in%all_commodities]
   payload<-list(schema="ostara-commodity-explorer-v1",cases=rows,
     commodities=as.list(all_commodities),artwork=image_manifest,
