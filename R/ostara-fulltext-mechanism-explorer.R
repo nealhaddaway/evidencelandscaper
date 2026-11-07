@@ -23,26 +23,51 @@ export_ostara_fulltext_mechanism_explorer <- function(
     "ostara_candidate_mechanisms_source.csv",
     "ostara_publications.csv",
     "ostara_export_source_manifest.csv")
+  # Prefer the complete client export where available. Otherwise read both
+  # approved W09 mechanism ledgers directly without requiring unrelated case
+  # extraction or Insights exports.
+  from_ledgers<-FALSE
+  available<-character()
   if(is.null(client_export_dir)) {
     root<-file.path(map_path,"reports","client_databases")
-    if(!dir.exists(root))stop("No client database exports: ",root)
-    candidates<-list.dirs(root,recursive=FALSE,full.names=TRUE)
-    candidates<-candidates[vapply(candidates,function(d)
+    folders<-if(dir.exists(root))
+      list.dirs(root,recursive=FALSE,full.names=TRUE) else character()
+    available<-folders[vapply(folders,function(d)
       all(file.exists(file.path(d,names_needed))),logical(1))]
-    if(!length(candidates))stop("No complete client database export found.")
-    client_export_dir<-candidates[[which.max(file.info(candidates)$mtime)]]
+    if(length(available)) {
+      client_export_dir<-available[[which.max(file.info(available)$mtime)]]
+    } else {
+      from_ledgers<-TRUE
+      message("[OSTARA mechanism explorer] No complete client export found.",
+        " Reading approved first10 and remaining90 full-text mechanism",
+        " checkpoints directly. No case or Insights export is required.")
+    }
   }
-  client_export_dir<-normalizePath(client_export_dir,winslash="/",mustWork=TRUE)
-  files<-file.path(client_export_dir,names_needed)
-  if(any(!file.exists(files)))
-    stop("Missing required client database files: ",
-         paste(names_needed[!file.exists(files)],collapse=", "))
   read_csv<-function(p)utils::read.csv(p,stringsAsFactors=FALSE,
      check.names=FALSE,fileEncoding="UTF-8-BOM",na.strings=NULL)
-  inv<-read_csv(files[[1L]])
-  candidates<-read_csv(files[[2L]])
-  pubs<-read_csv(files[[3L]])
-  provenance<-read_csv(files[[4L]])
+  if(from_ledgers) {
+    input<-.ostara_mechanism_explorer_from_ledgers(map_path)
+    inv<-input$inv
+    candidates<-input$candidates
+    pubs<-input$pubs
+    provenance<-input$provenance
+    files<-unname(input$source_files)
+    client_export_dir<-file.path(map_path,"runs","W09")
+  } else {
+    client_export_dir<-normalizePath(client_export_dir,winslash="/",
+                                     mustWork=TRUE)
+    files<-file.path(client_export_dir,names_needed)
+    if(any(!file.exists(files))) {
+      stop("Missing required client database files in ",
+           client_export_dir,": ",
+           paste(names_needed[!file.exists(files)],collapse=", "),
+           ". Omit client_export_dir to use approved source ledgers.")
+    }
+    inv<-read_csv(files[[1L]])
+    candidates<-read_csv(files[[2L]])
+    pubs<-read_csv(files[[3L]])
+    provenance<-read_csv(files[[4L]])
+  }
   expected<-c("record_id","cohort","mechanism_id",
     "collective_action_type","high_level_mechanism",
     "fine_level_mechanism","definition","status",
@@ -148,6 +173,7 @@ export_ostara_fulltext_mechanism_explorer <- function(
     schema=payload$schema,source_export_dir=client_export_dir,
     source_files=as.list(stats::setNames(vapply(files,sha,character(1)),
                                          basename(files))),
+    source_mode=if(from_ledgers) "approved_fulltext_ledgers" else "client_export",
     assessed_publications=length(ids),approved_codes=nrow(ontology),
     fulltext_candidate_proposals=nrow(ft_candidates),
     output_sha256=sha(file),
