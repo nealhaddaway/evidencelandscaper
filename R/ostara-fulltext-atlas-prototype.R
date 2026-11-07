@@ -2,14 +2,15 @@
 #'
 #' A versioned, standalone HTML prototype. Uses the extracted W09 case schema
 #' in the evidence-rich case CSV, not the historical W09 atlas object schema.
-#' The map displays only explicitly supplied verified coordinates. No LLM/API
+#' The map generates auditable approximate gazetteer coordinates automatically. No LLM/API
 #' calls and no overwrite of the historical atlas or case extraction outputs.
 #'
 #' @param map_path OSTARA project root.
 #' @param client_export_dir A completed export_ostara_client_databases folder.
 #'   Defaults to the most recently modified complete export.
-#' @param coordinates_csv Optional reviewed coordinates with case_id,latitude,
-#'   longitude,coordinate_basis,coordinate_source.
+#' @param coordinates_csv Optional externally reviewed coordinate override with
+#'   case_id,latitude,longitude,coordinate_basis,coordinate_source. When NULL,
+#'   generates approximate points automatically from extracted geography.
 #' @param output_dir Optional new empty output directory; defaults to a versioned
 #'   directory under reports/fulltext_atlas_prototype.
 #' @return Path of generated standalone evidence_atlas.html, invisibly.
@@ -74,9 +75,14 @@ export_ostara_fulltext_atlas_prototype <- function(
     if(is.null(x)||!length(x)||is.na(x))return("")
     as.character(x)
   }
-  # Verified optional per-case coordinates only, never country centroids.
+  # Generate offline provisional coordinates unless an explicit reviewed
+  # coordinate CSV was provided. Retain an audit for every extracted case.
+  geocoding<-NULL
   geo<-NULL
-  if(!is.null(coordinates_csv)) {
+  if(is.null(coordinates_csv)) {
+    geocoding<-.ostara_geocode_extracted_cases(cases)
+    geo<-geocoding$points
+  } else {
     coordinates_csv<-normalizePath(coordinates_csv,winslash="/",mustWork=TRUE)
     geo<-readcsv(coordinates_csv)
     required<-c("case_id","latitude","longitude",
@@ -128,7 +134,7 @@ export_ostara_fulltext_atlas_prototype <- function(
                          scalar(ms$evidence_quote[[k]])),collapse=": "))
     }
     coords<-NULL
-    if(!is.null(geo)) {
+    if(nrow(geo)) {
       k<-match(scalar(r$case_id[[1L]]),geo$case_id)
       if(!is.na(k))coords<-list(latitude=geo$latitude[[k]],
         longitude=geo$longitude[[k]],
@@ -198,7 +204,8 @@ export_ostara_fulltext_atlas_prototype <- function(
     key<-substr(digest::digest(c(
       vapply(files,function(p)digest::digest(file=p,algo="sha256",
                                              serialize=FALSE),character(1)),
-      if(is.null(coordinates_csv))"no-reviewed-coordinates" else
+      if(is.null(coordinates_csv))
+        digest::digest(geo,algo="sha256") else
         digest::digest(file=coordinates_csv,algo="sha256",serialize=FALSE),
       digest::digest(file=tpl,algo="sha256",serialize=FALSE)),
       algo="sha256"),1L,12L)
@@ -227,20 +234,32 @@ export_ostara_fulltext_atlas_prototype <- function(
     stop("Unable to create output folder: ",output_dir)
   html_file<-file.path(output_dir,"evidence_atlas.html")
   writeLines(html,html_file,useBytes=TRUE)
+  utils::write.csv(geo,file.path(output_dir,"atlas_coordinates.csv"),
+                   row.names=FALSE,na="")
+  if(!is.null(geocoding))
+    utils::write.csv(geocoding$audit,
+      file.path(output_dir,"atlas_geocoding_audit.csv"),
+      row.names=FALSE,na="")
   provenance<-list(schema=payload$schema,source_dir=client_export_dir,
     source_files=as.list(stats::setNames(vapply(files,function(p)
       digest::digest(file=p,algo="sha256",serialize=FALSE),character(1)),
       basename(files))),
-    coordinates_csv=if(is.null(coordinates_csv))NULL else coordinates_csv,
+    coordinates_csv=if(is.null(coordinates_csv))
+      "generated_offline_from_extracted_geography" else coordinates_csv,
+    mapped_cases=nrow(geo),unmapped_cases=nrow(cases)-nrow(geo),
+    coordinate_file_sha256=digest::digest(
+      file=file.path(output_dir,"atlas_coordinates.csv"),
+      algo="sha256",serialize=FALSE),
     output_sha256=digest::digest(file=html_file,algo="sha256",serialize=FALSE),
     cases=nrow(cases),publications=length(unique(cases$record_id)),
-    note="Prototype based on saved W09 case extraction CSV; no guessed coordinates.")
+    note=paste("Approximate offline gazetteer positions generated from",
+               "extracted country and unambiguous localities;",
+               "country representative points are NOT actual site locations."))
   jsonlite::write_json(provenance,file.path(output_dir,"provenance.json"),
                         pretty=TRUE,auto_unbox=TRUE,null="null")
   message("[OSTARA atlas prototype] ",nrow(cases)," cases across ",
     length(unique(cases$record_id))," publications: ",html_file)
-  if(is.null(coordinates_csv))
-    message("[OSTARA atlas prototype] No case-level reviewed coordinates provided. ",
-      "Map markers intentionally omitted; all cases remain available in sidebar.")
+  message("[OSTARA atlas prototype] ",nrow(geo),"/",nrow(cases),
+    " cases mapped (approximate); coordinate CSV and audit saved in output folder.")
   invisible(html_file)
 }
