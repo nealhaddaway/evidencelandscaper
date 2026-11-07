@@ -235,9 +235,33 @@ export_ostara_commodity_case_explorer <- function(
     "Francisco Manuel Blanco, Flora de Filipinas (1880s)","Public domain")
   add_other_plate("Soybeans","Soja d'Étampes Vilmorin-Andrieux 1883.png",
     "Vilmorin-Andrieux, Les Plantes potagères (1883)","Public domain")
-  cattle_file<-"Bos taurus Kaapse koe en kalf Caapse koey en kalf (titel op object), RP-T-1914-17-184.jpg"
-  add_other_plate("Beef",cattle_file,"Rijksmuseum, 1778","CC0")
-  add_other_plate("Dairy",cattle_file,"Rijksmuseum, 1778","CC0")
+  # Historical artwork for the remaining commodity cards.
+  # These filenames and their public-domain status are documented in the
+  # individual Wikimedia Commons source pages. For broad commodities,
+  # the picture is representative, not a claim about the underlying species.
+  add_other_plate("Beef",
+    "The Yorkshire Cow engraving by Harrison Weir 1850.jpg",
+    "Harrison Weir, The Cow: Dairy Husbandry and Cattle Breeding (1851)",
+    "Public domain")
+  add_other_plate("Dairy",
+    "The Yorkshire Cow engraving by Harrison Weir 1850.jpg",
+    "Harrison Weir, The Cow: Dairy Husbandry and Cattle Breeding (1851)",
+    "Public domain")
+  add_other_plate("Pulp and paper",
+    "Penny Magazine 1833 377 Paper Making by Hand.jpg",
+    "The Penny Magazine (1833), unknown engraver",
+    "Public domain")
+  add_other_plate("Sugar",
+    "Adolphe Millot betterave a sucre.jpg",
+    "Adolphe Millot, Larousse: sugar beet illustration",
+    "Public domain")
+  add_other_plate("Timber",
+    "Illustration Pinus sylvestris0.jpg",
+    "Otto Wilhelm Thomé, Flora von Deutschland (1885)",
+    "Public domain")
+  # Palm is an ambiguous commodity label. The oil palm image is presented
+  # only as a representative botanical plate rather than exact taxonomy.
+  add_plate("Palm","Elaeis guineensis - Köhler–s Medizinal-Pflanzen-056")
   image_manifest<-image_manifest[names(image_manifest)%in%all_commodities]
   payload<-list(schema="ostara-commodity-explorer-v1",cases=rows,
     commodities=as.list(all_commodities),artwork=image_manifest,
