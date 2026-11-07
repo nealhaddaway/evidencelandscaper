@@ -185,13 +185,19 @@ export_ostara_fulltext_atlas_prototype <- function(
   if(!grepl("__MAP_PATHS__",html,fixed=TRUE)||
      !grepl("__ATLAS_DATA__",html,fixed=TRUE))
     stop("Atlas template placeholders missing.")
-  html<-gsub("__MAP_PATHS__",paste(c(grid,paths),collapse="\n"),
-             html,fixed=TRUE)
-  html<-gsub("__ATLAS_DATA__",data,html,fixed=TRUE)
+  # Use literal placeholder splitting: JSON can contain backslashes and
+  # replacement strings in gsub() would interpret them.
+  inject<-function(html,token,value) {
+    pieces<-strsplit(html,token,fixed=TRUE)[[1L]]
+    if(length(pieces)!=2L)stop("Expected one template token: ",token)
+    paste(pieces,collapse=value)
+  }
+  html<-inject(html,"__MAP_PATHS__",paste(c(grid,paths),collapse="\n"))
+  html<-inject(html,"__ATLAS_DATA__",data)
   if(is.null(output_dir)) {
     key<-substr(digest::digest(c(
-      vapply(files,digest::digest,character(1),algo="sha256",
-             serialize=FALSE,file=TRUE),
+      vapply(files,function(p)digest::digest(file=p,algo="sha256",
+                                             serialize=FALSE),character(1)),
       if(is.null(coordinates_csv))"no-reviewed-coordinates" else
         digest::digest(file=coordinates_csv,algo="sha256",serialize=FALSE),
       digest::digest(file=tpl,algo="sha256",serialize=FALSE)),
