@@ -29,6 +29,7 @@
   normalize<-function(x)trimws(gsub("[^a-z0-9]+"," ",tolower(x)))
   valid3<-unique(stats::na.omit(as.character(cities$iso3)))
   field_cols<-grep("^field_[0-9]{3} :: ",names(cases),value=TRUE)
+  field_cols<-field_cols[!grepl(" \\[(evidence|reporting status)\\]$",field_cols)]
   country_fields<-field_cols[grepl(
     "(where did the case take place.*country|country|countries)",
     field_cols,ignore.case=TRUE)]
