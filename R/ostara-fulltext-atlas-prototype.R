@@ -204,8 +204,24 @@ export_ostara_fulltext_atlas_prototype <- function(
       algo="sha256"),1L,12L)
     output_dir<-file.path(map_path,"reports","fulltext_atlas_prototype",key)
   }
-  if(dir.exists(output_dir)&&length(list.files(output_dir,all.files=TRUE,no..=TRUE)))
-    stop("Output folder not empty; refusing to overwrite: ",output_dir)
+  if(dir.exists(output_dir)&&length(list.files(output_dir,all.files=TRUE,no..=TRUE))) {
+    existing_html<-file.path(output_dir,"evidence_atlas.html")
+    existing_prov<-file.path(output_dir,"provenance.json")
+    if(file.exists(existing_html)&&file.exists(existing_prov)) {
+      old<-jsonlite::fromJSON(existing_prov,simplifyVector=FALSE)
+      same<-identical(old$output_sha256,
+        digest::digest(file=existing_html,algo="sha256",serialize=FALSE))&&
+        identical(old$output_sha256,
+          digest::digest(html,algo="sha256",serialize=FALSE))
+      if(same) {
+        message("[OSTARA atlas prototype] Reusing identical existing atlas: ",
+                existing_html)
+        return(invisible(existing_html))
+      }
+    }
+    stop("Output folder is populated with different files; refusing overwrite: ",
+         output_dir)
+  }
   if(!dir.exists(output_dir)&&
      !dir.create(output_dir,recursive=TRUE,showWarnings=FALSE))
     stop("Unable to create output folder: ",output_dir)
