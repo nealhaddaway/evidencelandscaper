@@ -21,7 +21,8 @@ export_ostara_fulltext_atlas_prototype <- function(
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   if(!requireNamespace("jsonlite",quietly=TRUE)||
      !requireNamespace("digest",quietly=TRUE)||
-     !requireNamespace("maps",quietly=TRUE))
+     !requireNamespace("maps",quietly=TRUE)||
+     !requireNamespace("countrycode",quietly=TRUE))
     stop("Install jsonlite, digest and maps.")
   csv_names<-c("ostara_publications.csv",
     "ostara_cases_with_adjacent_evidence.csv",
@@ -76,6 +77,33 @@ export_ostara_fulltext_atlas_prototype <- function(
     if(is.null(x)||!length(x)||is.na(x))return("")
     as.character(x)
   }
+  # Atlas-only standardisation. Underlying extraction values, supporting
+  # quotations and CSVs are never changed.
+  display_value<-function(question,value) {
+    if(!nzchar(value))return(value)
+    items<-trimws(unlist(strsplit(value,"[;|,\n]",perl=TRUE)))
+    items<-items[nzchar(items)]
+    if(!length(items))return(value)
+    if(grepl("\\b(countries|country)\\b",question,ignore.case=TRUE,
+             perl=TRUE)) {
+      is_iso3<-grepl("^[A-Za-z]{3}$",items)
+      mapped<-rep(NA_character_,length(items))
+      if(any(is_iso3))mapped[is_iso3]<-suppressWarnings(
+        countrycode::countrycode(toupper(items[is_iso3]),
+                                 "iso3c","country.name",warn=FALSE))
+      known<-!is.na(mapped)&nzchar(mapped)
+      items[known]<-mapped[known]
+      return(paste(unique(items),collapse="; "))
+    }
+    if(grepl("\\b(crop|crops|commodity|commodities)\\b",question,
+             ignore.case=TRUE,perl=TRUE)) {
+      cocoa<-grepl("^(cacao|cocoa)(\\s*/\\s*(cacao|cocoa))?$",
+                   items,ignore.case=TRUE,perl=TRUE)
+      items[cocoa]<-"Cocoa"
+      return(paste(unique(items),collapse="; "))
+    }
+    value
+  }
   # Generate offline provisional coordinates unless an explicit reviewed
   # coordinate CSV was provided. Retain an audit for every extracted case.
   geocoding<-NULL
@@ -112,7 +140,10 @@ export_ostara_fulltext_atlas_prototype <- function(
       evidence<-scalar(r[[paste0(f," [evidence]")]][[1L]])
       # Old checkpoint schemas may lack a field; skip only genuine absences.
       if(!nzchar(value)&&!nzchar(status)&&!nzchar(evidence))return(NULL)
-      list(question=strip_field(f),value=value,
+      question<-strip_field(f)
+      list(question=question,value=value,
+           display_value=if(identical(status,"reported"))
+             display_value(question,value) else value,
            evidence=evidence,status=if(nzchar(status))status else "unknown")
     })
     fields<-Filter(Negate(is.null),fields)
