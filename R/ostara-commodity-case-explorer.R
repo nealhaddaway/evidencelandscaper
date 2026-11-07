@@ -187,7 +187,7 @@ export_ostara_commodity_case_explorer <- function(
         scalar(ca$assessment_reason) else "",
       boundary_uncertainty=if("case_boundary_uncertainty"%in%names(ca))
         scalar(ca$case_boundary_uncertainty) else "",
-      facets=facets,fields=fields)
+      facets=lapply(facets,as.list),fields=fields)
   }
   all_commodities<-sort(unique(all_commodities[nzchar(all_commodities)]))
   # Only images verified against specific public-domain plate records are
@@ -224,7 +224,7 @@ export_ostara_commodity_case_explorer <- function(
   add_plate("Palm oil","Elaeis guineensis - Köhler–s Medizinal-Pflanzen-056")
   image_manifest<-image_manifest[names(image_manifest)%in%all_commodities]
   payload<-list(schema="ostara-commodity-explorer-v1",cases=rows,
-    commodities=all_commodities,artwork=image_manifest,
+    commodities=as.list(all_commodities),artwork=image_manifest,
     atlas_url=if(is.null(atlas_url))"" else atlas_url)
   tpl<-system.file("ostara","commodity_explorer_template.html",
     package="evidencelandscaper")
