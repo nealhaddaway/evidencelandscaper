@@ -2,10 +2,10 @@
 #'
 #' Selects only human-classified specific_case/multiple_cases records from an
 #' explicit W08 classification CSV that also occur in the supplied W09 queue.
-#' A permanent batch register is written before paid extraction. All previously
-#' attempted/extracted W09 IDs and saved pilot samples are excluded at first
-#' selection. Existing global extraction checkpoints never count toward a new
-#' batch; this batch's own checkpoints are reused on resume.
+#' A permanent batch register is written before paid extraction. Earlier samples
+#' from OTHER prompt/schema versions are eligible for a new prompt test.
+#' Records already validated with THIS exact prompt/schema are excluded on
+#' first selection; this batch's own checkpoints are reused on resume.
 #'
 #' @param w09 Exact W09 full-text retrieval directory.
 #' @param classifications_csv Authoritative W08 CSV with record_id and
@@ -105,42 +105,23 @@ run_ostara_case_pilot_batch <- function(w09,classifications_csv,prompt_file,
   } else if(!file.copy(schema_file,staged_schema))
     stop("Cannot archive case schema.")
   if(!file.exists(sample_file)) {
-    # Exclude all IDs touched in ANY W09 extraction in this project.
-    roots<-list.dirs(file.path(map_path,"runs","W09"),
-                     recursive=FALSE,full.names=TRUE)
-    previous<-character()
-    for(root in roots) {
-      extraction_base<-file.path(root,"case_data_extraction")
-      if(!dir.exists(extraction_base))next
-      runs<-list.dirs(extraction_base,recursive=FALSE,full.names=TRUE)
-      for(run in runs)
-        for(file in c("case_data.jsonl","invalid_responses.jsonl",
-                      "source_documents.jsonl","batch_failures.jsonl",
-                      "unprocessed_fulltexts.jsonl"))
-          previous<-c(previous,ids_from(file.path(run,file)))
-    }
-    # Also exclude explicitly saved samples from earlier pilots, regardless
-    # of whether those IDs reached the API extraction stage.
-    samples<-list.files(file.path(map_path,"reports"),
-                        pattern="^sampled_publications\\.csv$",
-                        recursive=TRUE,full.names=TRUE)
-    samples<-setdiff(normalizePath(samples,winslash="/",mustWork=FALSE),
-                     normalizePath(sample_file,winslash="/",mustWork=FALSE))
-    for(file in samples) {
-      x<-tryCatch(utils::read.csv(file,stringsAsFactors=FALSE,
-                       fileEncoding="UTF-8-BOM"),error=function(e)NULL)
-      if(!is.null(x)&&"record_id"%in%names(x))
-        previous<-c(previous,as.character(x$record_id))
-    }
-    candidates<-setdiff(sort(unique(eligible)),unique(previous))
+    # A prompt-validation pilot may REUSE papers sampled under older prompts.
+    # Exclude ONLY records already validated under this exact prompt and
+    # schema within this exact W09 collection. All other previous sampling
+    # and API attempts are irrelevant to eligibility for a NEW extraction.
+    current_extraction_dir<-file.path(w09,"case_data_extraction",paste0(
+      "csv-",substr(sha(staged_schema),1,12),
+      "-prompt-",substr(sha(staged_prompt),1,12),
+      "-model-gpt-5.6-luna"))
+    current_done<-ids_from(file.path(current_extraction_dir,"case_data.jsonl"))
+    candidates<-setdiff(sort(unique(eligible)),unique(current_done))
     message("[OSTARA pilot] Confirmed-case IDs in W09 queue: ",length(eligible),
-            "; excluded as already attempted/sampled: ",
-            length(setdiff(eligible,candidates)),
-            "; unused candidates: ",length(candidates))
+            "; completed with THIS exact prompt/schema: ",
+            length(intersect(eligible,current_done)),
+            "; available for a fresh extraction: ",length(candidates))
     if(length(candidates)<n)
-      stop("Only ",length(candidates)," unused confirmed case-positive IDs remain; need ",n,
-           ". No model requests were made. Check whether older pilot sample registers ",
-           "already cover these IDs.")
+      stop("Only ",length(candidates)," case-positive IDs not completed with ",
+           "this prompt/schema; need ",n,". No model requests were made.")
     set.seed(seed)
     candidates<-sample(candidates,length(candidates))
     chosen<-list()
@@ -227,7 +208,9 @@ run_ostara_case_pilot_batch <- function(w09,classifications_csv,prompt_file,
   new_this_call<-setdiff(ids,done_before)
   if(!file.exists(file.path(dir,"batch_started.json"))&&
      length(intersect(ids,done_before)))
-    stop("First run overlaps existing extraction checkpoints; no API call made.")
+    stop("Selected IDs were completed under this exact prompt/schema before ",
+         "this pilot started; choose a new batch ID only after checking the ",
+         "saved selection. No API call made.")
   if(!file.exists(file.path(dir,"batch_started.json")))
     jsonlite::write_json(list(sample_sha256=sha(sample_file),
       prompt_sha256=sha(staged_prompt),schema_sha256=sha(staged_schema)),
