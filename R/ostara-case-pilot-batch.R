@@ -133,16 +133,37 @@ run_ostara_case_pilot_batch <- function(w09,classifications_csv,prompt_file,
         previous<-c(previous,as.character(x$record_id))
     }
     candidates<-setdiff(sort(unique(eligible)),unique(previous))
+    message("[OSTARA pilot] Confirmed-case IDs in W09 queue: ",length(eligible),
+            "; excluded as already attempted/sampled: ",
+            length(setdiff(eligible,candidates)),
+            "; unused candidates: ",length(candidates))
     if(length(candidates)<n)
       stop("Only ",length(candidates)," unused confirmed case-positive IDs remain; need ",n,
-           ". No model requests were made.")
+           ". No model requests were made. Check whether older pilot sample registers ",
+           "already cover these IDs.")
     set.seed(seed)
     candidates<-sample(candidates,length(candidates))
     chosen<-list()
+    failure_counts<-integer()
+    failure_examples<-list()
     for(id in candidates) {
       if(length(chosen)>=n)break
       payload<-tryCatch(w09_text_payload(w09,id,max_pages=0L),error=function(e)e)
-      if(inherits(payload,"error"))next
+      if(inherits(payload,"error")) {
+        reason<-conditionMessage(payload)
+        failure_counts[reason]<-if(is.na(failure_counts[reason]))1L else
+          failure_counts[reason]+1L
+        if(length(failure_examples)<8L)
+          failure_examples[[length(failure_examples)+1L]]<-paste(id,reason,sep=": ")
+        next
+      }
+      if(!is.character(payload$sha256)||length(payload$sha256)!=1L||
+         !nzchar(payload$sha256)) {
+        failure_counts["Missing source SHA256 in W09 payload"]<-
+          if(is.na(failure_counts["Missing source SHA256 in W09 payload"])) 1L
+          else failure_counts["Missing source SHA256 in W09 payload"]+1L
+        next
+      }
       i<-match(id,q$record_id)
       chosen[[length(chosen)+1L]]<-data.frame(
         record_id=id,title=as.character(q$title[[i]]),
@@ -150,8 +171,20 @@ run_ostara_case_pilot_batch <- function(w09,classifications_csv,prompt_file,
         source_sha256=payload$sha256,
         stringsAsFactors=FALSE)
     }
-    if(length(chosen)!=n)
-      stop("Only ",length(chosen)," unused readable confirmed-case full texts found; need ",n)
+    if(length(chosen)!=n) {
+      detail<-if(length(failure_counts))
+        paste(paste(names(sort(failure_counts,decreasing=TRUE)),
+                    as.integer(sort(failure_counts,decreasing=TRUE)),
+                    sep=" (n="),collapse="); ")
+      else "No payload errors recorded"
+      examples<-if(length(failure_examples))
+        paste(unlist(failure_examples),collapse="\n") else ""
+      stop("Only ",length(chosen),
+           " readable confirmed-case full texts found from ",
+           length(candidates)," unused candidates; need ",n,
+           ". No model requests were made.\nPayload failure counts: ",
+           detail,"\nExamples:\n",examples)
+    }
     selected<-do.call(rbind,chosen)
     utils::write.csv(selected,sample_file,row.names=FALSE,na="",fileEncoding="UTF-8")
     jsonlite::write_json(list(batch_id=batch_id,n=n,seed=seed,w09=w09,
