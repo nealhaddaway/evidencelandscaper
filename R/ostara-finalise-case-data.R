@@ -1,10 +1,10 @@
 #' Finalise and register the locked OSTARA full-text case extraction
 #'
-#' Consolidates the two cohort-wide exports (each already contains its relevant
-#' pilot checkpoints) without concatenating the 20-paper pilot a second time.
-#' Requires 100% of the saved accessible-fulltext inventories to have validated
-#' W09 checkpoint records. Writes immutable, checksum-verifiable final outputs
-#' and a versioned final manifest. Does not call the model or modify checkpoints.
+#' Checks the EXISTING OSTARA_all_case_data.csv and companion status/summary
+#' against cohort-wide exports and validated JSONL checkpoints. The 20-paper
+#' pilot is already included in the cohort outputs and is NOT appended again.
+#' Writes only a provenance manifest with SHA256 checksums; never rewrites the
+#' existing CSVs or extraction checkpoints, and makes no model calls.
 #'
 #' @param map_path OSTARA project root.
 #' @param pilot_id Name of the locked pilot archive.
@@ -141,43 +141,72 @@ finalise_ostara_locked_case_data <- function(map_path,
     stop("Some publications remain unresolved.")
   if(nrow(all_cases)!=sum(all_status$case_count))
     stop("Combined case count is inconsistent.")
-  # Write only after all checks pass. Existing final snapshots are immutable;
-  # a changed run must be finalised to a new revision rather than overwritten.
-  final_dir<-file.path(root,"final")
-  dir.create(final_dir,recursive=TRUE,showWarnings=FALSE)
-  cases_out<-file.path(final_dir,"OSTARA_all_case_data.csv")
-  status_out<-file.path(final_dir,"OSTARA_all_publication_status.csv")
-  summary_out<-file.path(final_dir,"OSTARA_extraction_summary.csv")
-  manifest_out<-file.path(final_dir,"final_manifest.json")
-  outfiles<-c(cases_out,status_out,summary_out,manifest_out)
-  if(any(file.exists(outfiles)))
-    stop("A final archive already exists. It is immutable; inspect ",
-         manifest_out," rather than overwrite it.")
-  write_excel_csv<-function(x,path) {
-    con<-file(path,open="wb")
-    on.exit(close(con),add=TRUE)
-    writeBin(as.raw(c(0xEF,0xBB,0xBF)),con)
-    utils::write.table(x,file=con,sep=",",row.names=FALSE,
-                       col.names=TRUE,quote=TRUE,na="",qmethod="double")
+  # Lock the pre-existing combined files: do NOT rewrite, move or append.
+  # The earlier full-run runner already combined both cohorts and included
+  # approved pilot records through the W09 checkpoint.
+  cases_out<-norm(file.path(root,"OSTARA_all_case_data.csv"))
+  status_out<-norm(file.path(root,"combined_publication_status.csv"))
+  summary_out<-norm(file.path(root,"extraction_summary.csv"))
+  existing_cases<-read_csv(cases_out)
+  existing_status<-read_csv(status_out)
+  existing_summary<-read_csv(summary_out)
+  # Compare by stable IDs so harmless row ordering differences do not fail,
+  # but all columns and every cell must otherwise match exactly.
+  same_by_id<-function(actual,expected,key,label) {
+    if(!identical(names(actual),names(expected)))
+      stop(label,": field names/order do not match the W09 cohort exports.")
+    if(!key%in%names(actual)||anyNA(actual[[key]])||
+       anyDuplicated(actual[[key]])||anyNA(expected[[key]])||
+       anyDuplicated(expected[[key]]))
+      stop(label,": missing or duplicated key ",key)
+    if(nrow(actual)!=nrow(expected)||
+       !setequal(actual[[key]],expected[[key]]))
+      stop(label,": IDs differ from validated cohort exports.")
+    a<-actual[match(sort(actual[[key]]),actual[[key]]),,drop=FALSE]
+    b<-expected[match(sort(actual[[key]]),expected[[key]]),,drop=FALSE]
+    rownames(a)<-NULL;rownames(b)<-NULL
+    for(name in names(a)) {
+      aa<-as.character(a[[name]])
+      bb<-as.character(b[[name]])
+      if(!identical(aa,bb))
+        stop(label,": existing values differ in column '",name,
+             "'. Existing combined files were NOT modified.")
+    }
+    invisible(TRUE)
   }
-  summary<-data.frame(cohort=cohorts,
-    accessible_publications=vapply(provenance,
+  same_by_id(existing_cases,all_cases,"case_id","Combined case data")
+  same_by_id(existing_status,all_status,"record_id","Combined publication status")
+  summary_expected<-data.frame(cohort=cohorts,
+    accessible_fulltexts=vapply(provenance,
       function(p)p$accessible_publications,integer(1)),
     validated_publications=vapply(provenance,
       function(p)p$validated_publications,integer(1)),
+    unresolved_publications=rep(0L,length(cohorts)),
     extracted_cases=vapply(provenance,
       function(p)p$extracted_cases,integer(1)))
-  summary<-rbind(summary,data.frame(cohort="TOTAL",
-    accessible_publications=sum(summary$accessible_publications),
-    validated_publications=sum(summary$validated_publications),
-    extracted_cases=sum(summary$extracted_cases)))
-  write_excel_csv(all_cases,cases_out)
-  write_excel_csv(all_status,status_out)
-  write_excel_csv(summary,summary_out)
+  if(!all(c("cohort","accessible_fulltexts","validated_publications",
+            "unresolved_publications","extracted_cases")%in%
+           names(existing_summary))||
+     nrow(existing_summary)!=length(cohorts)||
+     anyDuplicated(existing_summary$cohort)||
+     !setequal(existing_summary$cohort,cohorts))
+    stop("Existing extraction_summary.csv has unexpected structure/cohorts.")
+  for(name in names(summary_expected)) {
+    a<-as.character(existing_summary[[name]][
+      match(cohorts,existing_summary$cohort)])
+    b<-as.character(summary_expected[[name]])
+    if(!identical(a,b))
+      stop("Existing extraction_summary.csv mismatch in ",name)
+  }
+  # The final record is deliberately separate from the published
+  # canonical search/screening registry. Existing CSV bytes are preserved.
+  final_dir<-file.path(root,"final")
+  dir.create(final_dir,recursive=TRUE,showWarnings=FALSE)
+  manifest_out<-file.path(final_dir,"final_manifest.json")
   manifest<-list(
-    schema="ostara-locked-case-data-final-v1",
+    schema="ostara-existing-case-data-lock-v1",
     status="FINAL_ACCESSIBLE_FULLTEXT_EXTRACTION",
-    finalised_at_utc=format(Sys.time(),"%Y-%m-%dT%H:%M:%SZ",tz="UTC"),
+    locked_at_utc=format(Sys.time(),"%Y-%m-%dT%H:%M:%SZ",tz="UTC"),
     project="Ostara_collective_action_map",
     model="gpt-5.6-luna",
     eligibility="W08 human-adjudicated specific_case or multiple_cases with readable W09 full text",
@@ -195,10 +224,25 @@ finalise_ostara_locked_case_data <- function(map_path,
     final_case_csv=cases_out,final_case_csv_sha256=sha(cases_out),
     final_status_csv=status_out,final_status_csv_sha256=sha(status_out),
     final_summary_csv=summary_out,final_summary_csv_sha256=sha(summary_out))
-  jsonlite::write_json(manifest,manifest_out,pretty=TRUE,auto_unbox=TRUE)
+  if(file.exists(manifest_out)){
+    prior<-jsonlite::fromJSON(manifest_out,simplifyVector=FALSE)
+    if(!identical(prior$schema,manifest$schema))
+      stop("Existing final manifest is not an OSTARA existing-file lock.")
+    # The timestamp is deliberately excluded from comparison for
+    # idempotent verification of an already-locked identical archive.
+    manifest$locked_at_utc<-prior$locked_at_utc
+    if(!identical(prior,manifest))
+      stop("Existing final manifest differs from current provenance or CSV ",
+           "checksums. No files were changed.")
+    message("[OSTARA final] Existing manifest VERIFIED without rewriting.")
+  } else {
+    jsonlite::write_json(manifest,manifest_out,pretty=TRUE,auto_unbox=TRUE)
+    message("[OSTARA final] Manifest created without modifying existing CSVs.")
+  }
   message("[OSTARA final] ",nrow(all_status)," validated publications; ",
           nrow(all_cases)," cases; pilot included exactly once.")
-  message("[OSTARA final] Final manifest: ",manifest_out)
+  message("[OSTARA final] Locked dataset: ",cases_out)
+  message("[OSTARA final] Manifest: ",manifest_out)
   invisible(list(cases=cases_out,status=status_out,summary=summary_out,
-                 manifest=manifest_out,counts=summary))
+                 manifest=manifest_out,counts=existing_summary))
 }
