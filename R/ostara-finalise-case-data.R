@@ -8,12 +8,10 @@
 #'
 #' @param map_path OSTARA project root.
 #' @param pilot_id Name of the locked pilot archive.
-#' @param overwrite_final Allow replacement ONLY if existing files have exactly
-#'   identical bytes; changed final outputs require an explicitly new version.
 #' @return Invisible list of final output paths and counts.
 #' @export
 finalise_ostara_locked_case_data <- function(map_path,
-     pilot_id="case_pilot_20_20261113",overwrite_final=FALSE) {
+     pilot_id="case_pilot_20_20261113") {
   norm<-function(x)normalizePath(x,winslash="/",mustWork=TRUE)
   sha<-function(x)digest::digest(file=x,algo="sha256",serialize=FALSE)
   read_csv<-function(path)utils::read.csv(path,
@@ -25,8 +23,6 @@ finalise_ostara_locked_case_data <- function(map_path,
            simplifyVector=FALSE)
   }
   id<-function(x)as.character(x$record_id)
-  if(!is.logical(overwrite_final)||length(overwrite_final)!=1L||
-     is.na(overwrite_final))stop("overwrite_final must be TRUE or FALSE.")
   map_path<-norm(map_path)
   pilot<-norm(file.path(map_path,"reports","ostara_case_pilots",pilot_id))
   pilot_manifest_file<-norm(file.path(pilot,"batch_manifest.json"))
