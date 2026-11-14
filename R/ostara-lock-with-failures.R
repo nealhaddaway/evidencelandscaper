@@ -37,6 +37,14 @@ lock_ostara_case_data_with_failures <- function(map_path) {
     stop("Pilot sample must have 20 unique record IDs.")
   expected_failures<-c("work-4cfa0cacd9a36144",
      "work-6a77cf0d62cba451","work-9c31363ab815eff1")
+  # The nine validated publications from the final retry, recorded explicitly
+  # to document the change from 483 to 492 validated remaining90 records.
+  latest_retry_ids<-c(
+    "work-2bf8eac51f20836e","work-472b06139c558eb7",
+    "work-4c9a43b0d69013c0","work-5a9d05d79986ed5c",
+    "work-714ec230989ef6a1","work-81e7bf81768a5cd2",
+    "work-834184f3cb207052","work-aafd19f3fb6d25bd",
+    "work-b99a82efc107b5db")
   cohorts<-c("remaining90","first10")
   data_cases<-list();data_status<-list();prov<-list()
   for(cohort in cohorts) {
@@ -88,6 +96,9 @@ lock_ostara_case_data_with_failures <- function(map_path) {
        ifelse(ids%in%unresolved,"unresolved","validated")))
       stop("Stale or inconsistent cohort publication statuses: ",cohort)
     valid_ids<-setdiff(ids,unresolved)
+    if(identical(cohort,"remaining90")&&
+       !all(latest_retry_ids%in%valid_ids))
+      stop("One or more of the nine newly validated retry IDs is missing.")
     counts<-vapply(recs[match(valid_ids,rid)],
                     function(z)length(z$cases),integer(1))
     observed<-st$case_count[match(valid_ids,ids)]
@@ -196,6 +207,10 @@ lock_ostara_case_data_with_failures <- function(map_path) {
     total_failed_extractions=sum(statuses$extraction_status=="failed_extraction"),
     failed_record_ids=as.list(expected_failures),
     total_extracted_cases=nrow(combined),
+    last_retry_new_validations=9L,
+    last_retry_validated_record_ids=as.list(latest_retry_ids),
+    remaining90_validated_before_last_retry=483L,
+    remaining90_validated_after_last_retry=492L,
     outputs=list(
       cases=list(path=files[[1L]],sha256=sha(files[[1L]])),
       publication_status=list(path=files[[2L]],sha256=sha(files[[2L]])),
