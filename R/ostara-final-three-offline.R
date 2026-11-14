@@ -20,8 +20,8 @@ recover_ostara_final_three_offline <- function(map_path,commit=FALSE) {
     lapply(lines[nzchar(trimws(lines))],jsonlite::fromJSON,
            simplifyVector=FALSE)
   }
-  as_id<-function(x)if(is.character(x$record_id)&&length(x$record_id)==1L)
-    x$record_id else ""
+  as_id<-function(x)if(is.list(x)&&is.character(x$record_id)&&
+                      length(x$record_id)==1L) x$record_id else ""
   map_path<-norm(map_path)
   w09<-norm(file.path(map_path,"runs","W09","ft-mechanism-stage-remaining90"))
   pilot<-norm(file.path(map_path,"reports","ostara_case_pilots",
@@ -202,7 +202,7 @@ recover_ostara_final_three_offline <- function(map_path,commit=FALSE) {
     for(j in seq_along(candidates)){
       if(j==which)next
       z<-candidates[[j]]
-      if(!is.list(z$cases)||length(z$cases)<case_i)next
+      if(!is.list(z)||!is.list(z$cases)||length(z$cases)<case_i)next
       othercase<-z$cases[[case_i]]
       thiscase<-candidates[[which]]$cases[[case_i]]
       if(!is.list(othercase)||!is.character(othercase$case_id)||
