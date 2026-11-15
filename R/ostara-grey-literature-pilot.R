@@ -104,7 +104,9 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
     old<-jsonlite::fromJSON(staging_manifest,simplifyVector=FALSE)
     # If the first run established a source identity register, metadata
     # changes or replacement files must use a fresh batch ID.
-    if(!identical(old,manifest))
+    as_json<-function(z)as.character(jsonlite::toJSON(z,
+                              auto_unbox=TRUE,null="null",digits=NA))
+    if(!identical(as_json(old),as_json(manifest)))
       stop("Grey batch source register changed. Use a NEW batch_id ",
            "for changed metadata or documents.")
   } else {
@@ -182,8 +184,55 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
   excel_csv(status,status_out)
   cases_csv<-NULL
   if(length(records)){
-    cases_csv<-export_w09_cases_wide_evidence(
-      w09=root,extraction_dir=xdir,include_status=TRUE)
+    spec<-csv(schema)
+    spec<-spec[!grepl("mechanisms of the collective action",
+              spec$Question,ignore.case=TRUE),,drop=FALSE]
+    names_out<-unlist(lapply(seq_len(nrow(spec)),function(i){
+      nm<-paste0(sprintf("%02d",i),". ",spec$Question[[i]])
+      c(nm,paste0(nm," [evidence]"),
+        paste0(nm," [reporting status]"))
+    }),use.names=FALSE)
+    names_out<-make.unique(names_out)
+    base<-c("record_id","case_id","assessment_reason",
+            "case_boundary_uncertainty")
+    rows<-list()
+    for(rec in records)for(onecase in rec$cases){
+      fixed<-c(record_id=scalar(rec$record_id),
+        case_id=scalar(onecase$case_id),
+        assessment_reason=scalar(onecase$assessment_reason),
+        case_boundary_uncertainty=scalar(onecase$case_boundary_uncertainty))
+      values<-character()
+      for(i in seq_len(nrow(spec))) {
+        f<-onecase$fields[[sprintf("field_%03d",i)]]
+        if(is.null(f))stop("Validated grey case missing field ",i)
+        v<-if(!is.null(f$values))unlist(f$values,use.names=FALSE)
+           else unlist(f$value,use.names=FALSE)
+        is_factors<-grepl("enabler|barrier",spec$Question[[i]],
+                           ignore.case=TRUE)
+        answer<-if(!length(v))"" else if(is_factors)
+          paste0("• ",paste(v,collapse="\n• ")) else paste(v,collapse="\n")
+        ev<-if(length(f$evidence))
+          vapply(f$evidence,function(e)
+            paste0(scalar(e$anchor),": ",scalar(e$quote)),character(1))
+          else character()
+        values<-c(values,answer,paste(ev,collapse="\n"),
+                  scalar(f$reporting_status))
+      }
+      names(values)<-names_out
+      rows[[length(rows)+1L]]<-c(fixed,values)
+    }
+    all_names<-c(base,names_out)
+    if(length(rows)){
+      wide<-as.data.frame(do.call(rbind,rows),check.names=FALSE,
+                          stringsAsFactors=FALSE)
+      names(wide)<-all_names
+    }else {
+      wide<-as.data.frame(matrix(character(),nrow=0L,
+                         ncol=length(all_names)),check.names=FALSE)
+      names(wide)<-all_names
+    }
+    cases_csv<-file.path(root,"grey_case_data_wide.csv")
+    excel_csv(wide,cases_csv)
   }
   # Explicit outcome manifest may be updated as a batch resumes;
   # source identity manifest is immutable.
