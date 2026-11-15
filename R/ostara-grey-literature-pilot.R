@@ -114,9 +114,22 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
   queue<-data.frame(record_id=ids,title=labels,
                     doi=rep("",length(ids)),stringsAsFactors=FALSE)
   if(file.exists(qfile)){
-    old<-csv(qfile)
-    if(!identical(old,queue))
-      stop("Staged W09 retrieval queue has changed.")
+    # A CSV round-trip can convert an all-empty DOI column to logical NA
+    # or otherwise infer column types. Compare the recorded string values,
+    # not R's inferred data-frame column classes, and never rewrite a queue.
+    old<-utils::read.csv(qfile,check.names=FALSE,stringsAsFactors=FALSE,
+        colClasses="character",na.strings="NA",fileEncoding="UTF-8-BOM")
+    if(!identical(names(old),names(queue))||
+       nrow(old)!=nrow(queue))
+      stop("Staged W09 retrieval queue columns/row count changed.")
+    # Empty DOI is the only allowed missing value: no DOI was supplied for
+    # filename-only source records. Preserve every record_id and filename.
+    if(anyNA(old$record_id)||anyNA(old$title)||
+       !identical(old$record_id,as.character(queue$record_id))||
+       !identical(old$title,as.character(queue$title))||
+       !identical(replace(old$doi,is.na(old$doi),""),queue$doi))
+      stop("Staged W09 retrieval queue content changed. ",
+           "No staged inputs were overwritten.")
   } else utils::write.csv(queue,qfile,row.names=FALSE,na="")
   # Stage all documents first; unprocessable PDF or XML is logged and
   # never classified as 'no case'. Extraction requires 10 readable sources.
