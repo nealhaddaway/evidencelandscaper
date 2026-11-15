@@ -1,14 +1,12 @@
 #' Stage and optionally extract a ten-source OSTARA grey-literature pilot
 #'
-#' A separate W09-compatible namespace is created for identity-verified
-#' grey-literature PDF/XML files. The locked pilot prompt/schema are reused,
-#' without changing the published peer-reviewed case-data snapshot.
-#' Metadata file must have file_name,title,source_url,access_date and
-#' human_verified_identity columns. Never infers case-positive status from
-#' filename or metadata: submitted full texts may yield zero cases.
+#' A separate W09-compatible namespace is created from exactly ten PDF/XML
+#' files. The filename is used as the source label, with file hashes and
+#' extraction provenance recorded automatically. No sources.csv is needed.
+#' No case-positive classification is assumed; a document may yield zero cases.
 #'
 #' @param map_path OSTARA project root.
-#' @param input_dir Directory with 10 source PDF/XML files and sources.csv.
+#' @param input_dir Directory containing exactly 10 PDF/XML files.
 #' @param batch_id Stable pilot identifier, reused to resume.
 #' @param run_extraction FALSE stages/validates only; TRUE incurs API costs.
 #' @return Paths and source/publication statuses, invisibly.
@@ -40,32 +38,18 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
                        quote=TRUE,na="",qmethod="double")
   }
   map_path<-norm(map_path);input_dir<-norm(input_dir)
-  metadata_path<-norm(file.path(input_dir,"sources.csv"))
-  m<-csv(metadata_path)
-  required<-c("file_name","title","source_url","access_date",
-              "human_verified_identity")
-  if(!all(required%in%names(m)))
-    stop("sources.csv needs columns: ",paste(required,collapse=", "))
-  if(nrow(m)!=10L)stop("Ten-source pilot requires exactly 10 metadata rows.")
-  for(k in required)if(anyNA(m[[k]])||
-     any(!nzchar(trimws(as.character(m[[k]])))))
-       stop("Missing required metadata in column ",k)
-  if(anyDuplicated(m$file_name))
-    stop("Duplicate source filename in sources.csv.")
-  if(any(!m$human_verified_identity%in%c("TRUE","true",TRUE)))
-    stop("Every source requires human_verified_identity=TRUE; ",
-         "check document identity before a paid extraction.")
-  if(any(!grepl("^\\d{4}-\\d{2}-\\d{2}$",m$access_date)))
-    stop("access_date must use ISO YYYY-MM-DD.")
-  if(any(!grepl("^(https?://|doi:)",m$source_url,ignore.case=TRUE)))
-    stop("Each source_url must be a URL or doi: identifier.")
-  if(any(grepl("[/\\\\]",m$file_name))||
-     any(!grepl("\\.(pdf|xml)$",m$file_name,ignore.case=TRUE)))
-    stop("Provide plain .pdf/.xml filenames, no subfolders.")
-  input_paths<-file.path(input_dir,m$file_name)
-  if(any(!file.exists(input_paths)))
-    stop("Missing input files: ",
-         paste(m$file_name[!file.exists(input_paths)],collapse=", "))
+  files<-sort(list.files(input_dir,pattern="\\.(pdf|xml)$",
+                         ignore.case=TRUE,full.names=FALSE))
+  if(length(files)!=10L)
+    stop("Expected exactly 10 PDF/XML documents in input folder; found ",
+         length(files),".")
+  if(anyDuplicated(files))stop("Duplicate source filenames.")
+  input_paths<-file.path(input_dir,files)
+  if(any(dir.exists(input_paths))||any(!file.exists(input_paths)))
+    stop("All ten PDF/XML inputs must be files in the input directory.")
+  # Filenames are the ONLY source labels supplied by the operator. Bibliographic
+  # metadata is deliberately not inferred or fabricated.
+  labels<-tools::file_path_sans_ext(files)
   ext<-tolower(tools::file_ext(input_paths))
   hashes<-vapply(input_paths,sha,character(1))
   if(anyDuplicated(hashes))
@@ -87,14 +71,13 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
   staging_manifest<-file.path(root,"grey_sources_manifest.json")
   qfile<-file.path(root,"retrieval_queue.csv")
   inventory<-data.frame(
-    record_id=ids,file_name=m$file_name,title=m$title,
-    source_url=m$source_url,access_date=m$access_date,
-    human_verified_identity=rep(TRUE,10L),source_format=ext,
+    record_id=ids,file_name=files,title=labels,source_format=ext,
     source_sha256=hashes,original_file_bytes=as.numeric(file.info(input_paths)$size),
     stringsAsFactors=FALSE)
-  manifest<-list(schema="ostara-grey-literature-batch-v1",
+  manifest<-list(schema="ostara-grey-literature-filename-only-batch-v2",
     batch_id=batch_id,source_class="grey_literature",
     case_positive_prior_classification="not_assumed",
+    metadata_policy="Filename label only; bibliographic metadata unverified",
     full_texts_provided=10L,
     locked_prompt_sha256=sha(prompt),locked_schema_sha256=sha(schema),
     approved_pilot_manifest_sha256=sha(pfile),
@@ -128,7 +111,7 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
         stop("Cannot stage: ",input_paths[[i]])
     }
   }
-  queue<-data.frame(record_id=ids,title=m$title,
+  queue<-data.frame(record_id=ids,title=labels,
                     doi=rep("",length(ids)),stringsAsFactors=FALSE)
   if(file.exists(qfile)){
     old<-csv(qfile)
@@ -176,7 +159,7 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
   cases_n<-rep(NA_integer_,length(ids))
   for(i in which(ids%in%rid))
     cases_n[[i]]<-length(records[[match(ids[[i]],rid)]]$cases)
-  status<-data.frame(record_id=ids,title=m$title,
+  status<-data.frame(record_id=ids,file_name=files,title=labels,
      extraction_status=ifelse(!readable,"unreadable_full_text",
        ifelse(ids%in%rid,"validated","not_yet_validated")),
      case_count=cases_n,stringsAsFactors=FALSE)
