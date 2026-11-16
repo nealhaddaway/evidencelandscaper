@@ -9,10 +9,13 @@
 #' @param input_dir Directory containing exactly 10 PDF/XML files.
 #' @param batch_id Stable pilot identifier, reused to resume.
 #' @param run_extraction FALSE stages/validates only; TRUE incurs API costs.
+#' @param prompt_file Optional revised grey prompt path; defaults to approved journal prompt.
+#' @param schema_file Optional revised grey CSV path; defaults to approved journal schema.
 #' @return Paths and source/publication statuses, invisibly.
 #' @export
 run_ostara_grey_literature_pilot <- function(map_path,input_dir,
-   batch_id="grey_pilot_10",run_extraction=FALSE) {
+   batch_id="grey_pilot_10",run_extraction=FALSE,
+   prompt_file=NULL,schema_file=NULL) {
   if(!is.logical(run_extraction)||length(run_extraction)!=1L||
      is.na(run_extraction))stop("run_extraction must be TRUE or FALSE.")
   if(!is.character(batch_id)||length(batch_id)!=1L||
@@ -59,13 +62,28 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
   if(anyDuplicated(ids))stop("Source ID hash collision.")
   pilot<-norm(file.path(map_path,"reports","ostara_case_pilots",
                          "case_pilot_20_20261113"))
-  prompt<-norm(file.path(pilot,"prompt.txt"))
-  schema<-norm(file.path(pilot,"case_schema.csv"))
   pfile<-norm(file.path(pilot,"batch_manifest.json"))
   pmeta<-jsonlite::fromJSON(pfile,simplifyVector=FALSE)
-  if(!identical(sha(prompt),pmeta$staged_prompt_sha256)||
-     !identical(sha(schema),pmeta$schema_sha256))
-    stop("Locked OSTARA pilot prompt/schema hashes do not match.")
+  original_prompt<-norm(file.path(pilot,"prompt.txt"))
+  original_schema<-norm(file.path(pilot,"case_schema.csv"))
+  if(!identical(sha(original_prompt),pmeta$staged_prompt_sha256)||
+     !identical(sha(original_schema),pmeta$schema_sha256))
+    stop("Approved OSTARA pilot prompt/schema hashes do not match.")
+  if(xor(is.null(prompt_file),is.null(schema_file)))
+    stop("Supply both revised prompt_file and schema_file or neither.")
+  prompt<-if(is.null(prompt_file)) original_prompt else norm(prompt_file)
+  schema<-if(is.null(schema_file)) original_schema else norm(schema_file)
+  if(!is.null(schema_file)){
+    grey_spec<-csv(schema)
+    if(nrow(grey_spec)!=41L||
+       !identical(trimws(grey_spec$Question[[1L]]),"Type of source")||
+       !grepl("^Was this source/publication written, funded or commissioned",
+              trimws(grey_spec$Question[[41L]])))
+      stop("Expected the client's exact revised 41-field grey-literature schema.")
+    if(!identical(basename(batch_id),"grey_pilot_10_revised"))
+      message("[OSTARA grey] Using custom prompt/schema for batch ",batch_id,
+              "; this MUST be a distinct batch ID from previous inputs.")
+  }
   root<-file.path(map_path,"runs","W09","grey_literature",batch_id)
   dir.create(root,recursive=TRUE,showWarnings=FALSE)
   staging_manifest<-file.path(root,"grey_sources_manifest.json")
@@ -78,6 +96,7 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
     batch_id=batch_id,source_class="grey_literature",
     case_positive_prior_classification="not_assumed",
     metadata_policy="Filename label only; bibliographic metadata unverified",
+    input_contract=if(is.null(schema_file))"original_pilot" else "client_revised_grey_41_fields",
     full_texts_provided=10L,
     locked_prompt_sha256=sha(prompt),locked_schema_sha256=sha(schema),
     approved_pilot_manifest_sha256=sha(pfile),
