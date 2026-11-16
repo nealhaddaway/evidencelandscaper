@@ -54,3 +54,36 @@ the validator applies its choice without changing the client files. The
 revised run is isolated by distinct extraction prompt/schema hashes and batch
 ID, so earlier attempts on the same PDFs are not silently reused. Source
 identity is still filename-only; missing bibliographic data are not invented.
+
+## Select revised client inputs interactively in R (no manual staging)
+
+On macOS, the calling R script can select the locally stored client-supplied
+files with `file.choose()`. The repository function does not require a
+specific input filename, a ZIP, a `sources.csv`, or uploading the two
+documents to GitHub.
+
+```r
+message("Select the revised grey-literature TEXT prompt")
+grey_prompt <- normalizePath(file.choose(),mustWork=TRUE)
+message("Select the revised grey-literature CSV schema")
+grey_schema <- normalizePath(file.choose(),mustWork=TRUE)
+
+# First stage/readability only; no model requests.
+preview <- run_ostara_grey_literature_pilot(
+  map_path=map,input_dir=input,batch_id="grey_pilot_10_revised",
+  prompt_file=grey_prompt,schema_file=grey_schema,
+  run_extraction=FALSE)
+
+# Only after verifying preview$readable == 10:
+result <- run_ostara_grey_literature_pilot(
+  map_path=map,input_dir=input,batch_id="grey_pilot_10_revised",
+  prompt_file=grey_prompt,schema_file=grey_schema,
+  run_extraction=TRUE)
+```
+
+All ten source file IDs, source labels and hashes are derived from the
+same document folder as the prior test. The revised batch ID and
+prompt/schema hashes isolate new extractions from the previous pilot.
+The source register and extraction checkpoints are kept in the new
+batch directory. R's local file chooser does not modify the source
+documents or upload them to GitHub.
