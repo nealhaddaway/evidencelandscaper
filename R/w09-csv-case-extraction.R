@@ -52,6 +52,16 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
   if(any(!nzchar(trimws(spec$Definition))))
     stop("CSV contains empty field definitions.")
   spec$field_id<-sprintf("field_%03d",seq_len(nrow(spec)))
+  # Grey-specific checks must never alter the journal-literature contract.
+  is_grey_schema<-identical(trimws(spec$Question[[1L]]),"Type of source")
+  if(is_grey_schema) {
+    if(nrow(spec)!=41L||
+       !grepl("^Was this source/publication written, funded or commissioned",
+              trimws(spec$Question[[41L]])))
+      stop("Unexpected grey-literature field count/order.")
+    # The supplied prompt illustrates 'systemic or other', but the
+    # authoritative CSV permits 'systemic'; preserve both originals.
+  }
   schema_sha<-sha(schema_file)
   if(!length(record_ids)||anyNA(record_ids)||anyDuplicated(record_ids))
     stop("Supply unique manually identity-verified record_ids.")
@@ -150,7 +160,11 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
         q<-tolower(trimws(spec$Question[[i]]))
         allowed<-NULL
         if(grepl("^what is the status",q))
-          allowed<-c("active","paused","completed","abandoned")
+          allowed<-c("active","paused","completed","abandoned",
+                      if(is_grey_schema)"proposed")
+        if(is_grey_schema&&identical(q,"type of source"))
+          allowed<-c("self-issued_report","academic","independent_report",
+                      "government_document","web_page")
         if(grepl("^what is the level at which",q))
           allowed<-c("private sector","place- or landscape-based","national",
             "inter-governmental or multinational","systemic")
@@ -160,6 +174,13 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
         if(identical(q,"supply chain stages"))
           allowed<-c("production","aggregation","processing","transport",
                      "wholesale","retail")
+        if(is_grey_schema&&identical(q,"date of publication")&&
+           any(!grepl("^(0[1-9]|1[0-2])-[0-9]{4}$",vals)))
+          stop("Grey-literature publication date must be MM-YYYY: ",key)
+        if(is_grey_schema&&grepl("^was this source/publication written, funded or commissioned",q)&&
+           length(vals)&&any(!grepl("^(yes|no|unclear)([[:space:][:punct:]]|$)",
+                                      tolower(trimws(vals)))))
+          stop("Grey-literature involvement response must begin yes, no or unclear: ",key)
         if(!is.null(allowed)&&any(!vals%in%allowed))
           stop("Unrecognised fixed-choice value for ",key,": ",
                paste(setdiff(vals,allowed),collapse=", "))
