@@ -6,7 +6,8 @@
 #' prompt/ontology checksums determine an isolated resumable output directory.
 #' All result and audit files are written locally, not to GitHub.
 #'
-#' @param w09 W09 directory containing retrieval_queue.csv and pdfs/ or structured/.
+#' @param w09 Optional explicit W09 directory; NULL discovers all journal-literature W09 full-text collections in the map.
+#' @param map_path Local OSTARA project directory, used when w09=NULL.
 #' @param prompt_file Local full-text mechanism inventory prompt (.txt).
 #' @param ontology_file Local approved five-column ontology (.csv).
 #' @param sample_size Number of unique full texts, default 10.
@@ -15,8 +16,36 @@
 #' @return Versioned local run directory, invisibly.
 #' @export
 run_ostara_random_fulltext_mechanism_pilot <- function(
-    w09,prompt_file,ontology_file,sample_size=10L,seed=20261117L,
-    model="gpt-5.6-luna") {
+    w09=NULL,prompt_file,ontology_file,sample_size=10L,seed=20261117L,
+    model="gpt-5.6-luna",map_path=NULL) {
+  if(is.null(w09)) {
+    if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
+    map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
+    root<-file.path(map_path,"runs","W09")
+    candidates<-list.dirs(root,recursive=FALSE,full.names=TRUE)
+    candidates<-candidates[file.exists(file.path(candidates,"retrieval_queue.csv"))]
+    # Exclude independent grey pilot and provisional/subset queues.
+    candidates<-candidates[grepl("^(first10|remaining90)-all-included-",basename(candidates))]
+    if(!length(candidates))
+      stop("No completed journal W09 all-included collections found in ",root)
+    counts<-vapply(candidates,function(p){
+      q<-utils::read.csv(file.path(p,"retrieval_queue.csv"),stringsAsFactors=FALSE)
+      if(!"record_id"%in%names(q)||anyNA(q$record_id)||anyDuplicated(q$record_id))
+        stop("Invalid W09 queue: ",p)
+      sum(vapply(as.character(q$record_id),function(id)any(file.exists(c(
+        file.path(p,"structured",paste0(id,".xml")),
+        file.path(p,"structured",paste0(id,".json")),
+        file.path(p,"pdfs",paste0(id,".pdf"))))),logical(1)))
+    },integer(1))
+    candidates<-candidates[counts>0L]
+    if(!length(candidates))stop("No available journal full texts found in ",root)
+    # The multi-cohort runner below samples the union and routes each cohort
+    # through the established per-W09 inventory extractor.
+    return(.ostara_random_pilot_across_w09(
+      candidates=candidates,prompt_file=prompt_file,
+      ontology_file=ontology_file,sample_size=sample_size,seed=seed,
+      model=model,map_path=map_path))
+  }
   w09<-normalizePath(w09,winslash="/",mustWork=TRUE)
   prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
   ontology_file<-normalizePath(ontology_file,winslash="/",mustWork=TRUE)
