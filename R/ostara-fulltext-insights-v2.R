@@ -13,8 +13,8 @@
   if((length(z$insights)>0L)!=identical(z$status,"insights_identified"))
     stop("W09 insights-v2 status/count mismatch")
   categories<-c("empirical_finding","broader_lesson","recommendation","future_prospect")
-  bases<-c("original_empirical","literature_synthesis","author_interpretation",
-           "recommendation","speculative_proposal")
+  bases<-c("original_empirical","literature_synthesis","stakeholder_views",
+           "author_interpretation","not_stated")
   scopes<-c("multiple_cases","generalised_single_case","literature_wide",
             "conceptual","not_specified","not_applicable")
   flags<-list()
@@ -72,7 +72,7 @@
 #'
 #' @param w09 Directory with retrieval_queue.csv and pdfs/ or structured/ files.
 #' @param prompt_file Explicit revised Insights prompt TXT.
-#' @param ontology_file Explicit approved 30-code ontology CSV.
+#' @param ontology_file Explicit approved 26-code v5 or legacy 30-code ontology CSV.
 #' @param record_ids Optional subset from W09 queue; NULL uses all downloaded.
 #' @param max_records Maximum new assessments; 0 means all.
 #' @param model OpenAI Luna model.
@@ -98,12 +98,14 @@ extract_ostara_fulltext_insights_v2 <- function(
   if(!nzchar(trimws(prompt)))stop("Empty insights prompt.")
   ontology<-utils::read.csv(ontology_file,stringsAsFactors=FALSE,
                             fileEncoding="UTF-8-BOM",check.names=FALSE)
-  expected<-c("mechanism_id","collective_action_type",
+  legacy<-c("mechanism_id","collective_action_type",
               "high_level_mechanism","fine_level_mechanism","definition")
-  if(!identical(names(ontology),expected)||nrow(ontology)!=30L||
+  v5<-c("mechanism_id","category","function","mechanism","definition")
+  if(!((identical(names(ontology),legacy)&&nrow(ontology)==30L)||
+        (identical(names(ontology),v5)&&nrow(ontology)==26L))||
      anyNA(ontology)||any(!nzchar(trimws(as.matrix(ontology))))||
      anyDuplicated(ontology$mechanism_id))
-    stop("The approved ontology must contain 30 complete five-column definitions.")
+    stop("Ontology must be the approved 26-mechanism v5 or legacy 30-mechanism five-column CSV.")
   codes<-as.character(ontology$mechanism_id)
   queue_path<-file.path(w09,"retrieval_queue.csv")
   queue<-utils::read.csv(queue_path,stringsAsFactors=FALSE)
@@ -179,8 +181,8 @@ extract_ostara_fulltext_insights_v2 <- function(
     "source_quote,source_anchor,caveats. ",
     "insight_id must be <record_id>::insight_001 and sequential. ",
     "category: empirical_finding|broader_lesson|recommendation|future_prospect. ",
-    "evidence_basis: original_empirical|literature_synthesis|author_interpretation|",
-    "recommendation|speculative_proposal. ",
+    "evidence_basis: original_empirical|literature_synthesis|stakeholder_views|",
+    "author_interpretation|not_stated. ",
     "support_scope: multiple_cases|generalised_single_case|literature_wide|",
     "conceptual|not_specified|not_applicable. ",
     "context and caveats may be empty strings, mechanism_ids is an array ",
