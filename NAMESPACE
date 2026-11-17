@@ -131,6 +131,7 @@ export(run_w08_adjudicated_first_10)
 export(extract_ostara_all_fulltext_mechanisms)
 export(run_ostara_fulltext_insights_pilot)
 export(run_ostara_random_fulltext_mechanism_pilot)
+export(run_ostara_all_available_fulltext_mechanisms)
 export(rerun_ostara_mechanism_pilot_same_records)
 export(consolidate_ostara_fulltext_mechanism_pilot)
 
