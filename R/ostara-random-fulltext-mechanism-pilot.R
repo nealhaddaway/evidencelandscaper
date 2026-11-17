@@ -123,3 +123,97 @@ run_ostara_random_fulltext_mechanism_pilot <- function(
   message("[FT mechanism pilot] Results saved locally: ",dest)
   invisible(dest)
 }
+
+# Sample the entire retrieved journal full-text pool across all completed W09
+# all-included cohorts, retaining each source's owning W09 directory.
+.ostara_random_pilot_across_w09<-function(
+    candidates,prompt_file,ontology_file,sample_size,seed,model,map_path) {
+  prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
+  ontology_file<-normalizePath(ontology_file,winslash="/",mustWork=TRUE)
+  if(length(sample_size)!=1L||is.na(sample_size)||
+     sample_size!=as.integer(sample_size)||sample_size<1L)
+    stop("sample_size must be a positive integer")
+  if(length(seed)!=1L||is.na(seed)||seed!=as.integer(seed)||seed<0L)
+    stop("seed must be a nonnegative integer")
+  sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
+  candidates<-sort(unique(normalizePath(candidates,winslash="/",mustWork=TRUE)))
+  pool<-do.call(rbind,lapply(candidates,function(w09){
+    q<-utils::read.csv(file.path(w09,"retrieval_queue.csv"),stringsAsFactors=FALSE)
+    ids<-sort(as.character(q$record_id))
+    paths<-vapply(ids,function(id){
+      options<-c(file.path(w09,"structured",paste0(id,".xml")),
+                 file.path(w09,"structured",paste0(id,".json")),
+                 file.path(w09,"pdfs",paste0(id,".pdf")))
+      present<-options[file.exists(options)]
+      if(length(present))normalizePath(present[[1L]],winslash="/",mustWork=TRUE)
+      else ""
+    },character(1))
+    data.frame(record_id=ids[nzchar(paths)],w09=w09,
+      source_file=unname(paths[nzchar(paths)]),stringsAsFactors=FALSE)
+  }))
+  if(is.null(pool)||nrow(pool)<sample_size)
+    stop("Only ",if(is.null(pool))0L else nrow(pool),
+         " journal W09 full texts available; need ",sample_size)
+  # A record can be carried in both full-text collections. Select one
+  # deterministic source after checking that duplicate IDs have identical bytes.
+  duplicated_ids<-unique(pool$record_id[duplicated(pool$record_id)])
+  for(id in duplicated_ids) {
+    hashes<-unique(vapply(pool$source_file[pool$record_id==id],sha,character(1)))
+    if(length(hashes)>1L)
+      stop("Conflicting full texts for duplicate W09 record ID: ",id)
+  }
+  pool<-pool[!duplicated(pool$record_id),,drop=FALSE]
+  pool<-pool[order(pool$record_id),,drop=FALSE]
+  if(nrow(pool)<sample_size)stop("Insufficient unique full texts")
+  had_seed<-exists(".Random.seed",envir=.GlobalEnv,inherits=FALSE)
+  if(had_seed)old_seed<-get(".Random.seed",envir=.GlobalEnv)
+  on.exit({
+    if(had_seed)assign(".Random.seed",old_seed,envir=.GlobalEnv)
+    else if(exists(".Random.seed",envir=.GlobalEnv,inherits=FALSE))
+      rm(".Random.seed",envir=.GlobalEnv)
+  },add=TRUE)
+  set.seed(seed)
+  selection<-pool[sort(sample.int(nrow(pool),sample_size,replace=FALSE)),,drop=FALSE]
+  rownames(selection)<-NULL
+  key<-substr(digest::digest(c(sha(prompt_file),sha(ontology_file),
+      as.character(seed),as.character(sample_size),model,
+      vapply(candidates,function(p)sha(file.path(p,"retrieval_queue.csv")),character(1)),
+      selection$record_id,selection$w09,
+      vapply(selection$source_file,sha,character(1))),algo="sha256"),1L,16L)
+  base<-file.path(map_path,"runs","W09","random_fulltext_mechanism_pilots",
+                   paste0("seed-",seed,"-n-",sample_size,"-",key))
+  if(dir.exists(base)&&!file.exists(file.path(base,"sample_manifest.json")))
+    stop("Existing pilot directory without sample manifest: ",base)
+  dir.create(base,recursive=TRUE,showWarnings=FALSE)
+  manifest<-list(schema="ostara-random-multicohort-fulltexts-v1",
+     seed=as.integer(seed),sample_size=as.integer(sample_size),
+     prompt_sha256=sha(prompt_file),ontology_sha256=sha(ontology_file),
+     model=model,source_w09=as.list(candidates),
+     records=lapply(seq_len(nrow(selection)),function(i)as.list(selection[i,,drop=FALSE])))
+  manifest_path<-file.path(base,"sample_manifest.json")
+  if(file.exists(manifest_path)) {
+    previous<-jsonlite::fromJSON(manifest_path,simplifyVector=FALSE)
+    canonical<-function(x)as.character(jsonlite::toJSON(x,auto_unbox=TRUE,null="null"))
+    if(!identical(canonical(previous),canonical(manifest)))
+      stop("Pilot sample manifest/provenance mismatch")
+  } else jsonlite::write_json(manifest,manifest_path,auto_unbox=TRUE,pretty=TRUE)
+  csv_path<-file.path(base,"random_sample.csv")
+  if(file.exists(csv_path)) {
+    old<-utils::read.csv(csv_path,stringsAsFactors=FALSE)
+    if(!identical(old,selection))stop("Random pilot sample CSV mismatch")
+  } else utils::write.csv(selection,csv_path,row.names=FALSE)
+  message("[FT mechanism pilot] ",nrow(selection)," sampled from ",
+          nrow(pool)," unique available journal full texts across ",
+          length(candidates)," W09 cohorts. No prior inventories excluded.")
+  outputs<-character()
+  for(w09 in unique(selection$w09)) {
+    group<-selection$record_id[selection$w09==w09]
+    group_base<-file.path(base,paste0("cohort-",basename(w09)))
+    dir.create(group_base,recursive=TRUE,showWarnings=FALSE)
+    outputs<-c(outputs,extract_ostara_all_fulltext_mechanisms(
+      w09=w09,record_ids=group,max_records=0L,model=model,
+      output_dir=group_base,ontology_file=ontology_file,prompt_file=prompt_file))
+  }
+  message("[FT mechanism pilot] Sample and per-cohort checkpoints: ",base)
+  invisible(base)
+}
