@@ -118,7 +118,8 @@ run_ostara_fulltext_insights_pilot <- function(
   }
   output<-extract_ostara_fulltext_insights_v2(
     w09=stage,prompt_file=prompt_file,ontology_file=ontology_file,
-    record_ids=as.character(selection$record_id),max_records=0L,model=model)
+    record_ids=as.character(selection$record_id),max_records=0L,model=model,
+    use_exact_prompt=TRUE)
   # Consolidate completed outputs, preserving no-insight and unclear
   # publications as explicit publication-level rows.
   ledger<-file.path(output,"insights_assessments.jsonl")
