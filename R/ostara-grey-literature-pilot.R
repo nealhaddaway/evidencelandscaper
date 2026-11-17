@@ -7,7 +7,8 @@
 #'
 #' @param map_path OSTARA project root.
 #' @param input_dir Directory containing exactly 10 PDF/XML files.
-#' @param batch_id Stable pilot identifier, reused to resume.
+#' @param batch_id Stable pilot label. Revised prompt/schema files automatically
+#'   produce a separate hash-versioned extraction subdirectory.
 #' @param run_extraction FALSE stages/validates only; TRUE incurs API costs.
 #' @param prompt_file Optional revised grey prompt path; defaults to approved journal prompt.
 #' @param schema_file Optional revised grey CSV path; defaults to approved journal schema.
@@ -84,6 +85,16 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
       message("[OSTARA grey] Using custom prompt/schema for batch ",batch_id,
               "; this MUST be a distinct batch ID from previous inputs.")
   }
+  # Every exact prompt/schema version receives an independent W09
+  # namespace. Same ten source files + changed client inputs are always
+  # re-extracted, while rerunning identical inputs resumes their checkpoint.
+  # The operator keeps using the same batch_id in their R script.
+  requested_batch_id<-batch_id
+  if(!is.null(prompt_file)) {
+    version_id<-paste0("prompt-",substr(sha(prompt),1L,12L),
+                       "-schema-",substr(sha(schema),1L,12L))
+    batch_id<-paste0(batch_id,"__",version_id)
+  }
   root<-file.path(map_path,"runs","W09","grey_literature",batch_id)
   dir.create(root,recursive=TRUE,showWarnings=FALSE)
   staging_manifest<-file.path(root,"grey_sources_manifest.json")
@@ -93,7 +104,8 @@ run_ostara_grey_literature_pilot <- function(map_path,input_dir,
     source_sha256=hashes,original_file_bytes=as.numeric(file.info(input_paths)$size),
     stringsAsFactors=FALSE)
   manifest<-list(schema="ostara-grey-literature-filename-only-batch-v2",
-    batch_id=batch_id,source_class="grey_literature",
+    batch_id=batch_id,requested_batch_id=requested_batch_id,
+    source_class="grey_literature",
     case_positive_prior_classification="not_assumed",
     metadata_policy="Filename label only; bibliographic metadata unverified",
     input_contract=if(is.null(schema_file))"original_pilot" else "client_revised_grey_41_fields",
