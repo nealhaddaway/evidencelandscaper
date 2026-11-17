@@ -127,7 +127,8 @@ run_ostara_random_fulltext_mechanism_pilot <- function(
 # Sample the entire retrieved journal full-text pool across all completed W09
 # all-included cohorts, retaining each source's owning W09 directory.
 .ostara_random_pilot_across_w09<-function(
-    candidates,prompt_file,ontology_file,sample_size,seed,model,map_path) {
+    candidates,prompt_file,ontology_file,sample_size,seed,model,map_path,
+    fixed_sample=NULL) {
   prompt_file<-normalizePath(prompt_file,winslash="/",mustWork=TRUE)
   ontology_file<-normalizePath(ontology_file,winslash="/",mustWork=TRUE)
   if(length(sample_size)!=1L||is.na(sample_size)||
@@ -172,8 +173,26 @@ run_ostara_random_fulltext_mechanism_pilot <- function(
     else if(exists(".Random.seed",envir=.GlobalEnv,inherits=FALSE))
       rm(".Random.seed",envir=.GlobalEnv)
   },add=TRUE)
-  set.seed(seed)
-  selection<-pool[sort(sample.int(nrow(pool),sample_size,replace=FALSE)),,drop=FALSE]
+  if(is.null(fixed_sample)) {
+    set.seed(seed)
+    selection<-pool[sort(sample.int(nrow(pool),sample_size,replace=FALSE)),,drop=FALSE]
+  } else {
+    # Replay exact prior record IDs AND owning source files; a changed pool
+    # never silently changes this test cohort.
+    if(!is.data.frame(fixed_sample)||
+       !identical(names(fixed_sample),names(pool))||
+       nrow(fixed_sample)!=sample_size||
+       anyDuplicated(fixed_sample$record_id))
+      stop("Previous pilot sample is not a valid fixed cohort")
+    selection<-fixed_sample
+    for(i in seq_len(nrow(selection))) {
+      id<-selection$record_id[[i]]
+      match_i<-match(id,pool$record_id)
+      if(is.na(match_i)||!identical(pool$w09[[match_i]],selection$w09[[i]])||
+         !identical(pool$source_file[[match_i]],selection$source_file[[i]]))
+        stop("Source location changed for replayed publication: ",id)
+    }
+  }
   rownames(selection)<-NULL
   key<-substr(digest::digest(c(sha(prompt_file),sha(ontology_file),
       as.character(seed),as.character(sample_size),model,
@@ -218,4 +237,78 @@ run_ostara_random_fulltext_mechanism_pilot <- function(
   message("[FT mechanism pilot] Unified database: ",
           file.path(base,"mechanism_database.jsonl"))
   invisible(base)
+}
+
+#' Re-run the EXACT full-text mechanism pilot publications using new inputs
+#'
+#' Selects the latest existing pilot sample (or an explicit source_pilot_dir).
+#' Does not resample, exclude previously inventoried records or modify earlier
+#' results. New prompt/ontology hashes create a new versioned checkpoint. The
+#' original sample list, source collection and local files are verified.
+#' @param map_path Existing Ostara project directory.
+#' @param prompt_file New revised inventory prompt TXT.
+#' @param ontology_file New ontology CSV.
+#' @param source_pilot_dir Optional exact previous pilot directory.
+#' @param model Luna model.
+#' @return New pilot directory with a single combined CSV, invisibly.
+#' @export
+rerun_ostara_mechanism_pilot_same_records <- function(
+    map_path=NULL,prompt_file,ontology_file,source_pilot_dir=NULL,
+    model="gpt-5.6-luna") {
+  if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
+  map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
+  root<-file.path(map_path,"runs","W09","random_fulltext_mechanism_pilots")
+  if(is.null(source_pilot_dir)) {
+    if(!dir.exists(root))stop("No previous mechanism pilot found: ",root)
+    runs<-list.dirs(root,recursive=FALSE,full.names=TRUE)
+    runs<-runs[file.exists(file.path(runs,"sample_manifest.json"))&
+               file.exists(file.path(runs,"random_sample.csv"))]
+    if(!length(runs))stop("No existing pilot with a fixed sample register")
+    runs<-runs[order(file.info(file.path(runs,"sample_manifest.json"))$mtime,
+                     decreasing=TRUE)]
+    source_pilot_dir<-runs[[1L]]
+  }
+  source_pilot_dir<-normalizePath(source_pilot_dir,winslash="/",mustWork=TRUE)
+  original<-jsonlite::fromJSON(
+    file.path(source_pilot_dir,"sample_manifest.json"),simplifyVector=FALSE)
+  if(!identical(original$schema,"ostara-random-multicohort-fulltexts-v1"))
+    stop("Previous pilot has an unsupported sample manifest")
+  sample<-utils::read.csv(file.path(source_pilot_dir,"random_sample.csv"),
+                          stringsAsFactors=FALSE,colClasses="character",
+                          check.names=FALSE)
+  if(!identical(names(sample),c("record_id","w09","source_file"))||
+     nrow(sample)!=as.integer(original$sample_size)||
+     anyNA(sample)||anyDuplicated(sample$record_id)||
+     length(original$records)!=nrow(sample))
+    stop("Previous pilot sample register is invalid")
+  sha<-function(p)digest::digest(file=p,algo="sha256",serialize=FALSE)
+  for(i in seq_len(nrow(sample))) {
+    old<-original$records[[i]]
+    if(!identical(as.character(old$record_id),sample$record_id[[i]])||
+       !identical(as.character(old$w09),sample$w09[[i]])||
+       !identical(as.character(old$source_file),sample$source_file[[i]])||
+       !file.exists(sample$source_file[[i]]))
+      stop("Previous sample provenance or source missing: row ",i)
+  }
+  # Verify original source hashes against saved extraction provenance, where
+  # available, before producing the new analysis.
+  source_ledger<-file.path(source_pilot_dir,"mechanism_database.jsonl")
+  if(file.exists(source_ledger)) {
+    entries<-readLines(source_ledger,warn=FALSE,encoding="UTF-8")
+    for(line in entries[nzchar(trimws(entries))]) {
+      z<-jsonlite::fromJSON(line,simplifyVector=FALSE)
+      i<-match(as.character(z$record_id),sample$record_id)
+      if(is.na(i))stop("Previous completed record not in fixed sample")
+      if(!identical(sha(sample$source_file[[i]]),
+                    as.character(z$provenance$source_sha256)))
+        stop("Source bytes differ from prior validated pilot: ",z$record_id)
+    }
+  }
+  message("[FT mechanism replay] Reusing exactly ",nrow(sample),
+          " original publications; no random resampling.")
+  .ostara_random_pilot_across_w09(
+    candidates=unique(sample$w09),prompt_file=prompt_file,
+    ontology_file=ontology_file,sample_size=nrow(sample),
+    seed=as.integer(original$seed),model=model,map_path=map_path,
+    fixed_sample=sample)
 }
