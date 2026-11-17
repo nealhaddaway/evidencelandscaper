@@ -147,13 +147,16 @@ extract_ostara_all_fulltext_mechanisms <- function(
                               jsonlite::fromJSON,simplifyVector=FALSE)
   ont<-utils::read.csv(files[["ontology"]],stringsAsFactors=FALSE,
                         check.names=FALSE,fileEncoding="UTF-8-BOM")
-  expected_columns<-c("mechanism_id","collective_action_type",
+  legacy_columns<-c("mechanism_id","collective_action_type",
     "high_level_mechanism","fine_level_mechanism","definition")
-  if(!identical(names(ont),expected_columns)||nrow(ont)!=30L||
+  client_v5_columns<-c("mechanism_id","category","function","mechanism","definition")
+  is_legacy<-identical(names(ont),legacy_columns)&&nrow(ont)==30L
+  is_client_v5<-identical(names(ont),client_v5_columns)&&nrow(ont)==26L
+  if(!(is_legacy||is_client_v5)||
      anyNA(ont)||any(!nzchar(trimws(as.matrix(ont))))||
      anyDuplicated(ont$mechanism_id)||
      any(!grepl("^M[0-9]+\\.[0-9]+\\.[0-9]+$",ont$mechanism_id)))
-    stop("Approved ontology must have 30 unique, nonempty IDs and five canonical columns")
+    stop("Ontology must be either the legacy 30-mechanism canonical CSV or the supplied 26-mechanism v5 CSV, with unique IDs and nonempty definitions")
   codes<-as.character(ont$mechanism_id)
   queue<-utils::read.csv(files[["queue"]],stringsAsFactors=FALSE)
   if(!"record_id"%in%names(queue)||anyDuplicated(queue$record_id)||
