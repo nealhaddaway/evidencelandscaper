@@ -165,6 +165,13 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
         if(is_grey_schema&&identical(q,"type of source"))
           allowed<-c("self-issued_report","academic","independent_report",
                       "government_document","web_page")
+        # The revised grey CSV explicitly restricts commodity labels,
+        # including beef (not cattle) and excluding forests/carbon as timber.
+        if(is_grey_schema&&
+           grepl("^which commodity/commodities is the collective action addressing",q))
+          allowed<-c("soy","palm oil","cocoa","coffee","timber","beef",
+                     "rubber","sugarcane","rice","cassava","maize",
+                     "pulp and paper")
         if(grepl("^what is the level at which",q))
           allowed<-c("private sector","place- or landscape-based","national",
             "inter-governmental or multinational","systemic")
