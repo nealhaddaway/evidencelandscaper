@@ -130,6 +130,7 @@ export(run_w08_adjudicated_first_10)
 
 export(extract_ostara_all_fulltext_mechanisms)
 export(run_ostara_random_fulltext_mechanism_pilot)
+export(rerun_ostara_mechanism_pilot_same_records)
 export(consolidate_ostara_fulltext_mechanism_pilot)
 
 export(prepare_w09_no_case_fulltexts_first10)
