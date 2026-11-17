@@ -292,9 +292,9 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
             is.character(e$anchor)&&length(e$anchor)==1L,
             logical(1)))
         old_status<-f$reporting_status
-        if(is_grey_schema&&has_value&&evidence_ok&&
+        if(has_value&&evidence_ok&&
            (is.null(old_status)||!length(old_status)||
-            identical(old_status,"not_reported"))) {
+            (is_grey_schema&&identical(old_status,"not_reported")))) {
           f$reporting_status<-"reported"
           changes[[length(changes)+1L]]<-list(
             case_id=candidate$cases[[j]]$case_id,field_id=key,
