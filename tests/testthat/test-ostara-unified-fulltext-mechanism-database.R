@@ -5,7 +5,12 @@ testthat::test_that("unified mechanism pilot keeps one output database", {
   testthat::expect_silent(parse(file=runner))
   a<-paste(readLines(core,warn=FALSE),collapse="\n")
   b<-paste(readLines(runner,warn=FALSE),collapse="\n")
-  for(term in c("mechanism_database.jsonl","mechanism_inventory",
+  for(term in c("ostara_fulltext_mechanisms.csv",
+                "case_presence_json","new_novelty_json","candidate_cases_json",
+                "evidence_review_flags_json","publication_provenance_json",
+                "publication_status=\"not_yet_validated\"",
+                "single_csv_sha256",
+                "mechanism_database.jsonl","mechanism_inventory",
                 "new_novelty","case_presence","candidate_cases",
                 "publication_status","prompt_sha256","ontology_sha256",
                 "Duplicate record: ","source_ledgers")) {
