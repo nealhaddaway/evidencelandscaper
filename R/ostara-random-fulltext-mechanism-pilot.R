@@ -214,6 +214,8 @@ run_ostara_random_fulltext_mechanism_pilot <- function(
       w09=w09,record_ids=group,max_records=0L,model=model,
       output_dir=group_base,ontology_file=ontology_file,prompt_file=prompt_file))
   }
-  message("[FT mechanism pilot] Sample and per-cohort checkpoints: ",base)
+  consolidate_ostara_fulltext_mechanism_pilot(map_path=map_path,pilot_dir=base)
+  message("[FT mechanism pilot] Unified database: ",
+          file.path(base,"mechanism_database.jsonl"))
   invisible(base)
 }
