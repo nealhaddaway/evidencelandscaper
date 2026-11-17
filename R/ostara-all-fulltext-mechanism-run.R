@@ -71,6 +71,16 @@ run_ostara_all_available_fulltext_mechanisms <- function(
     universe<-universe[!duplicated(universe$record_id),,drop=FALSE]
   }
   universe<-universe[order(universe$record_id),,drop=FALSE]
+  # Some legacy W09 queues do not contain usable bibliographic identity
+  # columns; they cannot safely donate full texts to this run.
+  usable<-vapply(runs,function(p) {
+    q<-tryCatch(utils::read.csv(file.path(p,"retrieval_queue.csv"),
+                                stringsAsFactors=FALSE),
+                error=function(e)NULL)
+    !is.null(q)&&all(c("record_id","title","doi")%in%names(q))&&
+      !anyNA(q$record_id)&&!anyDuplicated(q$record_id)
+  },logical(1))
+  runs<-runs[usable]
   all_queues<-lapply(runs,qread)
   formats<-data.frame(folder=c("structured","structured","pdfs"),
                       ext=c("xml","json","pdf"),stringsAsFactors=FALSE)
