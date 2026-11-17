@@ -76,11 +76,13 @@
 #' @param record_ids Optional subset from W09 queue; NULL uses all downloaded.
 #' @param max_records Maximum new assessments; 0 means all.
 #' @param model OpenAI Luna model.
+#' @param use_exact_prompt If TRUE, transmit the supplied prompt unmodified;
+#'   legacy callers retain their original appended output contract.
 #' @return Versioned output directory, invisibly.
 #' @export
 extract_ostara_fulltext_insights_v2 <- function(
     w09,prompt_file,ontology_file,record_ids=NULL,max_records=0L,
-    model="gpt-5.6-luna") {
+    model="gpt-5.6-luna",use_exact_prompt=FALSE) {
   if(!identical(model,"gpt-5.6-luna"))stop("Only gpt-5.6-luna is supported.")
   if(length(max_records)!=1L||is.na(max_records)||
      max_records!=as.integer(max_records)||max_records<0L)
@@ -187,7 +189,7 @@ extract_ostara_fulltext_insights_v2 <- function(
     "conceptual|not_specified|not_applicable. ",
     "context and caveats may be empty strings, mechanism_ids is an array ",
     "of supplied approved codes or []. Never fabricate quotes or anchors.")
-  instructions<-paste0(prompt,contract)
+  instructions<-if(isTRUE(use_exact_prompt))prompt else paste0(prompt,contract)
   failures<-file.path(dest,"failed_attempts.jsonl")
   for(id in todo) {
     payload<-tryCatch(w09_text_payload(w09,id,max_pages=0L),
