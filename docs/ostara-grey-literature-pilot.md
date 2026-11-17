@@ -87,3 +87,29 @@ prompt/schema hashes isolate new extractions from the previous pilot.
 The source register and extraction checkpoints are kept in the new
 batch directory. R's local file chooser does not modify the source
 documents or upload them to GitHub.
+
+## Rerun on same ten files after client edits (November 2026)
+
+**Keep the same ten full-text files and the same R calling script.** Select the
+new prompt TXT and schema CSV through `file.choose()`. The grey pilot runner
+now automatically makes a distinct W09 directory using the SHA-256 prefixes
+of **both** input files, e.g.
+`grey_pilot_10_revised__prompt-<12hex>-schema-<12hex>/`.
+Prior grey-lit batch directories, journal dataset and checkpoints remain
+unchanged. Repeating identical prompt/schema/source files resumes the same
+version; changing either input produces a new extraction version.
+
+The Nov 17 client's files have 41 fields. The fields and ordering remain
+unchanged; updated instructions clarify (a) status completed vs abandoned,
+(b) named commodities, including beef vs cattle and forests vs timber,
+(c) explicit shared-interest criteria, and (d) source involvement. Revised
+prompt instructions distinguish the source researchers' metrics from metrics
+tracked, reported or audited by the **case actors**. No bibliographic metadata
+is required; filenames label the source inputs.
+
+Pre-existing downstream validation still checks output JSON shapes, the
+source citation anchor and evidence presence; grey-specific checks include
+source type, proposed status, month-year date, country code, permitted
+commodity labels and the source-actor involvement field. Semantic assessment
+of actor ownership of metrics is not deterministically verifiable; reported
+extraction claims with quote mismatches remain audit-flagged for review.
