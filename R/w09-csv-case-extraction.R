@@ -240,6 +240,74 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
     }
     invisible(TRUE)
   }
+  # Deterministic recovery is restricted to the revised grey schema.
+  # Preserve archived raw responses; record every mutation in audit JSONL.
+  repair_grey_response<-function(candidate) {
+    changes<-list()
+    if(!is.list(candidate$cases))return(list(object=candidate,changes=changes))
+    for(j in seq_along(candidate$cases)) {
+      fields<-candidate$cases[[j]]$fields
+      if(!is.list(fields))next
+      for(i in seq_len(nrow(spec))) {
+        key<-spec$field_id[[i]]
+        f<-fields[[key]]
+        if(!is.list(f))next
+        q<-tolower(trimws(spec$Question[[i]]))
+        # Only the unambiguous singular/plural synonym in the grey pilot.
+        if(is_grey_schema&&startsWith(q,"what is/are the shared interest")) {
+          for(slot in c("value","values")) {
+            v<-f[[slot]]
+            if(is.character(v)) {
+              n<-which(v=="shared risk")
+              if(length(n)) {
+                v[n]<-"shared risks"
+                f[[slot]]<-v
+                changes[[length(changes)+1L]]<-list(
+                  case_id=candidate$cases[[j]]$case_id,field_id=key,
+                  repair="fixed_choice_synonym",original="shared risk",
+                  normalized="shared risks")
+              }
+            } else if(is.list(v)) {
+              n<-which(vapply(v,function(z)is.character(z)&&
+                         length(z)==1L&&identical(z,"shared risk"),logical(1)))
+              if(length(n)) {
+                v[n]<-rep(list("shared risks"),length(n))
+                f[[slot]]<-v
+                changes[[length(changes)+1L]]<-list(
+                  case_id=candidate$cases[[j]]$case_id,field_id=key,
+                  repair="fixed_choice_synonym",original="shared risk",
+                  normalized="shared risks")
+              }
+            }
+          }
+        }
+        vals<-if(!is.null(f$values))unlist(f$values,use.names=FALSE)
+              else if(!is.null(f$value))f$value else character()
+        has_value<-is.character(vals)&&length(vals)>0L&&
+                   all(!is.na(vals))&&all(nzchar(trimws(vals)))
+        evidence_ok<-is.list(f$evidence)&&length(f$evidence)>0L&&
+          all(vapply(f$evidence,function(e)is.list(e)&&
+            is.character(e$quote)&&length(e$quote)==1L&&
+            nzchar(trimws(e$quote))&&
+            is.character(e$anchor)&&length(e$anchor)==1L,
+            logical(1)))
+        old_status<-f$reporting_status
+        if(is_grey_schema&&has_value&&evidence_ok&&
+           (is.null(old_status)||!length(old_status)||
+            identical(old_status,"not_reported"))) {
+          f$reporting_status<-"reported"
+          changes[[length(changes)+1L]]<-list(
+            case_id=candidate$cases[[j]]$case_id,field_id=key,
+            repair="reporting_status_with_evidence",
+            previous_status=if(is.null(old_status))NULL else old_status,
+            assigned_status="reported",
+            reason="substantive values and evidence supplied; evidence fidelity checked separately")
+        }
+        candidate$cases[[j]]$fields[[key]]<-f
+      }
+    }
+    list(object=candidate,changes=changes)
+  }
   # Field specifications are sent once per model request, not embedded as
   # repeated prose in the archived short prompt.
   defs<-paste(utils::capture.output(utils::write.csv(spec,
@@ -323,35 +391,6 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
     history<-readjl(file.path(dest,"invalid_responses.jsonl"))
     history<-Filter(function(z)identical(z$record_id,id)&&
       is.character(z$raw)&&length(z$raw)==1L,history)
-    # Repair only mechanically inferable missing status values in archived
-    # responses. Preserve raw JSONL and record every change in the audit.
-    repair_missing_status<-function(candidate) {
-      changes<-list()
-      for(j in seq_along(candidate$cases)) {
-        fields<-candidate$cases[[j]]$fields
-        if(!is.list(fields))next
-        for(key in intersect(names(fields),spec$field_id)) {
-          f<-fields[[key]]
-          if(!is.list(f))next
-          status<-f$reporting_status
-          if(!is.null(status)&&length(status))next
-          has_value<-(!is.null(f$value)&&is.character(f$value)&&
-            length(f$value)==1L&&!is.na(f$value)&&nzchar(trimws(f$value)))||
-            (!is.null(f$values)&&length(unlist(f$values,use.names=FALSE))>0L)
-          if(!has_value)next
-          if(!is.list(f$evidence)||!length(f$evidence))next
-          f$reporting_status<-"reported"
-          candidate$cases[[j]]$fields[[key]]<-f
-          changes[[length(changes)+1L]]<-list(
-            case_id=candidate$cases[[j]]$case_id,
-            field_id=key,
-            previous_status=NULL,
-            assigned_status="reported",
-            reason="substantive answer and supporting evidence supplied")
-        }
-      }
-      list(object=candidate,changes=changes)
-    }
     # Evaluate all archived responses and prefer the fewest evidence flags.
     # Schema and field-value rules remain strict. Evidence exceptions are
     # explicitly audited and mean the checkpoint requires human review.
@@ -363,7 +402,7 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
       repairs<-list()
       old_obj<-tryCatch({
         candidate<-jsonlite::fromJSON(history[[k]]$raw,simplifyVector=FALSE)
-        fixed<-repair_missing_status(candidate)
+        fixed<-repair_grey_response(candidate)
         candidate<-fixed$object
         repairs<-fixed$changes
         withCallingHandlers(check_result(candidate,id,payload$text),
@@ -394,7 +433,7 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
           evidence_review_required=length(best$flags)>0L||
             length(best$repairs)>0L,
           evidence_flags=as.list(best$flags),
-          deterministic_status_repairs=best$repairs,
+          deterministic_repairs=best$repairs,
           validation_rule="relaxed_evidence_with_manual_review_flags"),
           auto_unbox=TRUE,null="null"),"\n",
           file=file.path(dest,"revalidation_audit.jsonl"),
@@ -454,6 +493,8 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
       obj<-tryCatch({
         if(!length(parts))stop("Missing model JSON text.")
         x<-jsonlite::fromJSON(parts[[1L]],simplifyVector=FALSE)
+        fixed<-repair_grey_response(x)
+        x<-fixed$object
         flags<-character()
         withCallingHandlers(check_result(x,id,payload$text),
           warning=function(w) {
@@ -461,16 +502,19 @@ run_w09_case_data_extraction <- function(w09,prompt_file,schema_file,record_ids,
             invokeRestart("muffleWarning")
           })
         attr(x,"w09_evidence_flags")<-unique(flags)
+        attr(x,"w09_deterministic_repairs")<-fixed$changes
         x
       },error=function(e){issue<<-conditionMessage(e);NULL})
       if(!is.null(obj)) {
         flags<-attr(obj,"w09_evidence_flags")
+        repairs<-attr(obj,"w09_deterministic_repairs")
         attr(obj,"w09_evidence_flags")<-NULL
+        attr(obj,"w09_deterministic_repairs")<-NULL
         cat(jsonlite::toJSON(obj,auto_unbox=TRUE,null="null"),"\n",
             file=ledger,append=TRUE,sep="")
         audit<-list(record_id=id,source_sha256=payload$sha256,
-          evidence_review_required=length(flags)>0L,
-          evidence_flags=as.list(flags),
+          evidence_review_required=length(flags)>0L||length(repairs)>0L,
+          evidence_flags=as.list(flags),deterministic_repairs=repairs,
           validation_rule="case_data_schema_strict_evidence_flagged")
         cat(as.character(jsonlite::toJSON(audit,auto_unbox=TRUE,null="null")),
             "\n",file=file.path(dest,"evidence_validation_audit.jsonl"),
