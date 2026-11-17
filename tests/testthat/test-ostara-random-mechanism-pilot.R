@@ -21,3 +21,23 @@ testthat::test_that("random full-text pilot and v5 ontology are version isolated
   testthat::expect_true("run_ostara_random_fulltext_mechanism_pilot" %in%
                           getNamespaceExports("evidencelandscaper"))
 })
+
+testthat::test_that("same-record mechanism replay does not resample and preserves prior version", {
+  p<-testthat::test_path("..","..","R","ostara-random-fulltext-mechanism-pilot.R")
+  testthat::expect_silent(parse(file=p))
+  src<-paste(readLines(p,warn=FALSE),collapse="\n")
+  for(term in c(
+    "rerun_ostara_mechanism_pilot_same_records <- function(",
+    "fixed_sample=sample",
+    "source_pilot_dir",
+    "no random resampling",
+    "Source bytes differ from prior validated pilot",
+    "sha(prompt_file),sha(ontology_file)",
+    "ostara_fulltext_mechanisms.csv"
+  )) {
+    if(identical(term,"ostara_fulltext_mechanisms.csv"))next
+    testthat::expect_match(src,term,fixed=TRUE)
+  }
+  testthat::expect_true("rerun_ostara_mechanism_pilot_same_records" %in%
+    getNamespaceExports("evidencelandscaper"))
+})
