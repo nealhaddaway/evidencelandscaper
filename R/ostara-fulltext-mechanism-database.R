@@ -144,6 +144,70 @@ consolidate_ostara_fulltext_mechanism_pilot <- function(map_path=NULL,pilot_dir=
   }
   for(nm in names(tables))
     save_csv(tables[[nm]],file.path(pilot_dir,paste0(nm,".csv")))
+  # The ONE analyst-facing CSV: publication x approved mechanism. Complex
+  # publication-level objects are serialized as JSON in quoted CSV cells so
+  # multiple novelty/case candidates are not truncated or flattened away.
+  # A pending publication receives one explicit status row, never an inferred
+  # negative mechanism assessment.
+  as_json_cell<-function(x)as.character(jsonlite::toJSON(
+    x,auto_unbox=TRUE,null="null",digits=NA))
+  unified_rows<-list()
+  for(id in ids) {
+    i<-match(id,sample$record_id)
+    z<-results[[id]]
+    if(is.null(z)) {
+      unified_rows[[length(unified_rows)+1L]]<-data.frame(
+        record_id=id,publication_status="not_yet_validated",
+        source_file=sample$source_file[[i]],
+        source_sha256=sha(sample$source_file[[i]]),
+        model=as.character(m$model),
+        prompt_sha256=as.character(m$prompt_sha256),
+        ontology_sha256=as.character(m$ontology_sha256),
+        mechanism_id="",mechanism_status="",mechanism_source_quote="",
+        mechanism_source_anchor="",mechanism_reason="",
+        case_status="",candidate_case_count=NA_integer_,
+        case_assessment_reason="",case_presence_json="",
+        novelty_count=NA_integer_,new_novelty_json="",
+        candidate_cases_json="",evidence_review_required=NA,
+        evidence_review_flags_json="",publication_provenance_json="",
+        stringsAsFactors=FALSE)
+      next
+    }
+    presence<-z$case_presence_assessment
+    novelty<-z$new_novelty
+    cases<-presence$candidate_cases
+    for(v in z$mechanism_inventory) {
+      unified_rows[[length(unified_rows)+1L]]<-data.frame(
+        record_id=id,publication_status="validated",
+        source_file=sample$source_file[[i]],
+        source_sha256=as.character(z$provenance$source_sha256),
+        model=as.character(m$model),
+        prompt_sha256=as.character(m$prompt_sha256),
+        ontology_sha256=as.character(m$ontology_sha256),
+        mechanism_id=scalar(v$mechanism_id),
+        mechanism_status=scalar(v$status),
+        mechanism_source_quote=scalar(v$source_quote),
+        mechanism_source_anchor=scalar(v$source_anchor),
+        mechanism_reason=scalar(v$reason),
+        case_status=scalar(presence$case_status),
+        candidate_case_count=if(is.null(presence$candidate_case_count))
+                               NA_integer_ else as.integer(presence$candidate_case_count),
+        case_assessment_reason=scalar(presence$assessment_reason),
+        case_presence_json=as_json_cell(presence),
+        novelty_count=length(novelty),
+        new_novelty_json=as_json_cell(novelty),
+        candidate_cases_json=as_json_cell(cases),
+        evidence_review_required=isTRUE(z$evidence_review_required),
+        evidence_review_flags_json=as_json_cell(z$evidence_review_flags),
+        publication_provenance_json=as_json_cell(z$provenance),
+        stringsAsFactors=FALSE)
+    }
+    if(!length(z$mechanism_inventory))
+      stop("Validated publication has no mechanism inventory: ",id)
+  }
+  unified<-do.call(rbind,unified_rows)
+  unified_path<-file.path(pilot_dir,"ostara_fulltext_mechanisms.csv")
+  save_csv(unified,unified_path)
   database<-file.path(pilot_dir,"mechanism_database.jsonl")
   tmp<-tempfile(pattern=".ostara-",tmpdir=pilot_dir)
   on.exit(if(file.exists(tmp))unlink(tmp),add=TRUE)
@@ -157,12 +221,14 @@ consolidate_ostara_fulltext_mechanism_pilot <- function(map_path=NULL,pilot_dir=
     selected_publications=length(ids),validated_publications=length(done),
     missing_publications=as.list(setdiff(ids,done)),
     prompt_sha256=m$prompt_sha256,ontology_sha256=m$ontology_sha256,
-    model=m$model,source_ledgers=source_ledgers,database_sha256=sha(database))
+    model=m$model,source_ledgers=source_ledgers,database_sha256=sha(database),
+    single_csv=unified_path,single_csv_sha256=sha(unified_path),
+    single_csv_rows=nrow(unified))
   jsonlite::write_json(provenance,file.path(pilot_dir,"consolidated_manifest.json"),
                        pretty=TRUE,auto_unbox=TRUE)
   message("[FT mechanism database] ",length(done),"/",length(ids),
     " validated publications, ",nrow(tables$mechanism_inventory),
-    " mechanism rows, one database at ",database,
+    " mechanism rows; single CSV: ",unified_path,
     ". Zero model calls.")
   invisible(pilot_dir)
 }
