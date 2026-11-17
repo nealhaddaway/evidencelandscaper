@@ -16,6 +16,8 @@ testthat::test_that("fixed insights prompt contract accepts v5 and exports one C
   testthat::expect_match(validator,"stakeholder_views",fixed=TRUE)
   testthat::expect_match(validator,"not_stated",fixed=TRUE)
   testthat::expect_match(validator,"nrow(ontology)==26L",fixed=TRUE)
+  testthat::expect_match(src,"use_exact_prompt=TRUE",fixed=TRUE)
+  testthat::expect_match(validator,"if(isTRUE(use_exact_prompt))prompt",fixed=TRUE)
   testthat::expect_false(grepl('"recommendation","speculative_proposal"',
                                validator,fixed=TRUE))
   testthat::expect_true("run_ostara_fulltext_insights_pilot" %in%
