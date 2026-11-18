@@ -133,6 +133,7 @@ export(run_ostara_fulltext_insights_pilot)
 export(run_ostara_random_fulltext_mechanism_pilot)
 export(run_ostara_all_available_fulltext_mechanisms)
 export(run_ostara_supplementary_case_extraction)
+export(run_ostara_all_fulltext_insights)
 export(rerun_ostara_mechanism_pilot_same_records)
 export(consolidate_ostara_fulltext_mechanism_pilot)
 
