@@ -246,7 +246,118 @@ run_ostara_all_available_fulltext_mechanisms <- function(
   utils::write.csv(tab,tmp,row.names=FALSE,na="")
   if(file.exists(csv))unlink(csv)
   if(!file.rename(tmp,csv))stop("Could not write single pooled mechanism CSV")
-  message("[FT mechanisms] Single database: ",csv," (",
+  novelty_csv<-export_ostara_fulltext_candidate_mechanisms(base)
+  message("[FT mechanisms] Single mechanism database: ",csv," (",
           length(ids),"/",nrow(pool)," validated; ",nrow(tab)," rows)")
+  message("[FT mechanisms] Separate candidate mechanisms: ",novelty_csv)
   invisible(csv)
+}
+
+
+#' Export proposed novel mechanisms from the completed full-text inventory
+#'
+#' Offline, no API calls. Reads the original validated, versioned JSONL ledger
+#' rather than parsing repeated JSON cells in the mechanism-wide CSV.
+#' Produces one row per proposed mechanism and preserves supporting evidence.
+#' Previously saved extraction checkpoints are never changed.
+#'
+#' @param mechanism_dir Full-text mechanism run folder containing source_pool.csv.
+#' @return Path to the flat new_novelty.csv.
+#' @export
+export_ostara_fulltext_candidate_mechanisms <- function(mechanism_dir) {
+  base<-normalizePath(mechanism_dir,winslash="/",mustWork=TRUE)
+  sha<-function(path)digest::digest(file=path,algo="sha256",serialize=FALSE)
+  pool_path<-file.path(base,"source_pool.csv")
+  manifest_path<-file.path(base,"pool_manifest.json")
+  if(!all(file.exists(c(pool_path,manifest_path))))
+    stop("Missing source pool or manifest in: ",base)
+  pool<-utils::read.csv(pool_path,stringsAsFactors=FALSE,
+                        check.names=FALSE,fileEncoding="UTF-8-BOM")
+  meta<-jsonlite::fromJSON(manifest_path,simplifyVector=FALSE)
+  if(!identical(meta$schema,"ostara-fulltext-all-available-v1")||
+     !all(c("record_id","source_sha256","original_source")%in%names(pool))||
+     anyDuplicated(pool$record_id)||anyNA(pool$record_id)||
+     nrow(pool)!=as.integer(meta$selected_count)||
+     !setequal(pool$record_id,
+               as.character(unlist(meta$selected_record_ids,use.names=FALSE))))
+    stop("Full-text mechanism source pool is not valid")
+  dirs<-list.dirs(base,recursive=FALSE,full.names=TRUE)
+  dirs<-dirs[grepl("^v4-",basename(dirs))&
+               file.exists(file.path(dirs,"manifest.json"))&
+               file.exists(file.path(dirs,"mechanism_assessments.jsonl"))]
+  if(length(dirs)!=1L)
+    stop("Expected exactly one completed versioned mechanism ledger in ",base,
+         "; found ",length(dirs))
+  run<-dirs[[1L]]
+  run_meta<-jsonlite::fromJSON(file.path(run,"manifest.json"),
+                                simplifyVector=FALSE)
+  if(!identical(run_meta$prompt_sha256,meta$prompt_sha256)||
+     !identical(run_meta$approved_ontology_sha256,meta$ontology_sha256))
+    stop("Extraction checkpoint prompt/ontology differs from source pool")
+  ledger_path<-file.path(run,"mechanism_assessments.jsonl")
+  raw<-readLines(ledger_path,warn=FALSE,encoding="UTF-8")
+  raw<-raw[nzchar(trimws(raw))]
+  assessments<-lapply(raw,jsonlite::fromJSON,simplifyVector=FALSE)
+  ids<-vapply(assessments,function(z)as.character(z$record_id),character(1))
+  if(anyDuplicated(ids)||any(!ids%in%pool$record_id))
+    stop("Duplicate or unexpected record IDs in mechanism ledger")
+  scalar<-function(x)if(is.null(x)||!length(x))"" else
+    paste(as.character(unlist(x,use.names=FALSE)),collapse=" | ")
+  columns<-c("record_id","candidate_mechanism_number","proposed_label",
+             "working_definition","support_status",
+             "closest_approved_mechanism_id","reason","source_quote",
+             "source_anchor","evidence_review_required",
+             "source_file","source_sha256","prompt_sha256",
+             "ontology_sha256","model")
+  rows<-list()
+  for(z in assessments) {
+    id<-as.character(z$record_id)
+    i<-match(id,pool$record_id)
+    if(!identical(scalar(z$provenance$source_sha256),
+                  as.character(pool$source_sha256[[i]]))||
+       !identical(scalar(z$provenance$prompt_sha256),
+                  as.character(meta$prompt_sha256))||
+       !identical(scalar(z$provenance$approved_ontology_sha256),
+                  as.character(meta$ontology_sha256))||
+       !is.list(z$new_novelty))
+      stop("Candidate mechanism provenance/structure mismatch for ",id)
+    if(!length(z$new_novelty))next
+    for(k in seq_along(z$new_novelty)) {
+      x<-z$new_novelty[[k]]
+      if(!is.list(x))stop("Malformed novelty entry for ",id)
+      row<-data.frame(
+        record_id=id,candidate_mechanism_number=k,
+        proposed_label=scalar(x$proposed_label),
+        working_definition=scalar(x$working_definition),
+        support_status=scalar(x$support_status),
+        closest_approved_mechanism_id=scalar(x$closest_approved_mechanism_id),
+        reason=scalar(x$reason),
+        source_quote=scalar(x$source_quote),
+        source_anchor=scalar(x$source_anchor),
+        evidence_review_required=isTRUE(z$evidence_review_required),
+        source_file=as.character(pool$original_source[[i]]),
+        source_sha256=as.character(pool$source_sha256[[i]]),
+        prompt_sha256=scalar(z$provenance$prompt_sha256),
+        ontology_sha256=scalar(z$provenance$approved_ontology_sha256),
+        model=scalar(z$provenance$model),
+        stringsAsFactors=FALSE,check.names=FALSE)
+      rows[[length(rows)+1L]]<-row
+    }
+  }
+  out<-if(length(rows))do.call(rbind,rows) else {
+    blank<-as.data.frame(matrix(character(),nrow=0L,
+                    ncol=length(columns)),stringsAsFactors=FALSE)
+    names(blank)<-columns
+    blank
+  }
+  path<-file.path(base,"new_novelty.csv")
+  tmp<-tempfile(pattern=".novelty-",tmpdir=base,fileext=".csv")
+  on.exit(if(file.exists(tmp))unlink(tmp),add=TRUE)
+  utils::write.csv(out,tmp,row.names=FALSE,na="",fileEncoding="UTF-8")
+  if(!file.copy(tmp,path,overwrite=TRUE))
+    stop("Could not save candidate mechanism CSV: ",path)
+  message("[FT mechanisms] Exported ",nrow(out),
+          " candidate mechanism proposals from ",length(ids),
+          " validated publications: ",path)
+  invisible(path)
 }
