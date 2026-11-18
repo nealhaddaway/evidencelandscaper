@@ -9,7 +9,7 @@ testthat::test_that("grey PDF collection reuses named local PDFs and checkpoints
     "PDF link"="",check.names=FALSE)
   input<-file.path(dir,"Grey literature database - Evidence log.csv")
   utils::write.csv(log,input,row.names=FALSE)
-  first<-download_ostara_grey_literature_pdfs(csv_file=input)
+  first<-download_ostara_grey_literature_pdfs(csv_file=input,existing_pdf_dir=dir)
   testthat::expect_equal(first$saved,1L)
   testthat::expect_true(file.exists(first$csv))
   result<-utils::read.csv(first$csv,stringsAsFactors=FALSE,
@@ -19,7 +19,7 @@ testthat::test_that("grey PDF collection reuses named local PDFs and checkpoints
                          "^0001_a_report_with_a_title\\.pdf$")
   testthat::expect_true(file.exists(file.path(first$pdf_directory,
                      result[["Downloaded PDF filename"]][[1L]])))
-  second<-download_ostara_grey_literature_pdfs(csv_file=input)
+  second<-download_ostara_grey_literature_pdfs(csv_file=input,existing_pdf_dir=dir)
   testthat::expect_equal(second$saved,1L)
   testthat::expect_identical(second$csv,first$csv)
   testthat::expect_false("Downloaded PDF filename"%in%names(log))
@@ -31,6 +31,9 @@ testthat::test_that("grey PDF function has one-file-picker and strict link prior
   testthat::expect_silent(parse(file=p))
   txt<-paste(readLines(p,warn=FALSE),collapse="\n")
   testthat::expect_match(txt,"file.choose()",fixed=TRUE)
+  testthat::expect_match(txt,"existing_pdf_dir",fixed=TRUE)
+  testthat::expect_match(txt,"recursive=FALSE",fixed=TRUE)
+  testthat::expect_false(grepl('path.expand("~/Downloads")',txt,fixed=TRUE))
   testthat::expect_match(txt,'for(field in c("PDF link","Link"))',fixed=TRUE)
   testthat::expect_match(txt,'"Name of PDF as saved"',fixed=TRUE)
   testthat::expect_match(txt,'"Downloaded PDF filename"',fixed=TRUE)
