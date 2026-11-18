@@ -1,6 +1,6 @@
 #' Collect OSTARA grey-literature PDFs from an uploaded evidence-log CSV
 #'
-#' In an interactive R session opens only ONE file chooser for the evidence log.
+#' In an interactive R session asks for the evidence log and the exact local PDF folder.
 #' Finds locally saved PDFs by "Name of PDF as saved", then tries "PDF link",
 #' then "Link". Only PDF-signature-verified bytes are saved as PDFs. HTML pages
 #' containing one unambiguous PDF link may be followed; ambiguous HTML links
@@ -8,15 +8,41 @@
 #' filename. Checkpoints update an adjacent new CSV after each record.
 #' The original evidence log is never changed and no LLM API is used.
 #'
-#' @param csv_file Input evidence log. If NULL, show file.choose() once.
+#' @param csv_file Input evidence log. If NULL, show file.choose().
+#' @param existing_pdf_dir Explicit folder containing previously saved PDFs.
+#'   If NULL, ask the user to choose a folder; no automatic folder discovery.
 #' @return Invisibly, the output CSV and directory paths with counts.
 #' @export
-download_ostara_grey_literature_pdfs <- function(csv_file=NULL) {
+download_ostara_grey_literature_pdfs <- function(csv_file=NULL,
+                                                  existing_pdf_dir=NULL) {
   if(is.null(csv_file)) {
     if(!interactive())stop("Select the evidence-log CSV in an interactive R session.")
     message("[OSTARA grey PDFs] Select your evidence-log CSV.")
     csv_file<-file.choose()
   }
+  if(is.null(existing_pdf_dir)) {
+    if(!interactive())
+      stop("Provide existing_pdf_dir in a non-interactive session.")
+    message("[OSTARA grey PDFs] Choose the folder containing existing PDFs.")
+    if(requireNamespace("tcltk",quietly=TRUE)&&
+       capabilities("tcltk")) {
+      selected<-tryCatch(tcltk::tk_choose.dir(
+        caption="Select the folder containing already saved PDFs"),
+        error=function(e)"")
+      existing_pdf_dir<-as.character(selected)
+    }
+    if(is.null(existing_pdf_dir)||!length(existing_pdf_dir)||
+       is.na(existing_pdf_dir)||!nzchar(existing_pdf_dir))
+      existing_pdf_dir<-readline(
+        "Paste the exact path to your existing PDF folder: ")
+  }
+  if(length(existing_pdf_dir)!=1L||is.na(existing_pdf_dir)||
+     !nzchar(trimws(existing_pdf_dir)))
+    stop("An explicit existing PDF folder is required; nothing was searched.")
+  existing_pdf_dir<-normalizePath(path.expand(existing_pdf_dir),
+                                  winslash="/",mustWork=TRUE)
+  if(!dir.exists(existing_pdf_dir))
+    stop("Selected PDF location is not a directory.")
   csv_file<-normalizePath(csv_file,winslash="/",mustWork=TRUE)
   if(!grepl("\\.csv$",csv_file,ignore.case=TRUE))
     stop("The selected file must be a CSV.")
@@ -101,18 +127,11 @@ download_ostara_grey_literature_pdfs <- function(csv_file=NULL) {
       identical(paste(txt[k:(k+4L)],collapse=""),"%PDF-"),
       logical(1)))
   }
-  # Index likely folders once, without guessing filenames. Includes the CSV
-  # folder and ordinary local download directories; avoids package-specific
-  # paths and searching the whole disk.
-  search_dirs<-unique(c(path_base,file.path(path_base,"pdfs"),
-    file.path(path_base,"PDFs"),file.path(path_base,"Downloads"),
-    path.expand("~/Downloads"),path.expand("~/Documents"),
-    path.expand("~/Desktop")))
-  search_dirs<-search_dirs[dir.exists(search_dirs)]
-  local<-unique(unlist(lapply(search_dirs,function(d)
-    list.files(d,pattern="\\.pdf$",recursive=TRUE,full.names=TRUE,
-               ignore.case=TRUE,include.dirs=FALSE)),use.names=FALSE))
-  local<-local[file.exists(local)]
+  # Only examine files directly within the user-selected PDF folder.
+  # Never search home, Downloads, Documents, Desktop, or other directories.
+  local<-list.files(existing_pdf_dir,pattern="\\\\.pdf$",recursive=FALSE,
+                    full.names=TRUE,ignore.case=TRUE)
+  local<-local[file.exists(local)&!dir.exists(local)]
   by_name<-split(local,tolower(basename(local)))
   # Existing original filenames are matched exactly, not by loose title
   # similarity (which risks silently selecting a different publication).
