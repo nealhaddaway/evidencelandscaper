@@ -90,10 +90,18 @@ export_w09_cases_wide_evidence <- function(w09=NULL,extraction_dir=NULL,
                     review_notes="")
       for(i in seq_len(nrow(spec))) {
         f<-case$fields[[spec$field_id[[i]]]]
-        vals<-if(is.null(f))character() else if(!is.null(f$values))
-          unlist(f$values,use.names=FALSE) else f$value
-        # Keep each distinct enabler/barrier readable inside one CSV cell.\n        # Only the presentation changes; JSON values remain unchanged.\n        is_factor_field<-grepl("enabler|barrier",spec$Question[[i]],\n                               ignore.case=TRUE)
-        answer<-if(length(vals)) {\n          items<-as.character(vals)\n          if(is_factor_field)paste0("• ",paste(items,collapse="\n• "))\n          else paste(items,collapse="\n")\n        } else ""
+        if(is.null(f))stop("Validated case is missing field ",spec$field_id[[i]])
+        vals<-if(!is.null(f$values))
+          unlist(f$values,use.names=FALSE) else
+          unlist(f$value,use.names=FALSE)
+        # Preserve enabler/barrier lists as readable bulleted CSV cells.
+        is_factor_field<-grepl("enabler|barrier",spec$Question[[i]],
+                               ignore.case=TRUE)
+        answer<-if(length(vals)) {
+          items<-as.character(vals)
+          if(is_factor_field)paste0("• ",paste(items,collapse="\n• "))
+          else paste(items,collapse="\n")
+        } else ""
         ev<-if(is.list(f$evidence)&&length(f$evidence))
           vapply(f$evidence,function(e)
             paste0(scalar(e$anchor),": ",scalar(e$quote)),character(1))
