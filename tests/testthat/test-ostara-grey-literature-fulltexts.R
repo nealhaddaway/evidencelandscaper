@@ -22,3 +22,19 @@ testthat::test_that("mixed grey-literature runner supports actual file types and
     "run_ostara_grey_literature_fulltexts"%in%
        getNamespaceExports("evidencelandscaper"))
 })
+
+
+testthat::test_that("identical grey sources are deduplicated before extraction", {
+  source_file<-testthat::test_path("..","..","R",
+                                   "ostara-grey-literature-fulltexts.R")
+  lines<-paste(readLines(source_file,warn=FALSE),collapse="\\n")
+  for(token in c("first_indices<-match(all_hashes,all_hashes)",
+                 "keep<-!duplicated(all_hashes)",
+                 "grey_duplicate_files.csv",
+                 "duplicates_omitted=sum(!keep)",
+                 "files<-files[keep]",
+                 "hashes<-hashes[keep]"))
+    testthat::expect_match(lines,token,fixed=TRUE)
+  testthat::expect_false(grepl("Two input files have identical SHA256",
+                              lines,fixed=TRUE))
+})
