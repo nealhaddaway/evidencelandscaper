@@ -53,9 +53,24 @@ run_ostara_grey_literature_fulltexts <- function(map_path,input_dir,
   # metadata is deliberately not inferred or fabricated.
   labels<-tools::file_path_sans_ext(files)
   ext<-tolower(tools::file_ext(input_paths))
-  hashes<-vapply(input_paths,sha,character(1))
-  if(anyDuplicated(hashes))
-    stop("Two input files have identical SHA256; resolve duplicate sources.")
+  hashes<-unname(vapply(input_paths,sha,character(1)))
+  # Treat byte-identical files as ONE source, while retaining a traceable
+  # record of every supplied filename. This happens before any paid work.
+  all_files<-files
+  all_hashes<-hashes
+  first_indices<-match(all_hashes,all_hashes)
+  keep<-!duplicated(all_hashes)
+  duplicates<-data.frame(
+    supplied_filename=all_files,
+    source_sha256=all_hashes,
+    selected_filename=all_files[first_indices],
+    selected_for_extraction=keep,
+    stringsAsFactors=FALSE)
+  files<-files[keep]
+  input_paths<-input_paths[keep]
+  labels<-labels[keep]
+  ext<-ext[keep]
+  hashes<-hashes[keep]
   # IDs remain reproducible across reruns and distinct from journal IDs.
   ids<-paste0("grey-",substr(hashes,1L,20L))
   if(anyDuplicated(ids))stop("Source ID hash collision.")
@@ -97,6 +112,12 @@ run_ostara_grey_literature_fulltexts <- function(map_path,input_dir,
   dir.create(root,recursive=TRUE,showWarnings=FALSE)
   staging_manifest<-file.path(root,"grey_sources_manifest.json")
   qfile<-file.path(root,"retrieval_queue.csv")
+  # Record omitted byte-identical copies for reproducibility.
+  duplicate_csv<-file.path(root,"grey_duplicate_files.csv")
+  excel_csv(duplicates,duplicate_csv)
+  if(any(!keep))message("[OSTARA grey] ",sum(!keep),
+    " byte-identical file(s) omitted; see ",duplicate_csv)
+
   inventory<-data.frame(
     record_id=ids,file_name=files,title=labels,source_format=ext,
     source_sha256=hashes,original_file_bytes=as.numeric(file.info(input_paths)$size),
@@ -324,6 +345,7 @@ run_ostara_grey_literature_fulltexts <- function(map_path,input_dir,
   invisible(list(batch_dir=root,source_manifest=staging_manifest,
      source_inventory=status_file,status=status_out,
      outcome_manifest=outcome_path,cases_csv=cases_csv,
+     duplicate_report=duplicate_csv,duplicates_omitted=sum(!keep),
      readable=sum(readable),validated=sum(ids%in%rid),
      case_count=sum(cases_n,na.rm=TRUE)))
 }
