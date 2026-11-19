@@ -30,12 +30,15 @@ audit_ostara_grey_zero_cases_by_filetype <- function(map_path,batch_dir=NULL) {
   completed<-statuses$extraction_status=="validated"
   if(any(completed&is.na(counts)))
     stop("Completed assessment with no recorded case count")
-  statuses$audit_classification<-ifelse(
-    completed&counts==0L,"validated_zero_cases",
-    ifelse(completed&counts>0L,"validated_with_cases",
-           ifelse(statuses$extraction_status=="unreadable_full_text",
-             "unreadable","not_yet_validated")))
-  statuses$potential_false_negative<-completed&counts==0L
+  statuses$audit_classification<-rep("not_yet_validated",nrow(statuses))
+  statuses$audit_classification[
+    statuses$extraction_status=="unreadable_full_text"]<-"unreadable"
+  statuses$audit_classification[completed&!is.na(counts)&counts>0L]<-
+    "validated_with_cases"
+  statuses$audit_classification[completed&!is.na(counts)&counts==0L]<-
+    "validated_zero_cases"
+  statuses$potential_false_negative<-
+    statuses$audit_classification=="validated_zero_cases"
   types<-sort(unique(statuses$file_type))
   summary_rows<-lapply(types,function(t) {
     idx<-statuses$file_type==t
