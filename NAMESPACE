@@ -175,3 +175,5 @@ export(lock_ostara_case_data_with_failures)
 export(run_ostara_grey_literature_pilot)
 
 export(download_ostara_grey_literature_pdfs)
+
+export(run_ostara_grey_literature_fulltexts)
