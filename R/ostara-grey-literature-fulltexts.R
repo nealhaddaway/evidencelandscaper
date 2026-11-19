@@ -1,17 +1,17 @@
-#' Stage and optionally extract a ten-source OSTARA grey-literature pilot
+#' Stage and optionally extract a folder of grey-lit PDF and HTML sources
 #'
-#' A separate W09-compatible namespace is created from exactly ten PDF/XML
+#' A separate W09-compatible namespace is created from PDF, XML, HTML, HTM and ASPX
 #' files. The filename is used as the source label, with file hashes and
 #' extraction provenance recorded automatically. No sources.csv is needed.
 #' No case-positive classification is assumed; a document may yield zero cases.
 #'
 #' @param map_path OSTARA project root.
-#' @param input_dir Directory containing exactly 10 PDF/XML files.
+#' @param input_dir User-selected directory of PDF, XML, HTML, HTM or ASPX files.
 #' @param batch_id Stable pilot label. Revised prompt/schema files automatically
 #'   produce a separate hash-versioned extraction subdirectory.
 #' @param run_extraction FALSE stages/validates only; TRUE incurs API costs.
-#' @param prompt_file Optional revised grey prompt path; defaults to approved journal prompt.
-#' @param schema_file Optional revised grey CSV path; defaults to approved journal schema.
+#' @param prompt_file Required revised grey-literature case extraction TXT.
+#' @param schema_file Required authoritative revised 41-field grey case-analysis CSV.
 #' @return Paths and source/publication statuses, invisibly.
 #' @export
 run_ostara_grey_literature_fulltexts <- function(map_path,input_dir,
@@ -70,8 +70,8 @@ run_ostara_grey_literature_fulltexts <- function(map_path,input_dir,
     stop("Approved OSTARA pilot prompt/schema hashes do not match.")
   if(is.null(prompt_file)||is.null(schema_file))
     stop("Supply the exact revised prompt TXT and authoritative 41-field case-analysis CSV.")
-  prompt<-if(is.null(prompt_file)) original_prompt else norm(prompt_file)
-  schema<-if(is.null(schema_file)) original_schema else norm(schema_file)
+  prompt<-norm(prompt_file)
+  schema<-norm(schema_file)
   if(!is.null(schema_file)){
     grey_spec<-csv(schema)
     if(nrow(grey_spec)!=41L||
