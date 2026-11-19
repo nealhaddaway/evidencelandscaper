@@ -177,3 +177,5 @@ export(run_ostara_grey_literature_pilot)
 export(download_ostara_grey_literature_pdfs)
 
 export(run_ostara_grey_literature_fulltexts)
+
+export(export_ostara_grey_literature_partial)
