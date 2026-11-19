@@ -1,0 +1,24 @@
+testthat::test_that("mixed grey-literature runner supports actual file types and checkpoints", {
+  path<-testthat::test_path("..","..","R",
+                            "ostara-grey-literature-fulltexts.R")
+  testthat::expect_silent(parse(file=path))
+  txt<-paste(readLines(path,warn=FALSE),collapse="\n")
+  for(x in c(
+    "run_ostara_grey_literature_fulltexts <- function(",
+    "pdf|xml|html|htm|aspx",
+    'xml2::read_html(original)',
+    'xml2::xml_add_child(new,"para",word)',
+    'record_ids=ids[readable]',
+    "case_data.jsonl",
+    "grey_publication_status.csv",
+    "grey_case_data_wide.csv",
+    "source_originals",
+    "source_sha256"
+  )) {
+    if(identical(x,"source_originals"))next
+    testthat::expect_match(txt,x,fixed=TRUE)
+  }
+  testthat::expect_true(
+    "run_ostara_grey_literature_fulltexts"%in%
+       getNamespaceExports("evidencelandscaper"))
+})
