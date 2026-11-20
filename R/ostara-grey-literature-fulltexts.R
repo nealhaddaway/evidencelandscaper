@@ -7,6 +7,8 @@
 #'
 #' @param map_path OSTARA project root.
 #' @param input_dir User-selected directory of PDF, XML, HTML, HTM or ASPX files.
+#' @param input_files Optional explicit vector of individual file paths, instead
+#'   of scanning input_dir. Files can be in different directories.
 #' @param batch_id Stable pilot label. Revised prompt/schema files automatically
 #'   produce a separate hash-versioned extraction subdirectory.
 #' @param run_extraction FALSE stages/validates only; TRUE incurs API costs.
@@ -14,9 +16,9 @@
 #' @param schema_file Required authoritative revised 41-field grey case-analysis CSV.
 #' @return Paths and source/publication statuses, invisibly.
 #' @export
-run_ostara_grey_literature_fulltexts <- function(map_path,input_dir,
+run_ostara_grey_literature_fulltexts <- function(map_path,input_dir=NULL,
    batch_id="grey_fulltexts",run_extraction=FALSE,
-   prompt_file=NULL,schema_file=NULL) {
+   prompt_file=NULL,schema_file=NULL,input_files=NULL) {
   if(!is.logical(run_extraction)||length(run_extraction)!=1L||
      is.na(run_extraction))stop("run_extraction must be TRUE or FALSE.")
   if(!is.character(batch_id)||length(batch_id)!=1L||
@@ -41,14 +43,39 @@ run_ostara_grey_literature_fulltexts <- function(map_path,input_dir,
     utils::write.table(x,con,sep=",",row.names=FALSE,col.names=TRUE,
                        quote=TRUE,na="",qmethod="double")
   }
-  map_path<-norm(map_path);input_dir<-norm(input_dir)
-  files<-sort(list.files(input_dir,pattern="\\.(pdf|xml|html|htm|aspx)$",
-                         ignore.case=TRUE,full.names=FALSE))
-  if(!length(files))stop("No supported files found in chosen folder.")
-  if(anyDuplicated(files))stop("Duplicate source filenames.")
-  input_paths<-file.path(input_dir,files)
-  if(any(dir.exists(input_paths))||any(!file.exists(input_paths)))
-    stop("Invalid input files in selected directory.")
+  map_path<-norm(map_path)
+  if(!is.null(input_files)) {
+    if(!is.null(input_dir))
+      stop("Supply either input_dir or input_files, not both.")
+    if(!is.character(input_files)||!length(input_files)||
+       anyNA(input_files)||any(!nzchar(trimws(input_files))))
+      stop("input_files must be a nonempty vector of individual file paths.")
+    input_paths<-vapply(input_files,norm,character(1))
+    if(any(dir.exists(input_paths)))
+      stop("input_files must contain files, not directories.")
+    if(anyDuplicated(input_paths))
+      stop("The same file path was supplied more than once.")
+    files<-basename(input_paths)
+    if(any(!grepl("\\.(pdf|xml|html|htm|aspx)$",files,ignore.case=TRUE)))
+      stop("Selected files must be PDF, XML, HTML, HTM or ASPX.")
+    if(anyDuplicated(files))
+      stop("Two selected files have the same basename. Rename one copy ",
+           "before running to preserve original filename provenance.")
+    ordering<-order(files)
+    files<-files[ordering]
+    input_paths<-unname(input_paths[ordering])
+  } else {
+    if(is.null(input_dir))
+      stop("Supply input_dir or input_files.")
+    input_dir<-norm(input_dir)
+    files<-sort(list.files(input_dir,pattern="\\.(pdf|xml|html|htm|aspx)$",
+                           ignore.case=TRUE,full.names=FALSE))
+    if(!length(files))stop("No supported files found in chosen folder.")
+    if(anyDuplicated(files))stop("Duplicate source filenames.")
+    input_paths<-file.path(input_dir,files)
+    if(any(dir.exists(input_paths))||any(!file.exists(input_paths)))
+      stop("Invalid input files in selected directory.")
+  }
   # Filenames are the ONLY source labels supplied by the operator. Bibliographic
   # metadata is deliberately not inferred or fabricated.
   labels<-tools::file_path_sans_ext(files)
