@@ -183,3 +183,5 @@ export(export_ostara_grey_literature_partial)
 export(audit_ostara_grey_zero_cases_by_filetype)
 
 export(export_ostara_all_included_bibliography)
+
+export(run_ostara_grey_literature_selected_files)
