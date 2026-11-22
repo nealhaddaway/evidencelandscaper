@@ -116,7 +116,8 @@ export_ostara_fulltext_atlas_prototype <- function(
     geo<-readcsv(coordinates_csv)
     required<-c("case_id","latitude","longitude",
                 "coordinate_basis","coordinate_source")
-    if(!all(required%in%names(geo))||anyDuplicated(geo$case_id)||
+    if(!all(required%in%names(geo))||
+       anyDuplicated(paste(geo$case_id,geo$latitude,geo$longitude,sep="|"))||
        any(!geo$case_id%in%cases$case_id))
       stop("Coordinates must have unique known case_id and all provenance columns.")
     lat<-suppressWarnings(as.numeric(geo$latitude))
@@ -167,11 +168,11 @@ export_ostara_fulltext_atlas_prototype <- function(
     }
     coords<-NULL
     if(nrow(geo)) {
-      k<-match(scalar(r$case_id[[1L]]),geo$case_id)
-      if(!is.na(k))coords<-list(latitude=geo$latitude[[k]],
-        longitude=geo$longitude[[k]],
-        coordinate_basis=scalar(geo$coordinate_basis[[k]]),
-        coordinate_source=scalar(geo$coordinate_source[[k]]))
+      k<-which(geo$case_id==scalar(r$case_id[[1L]]))
+      if(length(k))coords<-lapply(k,function(j)list(
+        latitude=geo$latitude[[j]],longitude=geo$longitude[[j]],
+        coordinate_basis=scalar(geo$coordinate_basis[[j]]),
+        coordinate_source=scalar(geo$coordinate_source[[j]])))
     }
     doi<-trimws(scalar(pub$doi[[1L]]))
     doi<-sub("^https?://(dx\\.)?doi\\.org/","",doi,ignore.case=TRUE)
@@ -278,7 +279,9 @@ export_ostara_fulltext_atlas_prototype <- function(
       basename(files))),
     coordinates_csv=if(is.null(coordinates_csv))
       "generated_offline_from_extracted_geography" else coordinates_csv,
-    mapped_cases=nrow(geo),unmapped_cases=nrow(cases)-nrow(geo),
+    mapped_cases=length(unique(geo$case_id)),
+    plotted_points=nrow(geo),
+    unmapped_cases=nrow(cases)-length(unique(geo$case_id)),
     coordinate_file_sha256=digest::digest(
       file=file.path(output_dir,"atlas_coordinates.csv"),
       algo="sha256",serialize=FALSE),
@@ -291,7 +294,8 @@ export_ostara_fulltext_atlas_prototype <- function(
                         pretty=TRUE,auto_unbox=TRUE,null="null")
   message("[OSTARA atlas prototype] ",nrow(cases)," cases across ",
     length(unique(cases$record_id))," publications: ",html_file)
-  message("[OSTARA atlas prototype] ",nrow(geo),"/",nrow(cases),
-    " cases mapped (approximate); coordinate CSV and audit saved in output folder.")
+  message("[OSTARA atlas prototype] ",length(unique(geo$case_id)),"/",nrow(cases),
+    " cases mapped across ",nrow(geo),
+    " indicative points; coordinate CSV and audit saved in output folder.")
   invisible(html_file)
 }
