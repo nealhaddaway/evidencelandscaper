@@ -31,6 +31,36 @@ testthat::test_that("v5 case mechanism coding accepts exact fields and exports o
      fileEncoding="UTF-8-BOM",stringsAsFactors=FALSE)
   testthat::expect_identical(as.character(exported$case_id),cases$case_id)
   testthat::expect_true(all(exported$coding_status=="not_yet_processed"))
+  testthat::expect_equal(nrow(utils::read.csv(result$long_csv,
+    fileEncoding="UTF-8-BOM")),0L)
+  # Simulate responses already paid for under the previous overly strict
+  # quote/status validation. Replay must not require a new API key or call.
+  saved<-list(batch_id=1L,raw=as.character(jsonlite::toJSON(
+    list(rows=list(
+      list(case_id=cases$case_id[[1]],status="coded",note="",
+        assignments=list(list(mechanism_id="M1",
+          supporting_quote="joint  monitoring",
+          rationale="Coordination is described."))),
+      list(case_id=cases$case_id[[2]],status="no_supported_match",
+        note="",assignments=list(list(mechanism_id="M2",
+          supporting_quote="not present in input",
+          rationale="Partnership commits to sharing prices."))))),
+    auto_unbox=TRUE)))
+  cat(as.character(jsonlite::toJSON(saved,auto_unbox=TRUE)),
+      "\n",file=file.path(output,"model_responses.jsonl"),append=TRUE)
+  recovered<-code_ostara_case_mechanisms_v5(cc,oc,output,
+    run_extraction=TRUE)
+  testthat::expect_equal(recovered$completed,2L)
+  testthat::expect_equal(recovered$assignments,2L)
+  long<-utils::read.csv(recovered$long_csv,check.names=FALSE,
+    fileEncoding="UTF-8-BOM",stringsAsFactors=FALSE)
+  testthat::expect_true("quote_verification" %in% names(long))
+  testthat::expect_true("unverified_requires_review" %in%
+    long$quote_verification)
+  updated<-utils::read.csv(recovered$wide_csv,check.names=FALSE,
+    fileEncoding="UTF-8-BOM",stringsAsFactors=FALSE)
+  testthat::expect_identical(updated$coding_status,
+    c("uncertain","uncertain"))
   repeat_run<-code_ostara_case_mechanisms_v5(cc,oc,output,
     run_extraction=FALSE)
   testthat::expect_equal(repeat_run$total,result$total)
