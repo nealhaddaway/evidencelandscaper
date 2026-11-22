@@ -133,10 +133,23 @@ code_ostara_case_mechanisms_v5 <- function(
         for(m in a$assignments) {
           if(!is.character(m$supporting_quote)||
              length(m$supporting_quote)!=1L||
-             !nzchar(trimws(m$supporting_quote))||
-             !grepl(trimws(m$supporting_quote),target,fixed=TRUE))
-            stop("Mechanism quote is not verbatim from input: ",
+             !nzchar(trimws(m$supporting_quote)))
+            stop("Missing supporting quote: ",
                  requested[[i]]," / ",m$mechanism_id)
+          # Preserve non-verbatim model evidence as an explicit review flag
+          # instead of silently treating it as verified or discarding an
+          # otherwise complete 15-case model response.
+          quote<-trimws(m$supporting_quote)
+          exact<-grepl(quote,target,fixed=TRUE)
+          # A model may collapse newlines or whitespace without changing
+          # words. This is a distinct, lower-assurance match.
+          collapse<-function(x)gsub("[[:space:]]+"," ",trimws(x))
+          whitespace_match<-grepl(collapse(quote),collapse(target),
+                                   fixed=TRUE)
+          m$quote_verification<-if(exact) "exact" else
+            if(whitespace_match) "whitespace_normalised" else
+              "unverified_requires_review"
+          a$assignments[[match(m$mechanism_id,codes)]]<-m
           if(!is.character(m$rationale)||length(m$rationale)!=1L||
              !nzchar(trimws(m$rationale)))
             stop("Mechanism assignment missing rationale: ",
@@ -146,8 +159,22 @@ code_ostara_case_mechanisms_v5 <- function(
       if(!is.character(a$status)||length(a$status)!=1L||
          !a$status%in%c("coded","no_supported_match","uncertain")||
          (a$status=="coded"&&!length(a$assignments))||
-         (a$status=="no_supported_match"&&length(a$assignments)))
-        stop("Invalid case classification status: ",requested[[i]])
+         (a$status=="no_supported_match"&&length(a$assignments))) {
+        a$note<-paste(c(if(is.character(a$note))a$note else NULL,
+          paste0("Model returned inconsistent status: ",
+                 paste(a$status,collapse="; "))),
+          collapse=" | ")
+        a$status<-"uncertain"
+      }
+      if(any(vapply(a$assignments,function(m)
+            identical(m$quote_verification,"unverified_requires_review"),
+            logical(1)))) {
+        a$status<-"uncertain"
+        a$note<-paste(c(if(is.character(a$note))a$note else NULL,
+                        "One or more quotations could not be verified against supplied evidence"),
+                      collapse=" | ")
+      }
+      sorted[[i]]<-a
     }
     sorted
   }
@@ -162,7 +189,8 @@ code_ostara_case_mechanisms_v5 <- function(
     "definition, NOT superficial keyword similarity. Only classify activities",
     "the case actually operationalises, not proposed or unrelated approaches.",
     "For each assignment supply a short rationale and a SHORT EXACT VERBATIM",
-    "supporting_quote from that case's summary or evidence. No invented",
+    "supporting_quote from that case's summary or evidence. Copy a short",
+    "contiguous exact substring, retaining whitespace and punctuation. No invented",
     "quotes. Do not use the ontology definition as source evidence.",
     "If no code has support, return no_supported_match and [] assignments.",
     "If evidence is materially ambiguous, use status uncertain (retain only",
@@ -252,8 +280,10 @@ code_ostara_case_mechanisms_v5 <- function(
   }
   # Convert completed checkpoints to both case-wide and assignment-long CSV.
   completed<-jl(ledger)
-  rows<-unlist(lapply(completed,function(d)d$rows),recursive=FALSE)
-  mapped<-setNames(rows,vapply(rows,function(z)z$case_id,character(1)))
+  rows<-if(length(completed))
+    unlist(lapply(completed,function(d)d$rows),recursive=FALSE) else list()
+  mapped<-if(length(rows))
+    setNames(rows,vapply(rows,function(z)z$case_id,character(1))) else list()
   if(anyDuplicated(names(mapped)))
     stop("Duplicate case IDs in extracted checkpoints.")
   wide<-data.frame(record_id=cases$record_id,case_id=cases$case_id,
@@ -281,16 +311,20 @@ code_ostara_case_mechanisms_v5 <- function(
         mechanism_id=m$mechanism_id,
         category=ont$category[[j]],function_label=ont[["function"]][[j]],
         mechanism=ont$mechanism[[j]],definition=ont$definition[[j]],
-        supporting_quote=m$supporting_quote,rationale=m$rationale,
+        supporting_quote=m$supporting_quote,
+        quote_verification=if(is.null(m$quote_verification))
+          "legacy_unchecked" else m$quote_verification,
+        rationale=m$rationale,
         coding_status=row$status,stringsAsFactors=FALSE)
     }
   }
   long_names<-c("record_id","case_id","mechanism_id","category",
     "function_label","mechanism","definition","supporting_quote",
-    "rationale","coding_status")
+    "quote_verification","rationale","coding_status")
   long<-if(length(assigned))do.call(rbind,assigned) else
-    as.data.frame(setNames(replicate(length(long_names),character(),
-      simplify=FALSE),long_names),stringsAsFactors=FALSE)
+    as.data.frame(stats::setNames(
+      rep(list(character(0)),length(long_names)),long_names),
+      stringsAsFactors=FALSE)
   save_csv<-function(d,p) {
     tmp<-tempfile(tmpdir=output_dir,fileext=".csv")
     on.exit(if(file.exists(tmp))unlink(tmp),add=TRUE)
