@@ -37,8 +37,8 @@
     "(where did the case take place.*(region|province|district|locality|place)|^field_[0-9]{3} :: .*\\b(location|locations|region|province|district|municipality|town|city|village)\\b)",
     field_cols,ignore.case=TRUE,perl=TRUE)]
   locality_fields<-setdiff(locality_fields,country_fields)
-  # ISO3 values are preferred. Country names may be converted, but never
-  # silently assign a random country when multiple are reported.
+  # ISO3 values are preferred. Each explicitly reported country receives
+  # its own representative point when local coordinates are unavailable.
   codes_for<-function(v) {
     items<-trimws(unlist(strsplit(as.character(v),"\\s*[;|,\\n]\\s*",perl=TRUE)))
     items<-unique(items[nzchar(items)])
@@ -70,50 +70,58 @@
       if(!identical(st,"reported"))return(character())
       localities_for(r[[f]][[1L]])
     }),use.names=FALSE))
-    chosen<-NA_integer_;basis<-"";source<-"";warning<-""
-    if(length(codes)==1L) {
-      code<-codes[[1L]]
-      # Only a single exact city candidate in the declared country is safe.
-      for(nm in localities) {
-        hits<-which(!is.na(cities$iso3)&cities$iso3==code&
-          normalize(cities$name)==normalize(nm)&
-          is.finite(cities$lat)&is.finite(cities$long))
-        if(length(hits)==1L) {
-          chosen<-hits[[1L]]
-          basis<-"gazetteer_named_locality_approximate"
-          source<-paste0("Extracted locality: ",nm," (",code,
-            "); maps::world.cities gazetteer; not verified site coordinates")
-          break
+    mapped_count<-0L;warning<-""
+    if(length(codes)) {
+      for(code in codes) {
+        chosen<-NA_integer_;basis<-"";source<-""
+        # A named locality is safe only when the extracted case has
+        # exactly one country: locality-country pairing is otherwise unknown.
+        if(length(codes)==1L)for(nm in localities) {
+          hits<-which(!is.na(cities$iso3)&cities$iso3==code&
+            normalize(cities$name)==normalize(nm)&
+            is.finite(cities$lat)&is.finite(cities$long))
+          if(length(hits)==1L) {
+            chosen<-hits[[1L]]
+            basis<-"gazetteer_named_locality_approximate"
+            source<-paste0("Extracted locality: ",nm," (",code,
+              "); maps::world.cities gazetteer; not verified site coordinates")
+            break
+          }
+        }
+        if(is.na(chosen)) {
+          hits<-which(!is.na(cities$iso3)&cities$iso3==code&
+            is.finite(cities$lat)&is.finite(cities$long))
+          if(length(hits)) {
+            ordered<-hits[order(-as.numeric(cities$pop[hits]),
+              as.character(cities$name[hits]),na.last=TRUE)]
+            chosen<-ordered[[1L]]
+            basis<-"country_representative_city_not_case_location"
+            source<-paste0("Extracted country ",code,"; representative city ",
+              as.character(cities$name[[chosen]]),
+              " from maps::world.cities; NOT the actual case location")
+          }
+        }
+        if(!is.na(chosen)) {
+          mapped_count<-mapped_count+1L
+          points[[length(points)+1L]]<-data.frame(
+            case_id=id,latitude=as.numeric(cities$lat[[chosen]]),
+            longitude=as.numeric(cities$long[[chosen]]),
+            coordinate_basis=basis,coordinate_source=source,
+            stringsAsFactors=FALSE)
         }
       }
-      if(is.na(chosen)) {
-        hits<-which(!is.na(cities$iso3)&cities$iso3==code&
-          is.finite(cities$lat)&is.finite(cities$long))
-        if(length(hits)) {
-          ordered<-hits[order(-as.numeric(cities$pop[hits]),
-            as.character(cities$name[hits]),na.last=TRUE)]
-          chosen<-ordered[[1L]]
-          basis<-"country_representative_city_not_case_location"
-          source<-paste0("Extracted country ",code,"; representative city ",
-            as.character(cities$name[[chosen]]),
-            " from maps::world.cities; NOT the actual case location")
-          warning<-"Only a country-scale representative point could be assigned"
-        } else warning<-"No gazetteer city in extracted country"
-      }
-    } else if(length(codes)>1L)
-      warning<-"Multiple countries reported; no single point assigned"
-    else
-      warning<-"No unambiguous extracted country code"
-    if(!is.na(chosen))
-      points[[length(points)+1L]]<-data.frame(
-        case_id=id,latitude=as.numeric(cities$lat[[chosen]]),
-        longitude=as.numeric(cities$long[[chosen]]),
-        coordinate_basis=basis,coordinate_source=source,
-        stringsAsFactors=FALSE)
+      if(mapped_count<length(codes))
+        warning<-"One or more extracted countries lack gazetteer coordinates"
+      else if(length(codes)>1L)
+        warning<-"Multiple countries: one indicative point per country, not verified sites"
+      else if(mapped_count==1L&&basis=="country_representative_city_not_case_location")
+        warning<-"Only a country-scale representative point could be assigned"
+    } else warning<-"No unambiguous extracted country code"
     audit[[length(audit)+1L]]<-data.frame(
       case_id=id,extracted_countries=paste(codes,collapse="; "),
       extracted_localities=paste(localities,collapse="; "),
-      mapped=!is.na(chosen),coordinate_basis=basis,
+      mapped=mapped_count>0L,coordinate_basis=if(mapped_count>0L)
+        "see_points_csv" else "",
       warning=warning,stringsAsFactors=FALSE)
   }
   points_df<-if(length(points))do.call(rbind,points) else
@@ -123,7 +131,9 @@
     data.frame(case_id=character(),extracted_countries=character(),
       extracted_localities=character(),mapped=logical(),
       coordinate_basis=character(),warning=character())
-  if(anyDuplicated(points_df$case_id)||anyDuplicated(audit_df$case_id))
-    stop("Duplicate case ID in coordinate output.")
+  if(anyDuplicated(paste(points_df$case_id,points_df$latitude,
+                         points_df$longitude,sep="|"))||
+     anyDuplicated(audit_df$case_id))
+    stop("Duplicate identical case/coordinate location or audit case ID.")
   list(points=points_df,audit=audit_df)
 }
