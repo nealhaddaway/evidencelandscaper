@@ -199,6 +199,34 @@ code_ostara_case_mechanisms_v5 <- function(
     "assignments:[{mechanism_id,supporting_quote,rationale}]}]}.",
     "Provide exactly one row for every supplied case_id, in input order."
   )
+  # Recover previously paid model responses from the append-only raw log.
+  # Earlier releases rejected a complete batch when a single quote differed
+  # or an otherwise valid case used an inconsistent status. Replay the raw
+  # output through the review-aware validator before making new API requests.
+  if(run_extraction&&file.exists(rawlog)) {
+    archived<-jl(rawlog)
+    for(b in setdiff(seq_len(n_batches),done_ids)) {
+      candidates<-Filter(function(z)
+        !is.null(z$batch_id)&&identical(as.integer(z$batch_id),as.integer(b))&&
+        is.character(z$raw)&&length(z$raw)==1L,archived)
+      if(!length(candidates))next
+      recovered<-NULL
+      for(candidate in rev(candidates)) {
+        recovered<-tryCatch(
+          check_batch(jsonlite::fromJSON(candidate$raw,
+             simplifyVector=FALSE),b),error=function(e)NULL)
+        if(!is.null(recovered))break
+      }
+      if(is.null(recovered))next
+      checkpoint<-list(batch_id=b,rows=recovered)
+      cat(as.character(jsonlite::toJSON(checkpoint,
+          auto_unbox=TRUE,null="null")),"\n",file=ledger,
+          append=TRUE,sep="")
+      done_ids<-c(done_ids,b)
+      message("[OSTARA mechanisms] recovered existing model response ",
+              "for batch ",b," (no new API call)")
+    }
+  }
   batches_to_run<-setdiff(seq_len(n_batches),done_ids)
   if(max_batches>0L)batches_to_run<-head(batches_to_run,max_batches)
   if(run_extraction&&length(batches_to_run)&&
