@@ -5,7 +5,7 @@ testthat::test_that("v5 case mechanism coding accepts exact fields and exports o
   dir.create(d)
   on.exit(unlink(d,recursive=TRUE),add=TRUE)
   ontology<-data.frame(mechanism_id=paste0("M",seq_len(26)),
-    category=rep("Category",26),function=rep("Function",26),
+    category=rep("Category",26),`function`=rep("Function",26),
     mechanism=paste0("Mechanism ",seq_len(26)),
     definition=rep("A documented collective-action mechanism.",26),
     stringsAsFactors=FALSE)
