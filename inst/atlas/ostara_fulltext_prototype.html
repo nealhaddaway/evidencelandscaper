@@ -19,6 +19,20 @@ button{cursor:pointer}.secondary-btn{background:#fff;border:1px solid var(--edge
 #maparea{position:relative;overflow:hidden;background:#eaf0e9}#world{width:100%;height:100%;display:block}
 .land{stroke:#a9bdb0;stroke-width:.7;fill:none}.graticule{stroke:#d7e5d9;stroke-width:.65}
 .marker{fill:var(--accent);stroke:#fff;stroke-width:1.4;cursor:pointer}.marker.active{fill:#e5a329;stroke:var(--ink);stroke-width:2.3}
+#mapcontrols{position:absolute;top:14px;left:14px;z-index:3;display:flex;gap:5px}
+#mapcontrols button{background:#fff;border:1px solid var(--edge);border-radius:6px;
+ padding:7px 11px;font-size:16px;box-shadow:0 1px 5px #243a3424}
+#mapchoices{position:absolute;z-index:5;left:14px;top:62px;display:none;
+ max-height:50%;width:min(350px,calc(100% - 28px));overflow-y:auto;
+ background:#fff;border:1px solid var(--edge);border-radius:8px;
+ padding:12px;box-shadow:0 5px 20px #243a3433}
+#mapchoices button.case-choice{display:block;width:100%;border:0;
+ border-top:1px solid var(--edge);padding:9px 2px;text-align:left;
+ background:#fff;color:var(--ink)}
+#mapchoices button.case-choice:hover{background:#f0f5ef}
+.cluster-pin{fill:#2c6956;stroke:#fff;stroke-width:1.7;cursor:pointer}
+.cluster-label{font-weight:700;fill:#fff;text-anchor:middle;pointer-events:none}
+#world{touch-action:none;cursor:grab}#world.dragging{cursor:grabbing}
 #mapnotice{position:absolute;left:15px;bottom:12px;background:#fffffff0;padding:8px 11px;border:1px solid var(--edge);border-radius:7px;font-size:12px;color:var(--muted)}
 #detail{position:absolute;right:12px;top:12px;bottom:12px;width:min(565px,calc(100% - 24px));background:#fff;border:1px solid var(--edge);box-shadow:0 9px 35px #243a3426;border-radius:10px;display:none;overflow:hidden;z-index:4}
 #detail.open{display:flex;flex-direction:column}#detailHead{padding:18px 20px 13px;border-bottom:1px solid var(--edge)}
@@ -42,7 +56,13 @@ details.group{border-bottom:1px solid var(--edge)}details.group>summary{padding:
 <div id="list"></div>
 </aside>
 <section id="maparea"><svg id="world" viewBox="0 0 1000 510" role="img" aria-label="World map with verified case locations"><rect width="1000" height="510" fill="#eaf0e9"/><g>__MAP_PATHS__</g><g id="markers"></g></svg>
-<div id="mapnotice">Approximate gazetteer locations · country-level points are not initiative locations</div>
+<div id="mapcontrols" aria-label="Map zoom controls">
+<button id="zoomIn" type="button" aria-label="Zoom in">+</button>
+<button id="zoomOut" type="button" aria-label="Zoom out">−</button>
+<button id="zoomHome" type="button" aria-label="Reset map view">Reset</button>
+</div>
+<div id="mapchoices" role="dialog" aria-label="Cases at this location"></div>
+<div id="mapnotice">Scrollable, draggable map · circles show grouped case points · indicative locations, not verified sites</div>
 <article id="detail" aria-label="Case details"><div id="detailHead"><button class="close" id="closeDetail">Close ×</button><div class="section-caption">Case evidence</div><h2 id="caseTitle"></h2><div id="caseMeta" class="meta"></div><div class="toolbar"><button class="secondary-btn" id="toggleEvidence">Hide all evidence</button><button class="secondary-btn" id="toggleMissing">Show unreported fields</button></div></div><div id="detailBody"></div></article>
 </section></main>
 <script id="atlas-data" type="application/json">__ATLAS_DATA__</script>
@@ -100,7 +120,7 @@ function openCase(c){
  $("caseTitle").textContent=c.display_name||"Extracted case";
  const tags=[c.cohort==="first10"?"First 10%":"Remaining 90%",...facetValues(c,headings[0]).slice(0,2),...facetValues(c,headings[1]).slice(0,2)];
  $("caseMeta").innerHTML=tags.filter(Boolean).map(t=>'<span class="chip">'+esc(t)+"</span>").join("");
- drawDetail();$("detail").classList.add("open");renderMarkers();
+ drawDetail();$("detail").classList.add("open");hideMapChoices();renderMarkers();
 }
 function drawDetail(){
  if(!active)return;
@@ -142,22 +162,164 @@ function filtersPass(c){
  const haystack=[c.title,c.display_name,c.record_id,c.case_id,...c.fields.flatMap(f=>[f.value,f.display_value])].join(" ").toLowerCase();
  return (!query||haystack.includes(query))&&headings.every(f=>!options[f[0]].value||facetValues(c,f).includes(options[f[0]].value));
 }
+
+const world=$("world");
+const ns="http://www.w3.org/2000/svg";
+const mapView={x:0,y:0,w:1000,h:510,zoom:1};
+const MAX_ZOOM=18;
+function clampView(){
+ mapView.w=1000/mapView.zoom;mapView.h=510/mapView.zoom;
+ mapView.x=Math.max(0,Math.min(1000-mapView.w,mapView.x));
+ mapView.y=Math.max(0,Math.min(510-mapView.h,mapView.y));
+ world.setAttribute("viewBox",[mapView.x,mapView.y,mapView.w,mapView.h].join(" "));
+}
+function zoomMap(factor,px,py){
+ const oldW=mapView.w,oldH=mapView.h;
+ const fx=Number.isFinite(px)?px:mapView.x+oldW/2;
+ const fy=Number.isFinite(py)?py:mapView.y+oldH/2;
+ const relX=(fx-mapView.x)/oldW,relY=(fy-mapView.y)/oldH;
+ mapView.zoom=Math.min(MAX_ZOOM,Math.max(1,mapView.zoom*factor));
+ mapView.w=1000/mapView.zoom;mapView.h=510/mapView.zoom;
+ mapView.x=fx-relX*mapView.w;mapView.y=fy-relY*mapView.h;
+ clampView();renderMarkers();
+}
+const svgCoords=e=>{
+ const pt=world.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;
+ const matrix=world.getScreenCTM();
+ if(!matrix)return null;
+ return pt.matrixTransform(matrix.inverse());
+};
+let pointerDrag=null;
+world.addEventListener("wheel",e=>{
+ e.preventDefault();
+ const p=svgCoords(e);
+ if(p)zoomMap(e.deltaY<0?1.35:1/1.35,p.x,p.y);
+},{passive:false});
+world.addEventListener("pointerdown",e=>{
+ if(e.button!==0||e.target.closest(".marker,.cluster-pin"))return;
+ const p=svgCoords(e);
+ if(!p)return;
+ pointerDrag={id:e.pointerId,p,originX:mapView.x,originY:mapView.y};
+ world.setPointerCapture(e.pointerId);world.classList.add("dragging");
+});
+world.addEventListener("pointermove",e=>{
+ if(!pointerDrag||pointerDrag.id!==e.pointerId)return;
+ const p=svgCoords(e);
+ if(!p)return;
+ mapView.x+=pointerDrag.p.x-p.x;
+ mapView.y+=pointerDrag.p.y-p.y;
+ clampView();renderMarkers();
+});
+for(const event of ["pointerup","pointercancel"]){
+ world.addEventListener(event,()=>{
+  pointerDrag=null;world.classList.remove("dragging");
+ });
+}
+$("zoomIn").onclick=()=>zoomMap(1.65);
+$("zoomOut").onclick=()=>zoomMap(1/1.65);
+$("zoomHome").onclick=()=>{mapView.zoom=1;mapView.x=0;mapView.y=0;
+ clampView();hideMapChoices();renderMarkers()};
+function hideMapChoices(){
+ $("mapchoices").style.display="none";$("mapchoices").replaceChildren();
+}
+function showMapChoices(entries){
+ const box=$("mapchoices");box.replaceChildren();
+ const heading=document.createElement("strong");
+ heading.textContent=entries.length+" case points at this location";
+ const close=document.createElement("button");
+ close.className="secondary-btn";close.textContent="Close";
+ close.style.float="right";close.onclick=hideMapChoices;
+ box.append(close,heading);
+ for(const e of entries){
+  const btn=document.createElement("button");btn.type="button";
+  btn.className="case-choice";
+  btn.textContent=(e.c.display_name||e.c.case_id)+
+    (e.coord.coordinate_basis==="country_representative_city_not_case_location"?
+      " · indicative country point":"");
+  btn.onclick=()=>{hideMapChoices();openCase(e.c)};
+  box.append(btn);
+ }
+ box.style.display="block";
+}
+const project=(lon,lat)=>[500+lon*1000/360,255-lat*510/180];
+function allMappedPoints(shown){
+ const entries=[];
+ for(const c of shown){
+  const locations=Array.isArray(c.coordinates)?c.coordinates:
+    (c.coordinates?[c.coordinates]:[]);
+  for(const coord of locations){
+   if(coord.latitude==null||coord.longitude==null)continue;
+   const lat=Number(coord.latitude),lon=Number(coord.longitude);
+   if(!Number.isFinite(lat)||!Number.isFinite(lon)||
+      Math.abs(lat)>90||Math.abs(lon)>180)continue;
+   const [x,y]=project(lon,lat);
+   entries.push({c,coord,x,y});
+  }
+ }
+ return entries;
+}
+function clustersFor(entries){
+ // Connected components of points nearer than 34 screen pixels.
+ // Exact co-located points remain grouped regardless of zoom level.
+ const parent=entries.map((_,i)=>i);
+ function root(i){while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i]}return i}
+ function unite(a,b){a=root(a);b=root(b);if(a!==b)parent[b]=a}
+ const scale=Math.max(1,world.getBoundingClientRect().width)/mapView.w;
+ for(let i=0;i<entries.length;i++)
+  for(let j=i+1;j<entries.length;j++)
+   if(Math.hypot(entries[i].x-entries[j].x,entries[i].y-entries[j].y)*scale<34)
+    unite(i,j);
+ const groups=new Map();
+ entries.forEach((e,i)=>{const k=root(i);if(!groups.has(k))groups.set(k,[]);
+  groups.get(k).push(e)});
+ return [...groups.values()];
+}
 function renderMarkers(){
  const g=$("markers");g.replaceChildren();
- const ns="http://www.w3.org/2000/svg";let n=0;
- for(const c of cases.filter(filtersPass)){
- const k=c.coordinates;if(!k||k.latitude==null||k.longitude==null)continue;
- const lat=Number(k.latitude),lon=Number(k.longitude);
- if(!Number.isFinite(lat)||!Number.isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)continue;
- const m=document.createElementNS(ns,"circle");m.setAttribute("cx",500+lon*1000/360);
- m.setAttribute("cy",255-lat*510/180);m.setAttribute("r",active?.case_id===c.case_id?"8":"5");
- m.setAttribute("class","marker"+(active?.case_id===c.case_id?" active":""));
- m.setAttribute("tabindex","0");m.setAttribute("aria-label",c.display_name);
- m.addEventListener("click",()=>openCase(c));m.addEventListener("keydown",e=>{if(e.key==="Enter")openCase(c)});
- g.appendChild(m);n++;
+ const points=allMappedPoints(cases.filter(filtersPass));
+ const radius=6/mapView.zoom;
+ let pins=0;
+ for(const entries of clustersFor(points)){
+  const x=entries.reduce((s,e)=>s+e.x,0)/entries.length;
+  const y=entries.reduce((s,e)=>s+e.y,0)/entries.length;
+  if(x<mapView.x-20/mapView.zoom||x>mapView.x+mapView.w+20/mapView.zoom||
+     y<mapView.y-20/mapView.zoom||y>mapView.y+mapView.h+20/mapView.zoom)continue;
+  const grouped=entries.length>1;
+  const circle=document.createElementNS(ns,"circle");
+  circle.setAttribute("cx",x);circle.setAttribute("cy",y);
+  circle.setAttribute("r",grouped?16/mapView.zoom:radius);
+  circle.setAttribute("class",grouped?"cluster-pin":
+    "marker"+(active?.case_id===entries[0].c.case_id?" active":""));
+  circle.setAttribute("tabindex","0");circle.setAttribute("role","button");
+  circle.setAttribute("aria-label",grouped?
+    entries.length+" case points; zoom or select cases":
+    entries[0].c.display_name||entries[0].c.case_id);
+  const activate=()=>{
+   if(!grouped){openCase(entries[0].c);return}
+   const same=entries.every(e=>
+     Math.abs(e.x-entries[0].x)<1e-8&&Math.abs(e.y-entries[0].y)<1e-8);
+   if(same||mapView.zoom>=MAX_ZOOM-0.01)showMapChoices(entries);
+   else zoomMap(2,x,y);
+  };
+  circle.addEventListener("click",e=>{e.stopPropagation();activate()});
+  circle.addEventListener("keydown",e=>{
+    if(e.key==="Enter"||e.key===" "){e.preventDefault();activate()}
+  });
+  g.append(circle);
+  if(grouped){
+   const label=document.createElementNS(ns,"text");
+   label.setAttribute("x",x);label.setAttribute("y",y);
+   label.setAttribute("dy",4/mapView.zoom);
+   label.setAttribute("font-size",12/mapView.zoom);
+   label.setAttribute("class","cluster-label");
+   label.textContent=String(entries.length);g.append(label);
+  }
+  pins++;
  }
- return n;
+ return {mappedCases:new Set(points.map(e=>e.c.case_id)).size,
+         points:points.length,pins};
 }
+
 function render(){
  const shown=cases.filter(filtersPass);
  $("list").replaceChildren();
@@ -167,8 +329,9 @@ function render(){
  const small=document.createElement("small");small.textContent=[c.title,c.cohort==="first10"?"First 10%":"Remaining 90%"].filter(Boolean).join(" · ");
  item.append(name,small);item.onclick=()=>openCase(c);$("list").append(item);
  }
- const n=renderMarkers();$("count").textContent=shown.length+" cases · "+n+" mapped";
+ const n=renderMarkers();$("count").textContent=shown.length+" cases · "+
+   n.mappedCases+" mapped · "+n.points+" points · "+n.pins+" visible pins";
  $("summary").textContent=cases.length+" case observations · "+payload.publications+" publications · "+payload.fields+" schema fields";
 }
-render();
+clampView();render();
 </script></body></html>
