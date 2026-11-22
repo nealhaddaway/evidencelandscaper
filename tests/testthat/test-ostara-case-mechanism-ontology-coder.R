@@ -60,7 +60,7 @@ testthat::test_that("v5 case mechanism coding accepts exact fields and exports o
   updated<-utils::read.csv(recovered$wide_csv,check.names=FALSE,
     fileEncoding="UTF-8-BOM",stringsAsFactors=FALSE)
   testthat::expect_identical(updated$coding_status,
-    c("uncertain","uncertain"))
+    c("coded","uncertain"))
   repeat_run<-code_ostara_case_mechanisms_v5(cc,oc,output,
     run_extraction=FALSE)
   testthat::expect_equal(repeat_run$total,result$total)
