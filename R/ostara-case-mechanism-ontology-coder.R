@@ -279,7 +279,7 @@ code_ostara_case_mechanisms_v5 <- function(
       assigned[[length(assigned)+1L]]<-data.frame(
         record_id=cases$record_id[[i]],case_id=cases$case_id[[i]],
         mechanism_id=m$mechanism_id,
-        category=ont$category[[j]],function_label=ont$function[[j]],
+        category=ont$category[[j]],function_label=ont[["function"]][[j]],
         mechanism=ont$mechanism[[j]],definition=ont$definition[[j]],
         supporting_quote=m$supporting_quote,rationale=m$rationale,
         coding_status=row$status,stringsAsFactors=FALSE)
