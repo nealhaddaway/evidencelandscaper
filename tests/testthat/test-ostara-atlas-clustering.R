@@ -17,3 +17,26 @@ testthat::test_that("full-text atlas offers zooming, clustering, and multi-locat
   testthat::expect_match(l,"for(code in codes)",fixed=TRUE)
   testthat::expect_match(l,"mapped=mapped_count>0L",fixed=TRUE)
 })
+
+
+testthat::test_that("retrospective atlas source and requested presentation are supported", {
+  root<-testthat::test_path("..","..")
+  generator<-file.path(root,"R","ostara-fulltext-atlas-prototype.R")
+  tpl<-file.path(root,"inst","atlas","ostara_fulltext_prototype.html")
+  code<-paste(readLines(generator,warn=FALSE,encoding="UTF-8"),
+              collapse="\n")
+  html<-paste(readLines(tpl,warn=FALSE,encoding="UTF-8"),
+              collapse="\n")
+  testthat::expect_silent(parse(file=generator))
+  for(term in c("cases_csv=NULL","numbered<-grep(",
+                'cases$cohort<-"retrospective"',
+                "files<-cases_csv","plotted_points=nrow(geo)"))
+    testthat::expect_match(code,term,fixed=TRUE)
+  for(term in c('showEvidence=false','id="geographySummary"',
+                'href="commodity_case_explorer.html"',
+                'width:min(760px,calc(100% - 24px))',
+                "22)\n    unite(i,j);"))
+    testthat::expect_match(html,term,fixed=TRUE)
+  testthat::expect_false(grepl('c.cohort==="first10"',html,fixed=TRUE))
+  testthat::expect_match(html,"const totalUnmapped=",fixed=TRUE)
+})
