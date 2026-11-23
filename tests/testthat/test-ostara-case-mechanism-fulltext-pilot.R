@@ -35,6 +35,8 @@ test_that("case-mechanism pilot freezes ten case-positive publications without A
   x<-run_ostara_case_mechanism_fulltext_pilot(
     cases_csv,ontology_csv,manifest_csv,out,run_extraction=FALSE)
   expect_equal(x$completed,0L)
+  expect_true(file.exists(x$human_review))
+  expect_equal(nrow(utils::read.csv(x$human_review)),0L)
   selection<-utils::read.csv(x$selection,stringsAsFactors=FALSE)
   expect_equal(nrow(selection),10L)
   expect_equal(selection$record_id[1:5],ids[1:5])
