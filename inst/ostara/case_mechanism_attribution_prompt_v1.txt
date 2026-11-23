@@ -1,0 +1,52 @@
+OSTARA — CASE-LEVEL FULL-TEXT MECHANISM ATTRIBUTION PILOT v1
+
+TASK
+For each PRE-REGISTERED case supplied for one publication, independently assess ALL 26 approved OSTARA v5 ontology mechanisms using the COMPLETE supplied full text. Return one JSON object only. This is not a publication-level mechanism inventory or case detection. Do not create, merge or rename cases.
+
+DEFINITION
+A collective action mechanism is a specific system, process, instrument or intervention that operationalises collective action and aims to align actors' actions towards a common goal. Code the operational HOW, not merely a sustainability objective, institution, impact, certification name, sector or generic collaboration.
+
+INPUT
+record_id, cases (exact case_id, case_name and reference context), approved_ontology (26 mechanism_id, category, function, mechanism, definition entries), and fulltext (anchored by [PAGE N] or other supplied exact source markers). The case register establishes identity only; verify every positive attribution independently against the full text. Do not use case summaries as supporting source quotations.
+
+REQUIRED OUTPUT CONTRACT
+{
+ "record_id": "EXACT INPUT RECORD ID",
+ "case_assessments": [
+   {
+    "case_id": "EXACT INPUT CASE ID",
+    "mechanism_assessments": [
+      {
+       "mechanism_id": "EXACT APPROVED CODE",
+       "attribution_status": "implemented|proposed_only|mentioned_only|unclear|not_identified",
+       "source_quote": "",
+       "source_anchor": "",
+       "attribution_reason": "",
+       "shared_across_cases": false
+      }
+    ]
+   }
+ ],
+ "unattributed_publication_mechanisms": [],
+ "ontology_gaps": []
+}
+Include EXACTLY ONE case_assessments entry for EACH supplied case, and EXACTLY ONE mechanism_assessments entry for EACH of the 26 approved mechanism IDs for EACH case. Use arrays [] (not null) for the final two fields. Do not include extra or invented case IDs or mechanism IDs.
+
+STATUS RULES
+implemented: the specific case actually operates or has operated the defined mechanism (including historical, failed or discontinued operation).
+proposed_only: the mechanism is explicitly proposed or planned for the specific case, but not implemented.
+mentioned_only: the mechanism is substantively discussed in relation to the case, without evidence it is operating or planned for that case.
+unclear: evidence plausibly concerns this case and mechanism, but the case linkage or operating status is ambiguous.
+not_identified: the publication provides no case-specific support for the mechanism; this is not proof of real-world absence.
+
+CASE ATTRIBUTION
+For each positive or unclear classification explain HOW the source evidence both identifies the operational mechanism AND links it to the specific case. A mechanism appearing elsewhere in the publication must NOT be transferred to every case. A parent programme, country, network or cooperative's mechanism must NOT be assumed to apply to all participants. Cross-case attribution is permitted only with explicit evidence that each specified case participates. shared_across_cases must only be true when the same defined mechanism is evidenced for at least two supplied cases. Do not infer mechanism effectiveness.
+
+EVIDENCE
+For every attribution other than not_identified, provide a SHORT VERBATIM substring of fulltext in source_quote and its EXACT source_anchor (such as [PAGE 3]); give the case-specific explanation in attribution_reason. The quote MUST occur inside the text segment of that anchor. One quote must substantiate both mechanism and case linkage. If no single supported quote can do this, classify as unclear or not_identified instead of fabricating a linkage. For not_identified, return empty quote and anchor and a short explanation. Do not invent source text or anchors.
+
+UNATTRIBUTED AND ONTOLOGY GAPS
+If a mechanism is supported at publication level but cannot be assigned to a supplied case, note it in unattributed_publication_mechanisms with its mechanism_id, reason and evidence, without altering case-level decisions. If a genuinely distinct operational mechanism lacks an ontology fit, add a narrative ontology_gaps proposal with case_id, proposed_label, reason and source quote/anchor. Do not invent an approved ID or confuse a new application of an old mechanism with novelty.
+
+PRE-SUBMISSION CHECK
+Case IDs match input exactly; each case covers all 26 IDs exactly once; status is permitted; all positive/unclear entries have verbatim evidence at the given anchor and a substantive case linkage; not_identified has no quote; JSON is valid. Output JSON only.
