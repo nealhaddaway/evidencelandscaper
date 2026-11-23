@@ -50,13 +50,11 @@ button{cursor:pointer}.secondary-btn{background:#fff;border:1px solid var(--edge
 .anchor{font-size:11px;color:var(--muted);margin-top:3px}.missing{color:var(--muted);font-style:italic}
 details.group{border-bottom:1px solid var(--edge);border-left:5px solid transparent;padding-left:10px;margin:6px 0;border-radius:5px}
 details.group>summary{padding:14px 9px;font-weight:700;cursor:pointer;list-style-position:inside}
-details.group-context{border-left-color:#EAD1DC;background:#EAD1DC38}
-details.group-arrangements{border-left-color:#C9DAF8;background:#C9DAF838}
-details.group-outcomes{border-left-color:#D9EAD3;background:#D9EAD338}
+details.group-description{border-left-color:#EAD1DC;background:#EAD1DC38}
+details.group-activities{border-left-color:#C9DAF8;background:#C9DAF838}
+details.group-objectives{border-left-color:#D9EAD3;background:#D9EAD338}
 details.group-enablers{border-left-color:#D9D2E9;background:#D9D2E938}
 details.group-barriers{border-left-color:#E6B8AF;background:#E6B8AF38}
-details.group-provenance{border-left-color:#AAB6B0;background:#F5F7F4}
-details.group-other{border-left-color:#DCE5DD}
 .smalltext{font-size:12px;color:var(--muted)}a{color:#995037}
 #advanced{margin:12px 0}#advanced summary{cursor:pointer;font-weight:650}#advanced label{margin-top:8px}
 @media(max-width:850px){header{height:auto}main{display:flex;flex-direction:column-reverse;height:auto}aside{max-height:42vh}#maparea{height:56vh;min-height:350px}#detail{width:calc(100% - 16px);left:8px;right:8px;top:8px;bottom:8px}}
@@ -122,36 +120,25 @@ let active=null,showEvidence=false,showMissing=false;
 // Section boundaries follow the row-fill colours in "Case data schema (1).xlsx",
 // sheet "Academic lit case analysis inst" (retrospective case questions 01–40).
 // The 40th source-provenance question has no fill in the workbook.
-const groupOrder=[
- "Case and context",
- "Collective-action arrangements",
- "Objectives and outcomes",
- "Enablers",
- "Barriers",
- "Source provenance",
- "Other extracted fields"
-];
+// These field numbers are the corresponding Excel schema row-colour groups.
+const groupOrder=["Description","Activities","Objectives and Impact","Enablers","Barriers"];
 const groupSlug={
- "Case and context":"context",
- "Collective-action arrangements":"arrangements",
- "Objectives and outcomes":"outcomes",
+ "Description":"description",
+ "Activities":"activities",
+ "Objectives and Impact":"objectives",
  "Enablers":"enablers",
- "Barriers":"barriers",
- "Source provenance":"provenance",
- "Other extracted fields":"other"
+ "Barriers":"barriers"
 };
-const groupFor=q=>{
- const m=String(q||"").match(/^\\s*(\\d{1,2})\\.\\s/);
- if(m){
-  const n=Number(m[1]);
-  if(n>=1&&n<=11)return "Case and context";
-  if(n>=12&&n<=13)return "Collective-action arrangements";
-  if(n>=14&&n<=21)return "Objectives and outcomes";
-  if(n>=22&&n<=30)return "Enablers";
-  if(n>=31&&n<=39)return "Barriers";
-  if(n===40)return "Source provenance";
- }
- return "Other extracted fields";
+const groupFor=f=>{
+ // Prefer the explicit number exported by the R atlas generator.
+ // Numeric fallback supports atlas data generated before the update.
+ const n=Number(f.field_number??String(f.question||"").split(".")[0]);
+ if(n>=1&&n<=11)return "Description";
+ if(n>=12&&n<=13)return "Activities";
+ if(n>=14&&n<=21)return "Objectives and Impact";
+ if(n>=22&&n<=30)return "Enablers";
+ if(n>=31&&n<=39)return "Barriers";
+ return null;
 };
 function openCase(c){
  active=c;showEvidence=false;showMissing=false;
@@ -165,7 +152,10 @@ function drawDetail(){
  if(!active)return;
  const c=active;
  const groups=new Map(groupOrder.map(g=>[g,[]]));
- for(const f of c.fields)groups.get(groupFor(f.question)).push(f);
+ for(const f of c.fields){
+  const group=groupFor(f);
+  if(group)groups.get(group).push(f);
+ }
  let html="";
  const doi=safeurl(c.doi_url);
  if(c.title||doi){
@@ -180,7 +170,7 @@ function drawDetail(){
  const visible=fs.filter(f=>showMissing||f.status==="reported"||f.status==="explicitly_none");
  if(!visible.length)continue;
  html+='<details class="group group-'+groupSlug[name]+'" '+
-  (name==="Case and context"?"open":"")+'><summary>'+esc(name)+' · '+visible.length+' fields</summary>';
+  (name==="Description"?"open":"")+'><summary>'+esc(name)+' · '+visible.length+' fields</summary>';
  for(const f of visible){
  const val=f.status==="not_reported"?"Not reported":f.status==="explicitly_none"?"Explicitly none":f.display_value||f.value||"Reported (no displayed value)";
  html+='<div class="field"><div class="question">'+esc(f.question)+'</div><div class="answer'+(f.status==="not_reported"?" missing":"")+'">'+esc(val)+'</div>';
