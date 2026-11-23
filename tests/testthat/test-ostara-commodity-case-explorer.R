@@ -122,3 +122,19 @@ test_that("retrospective commodity explorer merges palm and uses atlas case grou
   expect_equal(vapply(payload$cases,function(c)c$name,character(1)),
                c("Palm site A","Palm site B"))
 })
+
+
+test_that("commodity explorer colours case pills by known facet on cards and popups", {
+  tpl<-testthat::test_path("..","..","inst","ostara",
+                          "commodity_explorer_template.html")
+  html<-paste(readLines(tpl,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  for(facet in c("commodity","country","stage","status","level","interest"))
+    expect_true(grepl(paste0(".tag-",facet,"{background:"),html,fixed=TRUE))
+  expect_true(grepl('tag.className="tag tag-"+facet;',html,fixed=TRUE))
+  expect_true(grepl("addTags(pills,c);",html,fixed=TRUE))
+  expect_true(grepl('addTags($("detail-tags"),c);',html,fixed=TRUE))
+  expect_true(grepl('value,facet:"commodity"',html,fixed=TRUE))
+  expect_true(grepl('value,facet:"country"',html,fixed=TRUE))
+  expect_true(grepl('value,facet:"stage"',html,fixed=TRUE))
+  expect_true(grepl('value,facet:"status"',html,fixed=TRUE))
+})
