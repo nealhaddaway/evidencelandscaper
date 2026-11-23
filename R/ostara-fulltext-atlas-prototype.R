@@ -49,10 +49,21 @@ export_ostara_fulltext_atlas_prototype <- function(
     for(f in numbered) {
       n<-as.integer(sub("^([0-9]{2})\\..*$","\\1",f))
       dest<-paste0("field_",sprintf("%03d",n)," :: ",f)
-      ev<-paste0(f," [evidence]")
-      status<-paste0(f," [reporting status]")
-      if(!all(c(ev,status)%in%names(raw)))
-        stop("Missing corresponding evidence or status for ",f)
+      # The source CSV contains trailing spaces in some question titles
+      # (e.g., "02. What is the status? "). Match evidence/status on the
+      # trimmed question stem without altering original source values.
+      matched_column<-function(suffix) {
+        nms<-names(raw)
+        ix<-which(endsWith(nms,paste0(" [",suffix,"]"))&
+          trimws(sub(" \\[(evidence|reporting status)\\]$","",nms))==
+            trimws(f))
+        if(length(ix)!=1L)
+          stop("Expected exactly one ",suffix," column for ",f,
+               "; found ",length(ix),".")
+        nms[[ix]]
+      }
+      ev<-matched_column("evidence")
+      status<-matched_column("reporting status")
       cases[[dest]]<-raw[[f]]
       cases[[paste0(dest," [evidence]")]]<-raw[[ev]]
       cases[[paste0(dest," [reporting status]")]]<-raw[[status]]
