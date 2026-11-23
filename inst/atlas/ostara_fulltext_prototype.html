@@ -127,9 +127,15 @@ function drawDetail(){
  const c=active;
  const groups=new Map(groupOrder.map(g=>[g,[]]));
  for(const f of c.fields)groups.get(groupFor(f.question)).push(f);
- let html='<p class="smalltext"><b>Publication:</b> '+esc(c.title||"Not available");
- const doi=safeurl(c.doi_url);if(doi)html+=' · <a href="'+esc(doi)+'" target="_blank" rel="noopener noreferrer">DOI</a>';
- html+='</p><p class="smalltext"><b>Case ID:</b> '+esc(c.case_id)+'<br><b>Record ID:</b> '+esc(c.record_id)+'</p>';
+ let html="";
+ const doi=safeurl(c.doi_url);
+ if(c.title||doi){
+  html+='<p class="smalltext">';
+  if(c.title)html+='<b>Publication:</b> '+esc(c.title);
+  if(doi)html+=(c.title?" · ":"")+'<a href="'+esc(doi)+'" target="_blank" rel="noopener noreferrer">DOI</a>';
+  html+='</p>';
+ }
+ html+='<p class="smalltext"><b>Case ID:</b> '+esc(c.case_id)+'<br><b>Record ID:</b> '+esc(c.record_id)+'</p>';
  if(c.assessment_reason)html+='<p class="smalltext"><b>Case assessment:</b> '+esc(c.assessment_reason)+'</p>';
  for(const [name,fs] of groups){
  const visible=fs.filter(f=>showMissing||f.status==="reported"||f.status==="explicitly_none");
@@ -259,7 +265,7 @@ function allMappedPoints(shown){
  return entries;
 }
 function clustersFor(entries){
- // Connected components of points nearer than 34 screen pixels.
+ // Connected components of points nearer than 22 screen pixels.
  // Exact co-located points remain grouped regardless of zoom level.
  const parent=entries.map((_,i)=>i);
  function root(i){while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i]}return i}
