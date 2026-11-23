@@ -39,8 +39,10 @@ test_that("case-mechanism pilot freezes ten case-positive publications without A
   expect_equal(nrow(utils::read.csv(x$human_review)),0L)
   selection<-utils::read.csv(x$selection,stringsAsFactors=FALSE)
   expect_equal(nrow(selection),10L)
-  expect_equal(selection$record_id[1:5],ids[1:5])
-  expect_true(all(selection$case_count[1:5]==2L))
+  expect_setequal(selection$record_id,intersect(selection$record_id,ids))
+  expect_equal(length(unique(selection$record_id)),10L)
+  expect_equal(selection$case_count,
+    as.integer(table(rows$record_id)[selection$record_id]))
   expect_true(file.exists(file.path(out,"manifest.json")))
   expect_true(file.exists(file.path(out,"prompt.txt")))
   expect_true(file.exists(file.path(out,"ontology.csv")))
