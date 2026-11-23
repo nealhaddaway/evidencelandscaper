@@ -187,6 +187,7 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
         anchor<-sc(a$source_anchor)
         reason<-sc(a$attribution_reason)
         if(!nzchar(trimws(reason)))stop("Attribution reason is missing.")
+        evidence_issue<-""
         if(status=="not_identified") {
           if(nzchar(quote)||nzchar(anchor))
             stop("Unidentified mechanisms must not carry source evidence.")
@@ -197,14 +198,16 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
                           fulltext,perl=TRUE)[[1L]]
           anchors<-regmatches(fulltext,list(marker))[[1L]]
           where<-which(anchors==anchor)
-          if(length(where)!=1L)
-            stop("Source anchor not uniquely present in full text.")
-          first<-marker[[where]]+nchar(anchor)
-          last<-if(where<length(marker))marker[[where+1L]]-1L
-                else nchar(fulltext)
-          segment<-substr(fulltext,first,last)
-          if(!grepl(quote,segment,fixed=TRUE))
-            stop("Source quote is not verbatim within the stated anchor.")
+          if(length(where)!=1L) {
+            evidence_issue<-"anchor_not_uniquely_present_in_fulltext"
+          } else {
+            first<-marker[[where]]+nchar(anchor)
+            last<-if(where<length(marker))marker[[where+1L]]-1L
+                  else nchar(fulltext)
+            segment<-substr(fulltext,first,last)
+            if(!grepl(quote,segment,fixed=TRUE))
+              evidence_issue<-"quote_not_verbatim_at_anchor"
+          }
         }
         shared<-a$shared_across_cases
         if(!is.logical(shared)||length(shared)!=1L||is.na(shared))
@@ -215,7 +218,7 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
           attribution_status=status,
           source_quote=quote,source_anchor=anchor,
           attribution_reason=reason,shared_across_cases=shared,
-          stringsAsFactors=FALSE)
+          evidence_issue=evidence_issue,stringsAsFactors=FALSE)
       }
     }
     # A shared flag is valid only when at least two distinct registered
@@ -316,7 +319,8 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
     record_id=character(),case_id=character(),mechanism_id=character(),
     attribution_status=character(),source_quote=character(),
     source_anchor=character(),attribution_reason=character(),
-    shared_across_cases=logical(),stringsAsFactors=FALSE)
+    shared_across_cases=logical(),evidence_issue=character(),
+    stringsAsFactors=FALSE)
   long_csv<-file.path(output_dir,"case_mechanism_attributions.csv")
   utils::write.csv(out,long_csv,row.names=FALSE,na="")
   summary<-data.frame(record_id=ids,case_count=selection$case_count,
@@ -325,7 +329,8 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
     stringsAsFactors=FALSE)
   summary_csv<-file.path(output_dir,"pilot_status.csv")
   utils::write.csv(summary,summary_csv,row.names=FALSE,na="")
-  review<-out[out$attribution_status!="not_identified",,drop=FALSE]
+  review<-out[out$attribution_status!="not_identified"|
+    nzchar(out$evidence_issue),,drop=FALSE]
   review$human_decision<-rep("",nrow(review))
   review$human_notes<-rep("",nrow(review))
   review_file<-file.path(output_dir,"human_review_queue.csv")
