@@ -90,3 +90,24 @@ testthat::test_that("case detail accordion follows Excel row colour groups", {
     testthat::expect_match(html,term,fixed=TRUE)
   testthat::expect_false(grepl('name==="Overview and geography"',html,fixed=TRUE))
 })
+
+
+testthat::test_that("multi-location atlas keeps all uniquely resolved sites and colours them", {
+  root<-testthat::test_path("..","..")
+  tpl<-file.path(root,"inst","atlas","ostara_fulltext_prototype.html")
+  geo<-file.path(root,"R","ostara-fulltext-atlas-geocoding.R")
+  testthat::expect_silent(parse(file=geo))
+  html<-paste(readLines(tpl,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  geocode<-paste(readLines(geo,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  for(term in c(".marker.multi-location{fill:#2581c4}",
+                "case-choice.multi-location{background:#e0f2ff",
+                "entries.push({c,coord,x,y,multiLocation:locations.length>1})",
+                'e.multiLocation?" multi-location":""',
+                "allMulti=entries.every(e=>e.multiLocation)"))
+    testthat::expect_match(html,term,fixed=TRUE)
+  for(term in c("for(nm in localities)","for(hit in locality_hits)",
+                "for(code in setdiff(codes,country_located))",
+                "unresolved_localities=paste(unresolved,collapse=",
+                "mapped_point_count=mapped_count"))
+    testthat::expect_match(geocode,term,fixed=TRUE)
+})
