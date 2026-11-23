@@ -36,7 +36,7 @@ main{max-width:1320px;padding:26px 22px 80px;margin:auto}
 .empty{grid-column:1/-1;padding:28px;border:1px dashed #bdcfc0;border-radius:9px;color:var(--muted)}
 #overlay{position:fixed;inset:0;background:#1c2926aa;z-index:20;display:none;justify-content:flex-end}
 #overlay.open{display:flex}
-.panel{width:min(720px,100vw);height:100%;background:white;display:flex;flex-direction:column;box-shadow:-12px 0 35px #1e272333}
+.panel{width:min(900px,100vw);height:100%;background:white;display:flex;flex-direction:column;box-shadow:-12px 0 35px #1e272333}
 .panel-head{padding:22px 26px 14px;border-bottom:1px solid var(--line);flex-shrink:0}
 .panel-head h2{font:28px Georgia,serif;margin:7px 0}.panel-head .buttons{display:flex;justify-content:space-between;gap:9px;align-items:center}
 .panel-scroll{overflow-y:auto;padding:17px 27px 35px}
@@ -44,7 +44,15 @@ main{max-width:1320px;padding:26px 22px 80px;margin:auto}
 .field-name{font-size:12px;font-weight:720}.field-value{white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0;font-size:13px}
 .evidence{border-left:3px solid #bdcbbd;padding:9px 11px;background:#f5f7f3;white-space:pre-wrap;overflow-wrap:anywhere;color:#516358;font-size:12px}
 .status{font-size:11px;color:var(--muted)}
-details.group{border-bottom:1px solid var(--line)}details.group summary{font-weight:720;padding:15px 0;cursor:pointer;font-size:14px}
+details.group{border-bottom:1px solid var(--line);border-left:5px solid transparent;padding-left:10px;margin:7px 0;border-radius:5px}
+details.group summary{font-weight:720;padding:15px 9px;cursor:pointer;font-size:14px}
+details.group-description{border-left-color:#EAD1DC;background:#EAD1DC38}
+details.group-activities{border-left-color:#C9DAF8;background:#C9DAF838}
+details.group-objectives{border-left-color:#D9EAD3;background:#D9EAD338}
+details.group-enablers{border-left-color:#D9D2E9;background:#D9D2E938}
+details.group-barriers{border-left-color:#E6B8AF;background:#E6B8AF38}
+.field-value ul{margin:5px 0 7px;padding-left:22px;white-space:normal}
+.field-value li{margin:3px 0;white-space:pre-wrap;overflow-wrap:anywhere}
 blockquote{margin:0}.source{font-size:12px;color:var(--muted);line-height:1.65}
 #illustration-note{font-size:11px;color:var(--muted);margin-top:-18px;margin-bottom:28px}
 @media(max-width:1050px){.filters{grid-template-columns:repeat(3,1fr)}}
@@ -73,7 +81,7 @@ blockquote{margin:0}.source{font-size:12px;color:var(--muted);line-height:1.65}
 <div id="overlay" role="dialog" aria-modal="true" aria-label="Full extracted case">
 <div class="panel"><div class="panel-head"><div class="buttons"><span class="eyebrow">FULL CASE RECORD / SOURCE-ANCHORED EXTRACTION</span><button class="secondary" id="close">Close ×</button></div>
 <h2 id="detail-title"></h2><div class="tags" id="detail-tags"></div>
-<div class="actions"><button class="secondary" id="toggle-evidence">Hide all evidence</button><button class="secondary" id="toggle-missing">Show unreported fields</button></div></div>
+<div class="actions"><button class="secondary" id="toggle-evidence">Show all evidence</button><button class="secondary" id="toggle-missing">Show unreported fields</button></div></div>
 <div id="detail-body" class="panel-scroll"></div></div></div>
 <script id="data" type="application/json">__DATA__</script>
 <script>
@@ -85,7 +93,7 @@ const library=Array.isArray(data.commodities)?data.commodities:(data.commodities
 const $=id=>document.getElementById(id);
 const escapeHtml=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const selected=new Set();const filterIds=["stage","country","status","level","interest"];
-let active=null,showEvidence=true,showMissing=false,lastFocus=null;
+let active=null,showEvidence=false,showMissing=false,lastFocus=null;
 if(data.atlas_url){const el=$("atlas-link");el.href=data.atlas_url;el.style.display="inline";}
 function uniq(a){return [...new Set(a.filter(Boolean))].sort((a,b)=>a.localeCompare(b))}
 function fieldvals(c,k){const v=c.facets?.[k];return Array.isArray(v)?v:(v?[v]:[])}
@@ -150,38 +158,61 @@ function render(){
   go.onclick=()=>openCase(c);bottom.append(source,go);box.append(title,pills,summary,bottom);root.append(box);
  }
 }
-const groupNames=["Overview and geography","Actors and participation","Organisation and governance","Activities and supply chain","Resources and outcomes","Enablers, barriers and lessons","Other extracted fields"];
-function groupFor(q){
- if(/(country|countries|geograph|where did|location|crop|commodit|production system|status|scale|level|case name|case description)/i.test(q))return groupNames[0];
- if(/(actor|participant|stakeholder|membership|shared interest)/i.test(q))return groupNames[1];
- if(/(govern|decision|organis|coordinat|institution|leadership)/i.test(q))return groupNames[2];
- if(/(activit|supply.chain|value.chain|implementation|transport|processing|market)/i.test(q))return groupNames[3];
- if(/(resource|incentive|funding|finance|benefit|outcome|impact|cost)/i.test(q))return groupNames[4];
- if(/(barrier|enabler|challenge|lesson|constraint|opportunit)/i.test(q))return groupNames[5];
- return groupNames[6];
+const groupNames=["Description","Activities","Objectives and Impact","Enablers","Barriers"];
+const groupSlug={
+ "Description":"description",
+ "Activities":"activities",
+ "Objectives and Impact":"objectives",
+ "Enablers":"enablers",
+ "Barriers":"barriers"
+};
+function groupFor(f){
+ const n=Number(f.field_number??String(f.question||"").split(".")[0]);
+ if(n>=1&&n<=11)return "Description";
+ if(n>=12&&n<=13)return "Activities";
+ if(n>=14&&n<=21)return "Objectives and Impact";
+ if(n>=22&&n<=30)return "Enablers";
+ if(n>=31&&n<=39)return "Barriers";
+ return null;
+}
+function formatFieldAnswer(value){
+ const lines=String(value??"").replace(/\r\n?/g,"\n").split("\n")
+  .map(s=>s.trim()).filter(Boolean)
+  .map(s=>s.replace(/^(?:[\u2022\u2023\u25E6\u2043\u2219*-]\s+|\(?\d{1,3}[.)]\s+)/u,"").trim())
+  .filter(Boolean)
+  .map(s=>s.replace(/^([^A-Za-zÀ-ÖØ-öø-ÿ]*)([a-zà-öø-ÿ])/u,
+    (_,prefix,letter)=>prefix+letter.toUpperCase()));
+ if(!lines.length)return "";
+ if(lines.length===1)return escapeHtml(lines[0]);
+ return "<ul>"+lines.map(line=>"<li>"+escapeHtml(line)+"</li>").join("")+"</ul>";
 }
 function openCase(c){
- active=c;lastFocus=document.activeElement;showEvidence=true;showMissing=false;
- $("detail-title").textContent=c.name;$("toggle-evidence").textContent="Hide all evidence";$("toggle-missing").textContent="Show unreported fields";
+ active=c;lastFocus=document.activeElement;showEvidence=false;showMissing=false;
+ $("detail-title").textContent=c.name;$("toggle-evidence").textContent="Show all evidence";$("toggle-missing").textContent="Show unreported fields";
  $("detail-tags").replaceChildren();
  for(const x of tags(c)){const tag=document.createElement("span");tag.className="tag";tag.textContent=x;$("detail-tags").append(tag);}
  drawDetail();$("overlay").classList.add("open");document.body.style.overflow="hidden";$("close").focus();
 }
 function drawDetail(){
  if(!active)return;const c=active,body=$("detail-body");
- let html='<p class="source"><b>Publication:</b> '+escapeHtml(c.title);
- if(c.doi_url&&c.doi_url.startsWith("https://doi.org/"))html+=' · <a href="'+escapeHtml(c.doi_url)+'" target="_blank" rel="noopener noreferrer">DOI</a>';
- html+='<br><b>Case ID:</b> '+escapeHtml(c.case_id)+' · <b>Record ID:</b> '+escapeHtml(c.record_id)+'</p>';
+ let html='<p class="source">';
+ if(c.title)html+='<b>Publication:</b> '+escapeHtml(c.title);
+ if(c.doi_url&&c.doi_url.startsWith("https://doi.org/"))html+=(c.title?' · ':'')+'<a href="'+escapeHtml(c.doi_url)+'" target="_blank" rel="noopener noreferrer">DOI</a>';
+ if(c.title||c.doi_url)html+='<br>';
+ html+='<b>Case ID:</b> '+escapeHtml(c.case_id)+' · <b>Record ID:</b> '+escapeHtml(c.record_id)+'</p>';
  if(c.assessment_reason)html+='<p class="source"><b>Case assessment:</b> '+escapeHtml(c.assessment_reason)+'</p>';
  const grouped=new Map(groupNames.map(g=>[g,[]]));
- for(const f of c.fields)grouped.get(groupFor(f.question)).push(f);
+ for(const f of c.fields){
+  const group=groupFor(f);
+  if(group)grouped.get(group).push(f);
+ }
  for(const [name,fields] of grouped){
   const visible=fields.filter(f=>showMissing||f.status!=="not_reported");
   if(!visible.length)continue;
-  html+='<details class="group" '+(name===groupNames[0]?'open':'')+'><summary>'+escapeHtml(name)+' ('+visible.length+')</summary>';
+  html+='<details class="group group-'+groupSlug[name]+'" '+(name===groupNames[0]?'open':'')+'><summary>'+escapeHtml(name)+' ('+visible.length+')</summary>';
   for(const f of visible){
     const val=f.status==="not_reported"?"Not reported":f.status==="explicitly_none"?"Explicitly none":f.display_value||f.value||"No value provided";
-    html+='<div class="field"><div class="field-name">'+escapeHtml(f.question)+'</div><div class="field-value">'+escapeHtml(val)+'</div>';
+    html+='<div class="field"><div class="field-name">'+escapeHtml(f.question)+'</div><div class="field-value">'+formatFieldAnswer(val)+'</div>';
     if(showEvidence&&f.evidence)html+='<blockquote class="evidence">'+escapeHtml(f.evidence)+'</blockquote>';
     if(f.status!=="reported")html+='<div class="status">Reporting status: '+escapeHtml(f.status)+'</div>';
     html+='</div>';
@@ -189,7 +220,7 @@ function drawDetail(){
   html+='</details>';
  }
  if(c.boundary_uncertainty)html+='<p class="source"><b>Case boundary uncertainty:</b> '+escapeHtml(c.boundary_uncertainty)+'</p>';
- if(c.cohort)html+='<p class="source"><b>Extraction cohort:</b> '+escapeHtml(c.cohort)+'</p>';
+
  body.innerHTML=html;
 }
 function closeDetail(){$("overlay").classList.remove("open");document.body.style.overflow="";active=null;lastFocus?.focus();}
