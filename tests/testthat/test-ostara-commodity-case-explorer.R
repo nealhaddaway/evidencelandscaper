@@ -73,3 +73,43 @@ test_that("Commodity explorer keeps all cases and evidence while merging synonym
     map_path=root,client_export_dir=client)
   expect_identical(html2,html)
 })
+
+
+test_that("retrospective commodity explorer merges palm and uses atlas case groups", {
+  skip_if_not_installed("countrycode")
+  skip_if_not_installed("jsonlite")
+  skip_if_not_installed("digest")
+  root<-tempfile("ostara-retrospective-commodity-")
+  dir.create(root)
+  csv<-file.path(root,"all_case_data - Retrospective.csv")
+  x<-data.frame(record_id=c("work-a","work-b"),
+    case_id=c("work-a::case_001","work-b::case_001"),
+    assessment_reason=c("eligible","eligible"),check.names=FALSE)
+  x[["01. Case name"]]<-c("Palm site A","Palm site B")
+  x[["02. What is the status? "]]<-c("active","active")
+  x[["06. Which commodity/commodities is the collective action addressing?"]]<-
+    c("palm","palm oil")
+  x[["40. Was this source/publication written, funded or commissioned by an organisation taking part in the case?"]]<-c("yes","no")
+  base<-grep("^[0-9]{2}\\. ",names(x),value=TRUE)
+  for(nm in base) {
+    x[[paste0(nm," [evidence]")]]<-"[PAGE 1]: source statement"
+    x[[paste0(nm," [reporting status]")]]<-"reported"
+  }
+  utils::write.csv(x,csv,row.names=FALSE,na="")
+  html<-export_ostara_commodity_case_explorer(map_path=root,cases_csv=csv,
+    atlas_url="evidence_atlas.html")
+  expect_true(file.exists(html))
+  content<-paste(readLines(html,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  inv<-utils::read.csv(file.path(dirname(html),"commodity_inventory.csv"))
+  expect_equal(inv$commodity,"Palm oil")
+  expect_equal(inv$cases,2L)
+  expect_false(grepl('"Palm"',content,fixed=TRUE))
+  expect_false(grepl("40. Was this source",content,fixed=TRUE))
+  expect_false(grepl("Extraction cohort:",content,fixed=TRUE))
+  expect_true(grepl('"Description","Activities","Objectives and Impact","Enablers","Barriers"',content,fixed=TRUE))
+  expect_true(grepl('showEvidence=false',content,fixed=TRUE))
+  expect_true(grepl('width:min(900px,100vw)',content,fixed=TRUE))
+  expect_true(grepl('formatFieldAnswer(val)',content,fixed=TRUE))
+  expect_true(grepl('"field_number":6',content,fixed=TRUE))
+  expect_true(grepl('evidence_atlas.html',content,fixed=TRUE))
+})
