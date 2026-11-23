@@ -88,7 +88,7 @@ test_that("retrospective commodity explorer merges palm and uses atlas case grou
   x[["01. Case name"]]<-c("Palm site A","Palm site B")
   x[["02. What is the status? "]]<-c("active","active")
   x[["06. Which commodity/commodities is the collective action addressing?"]]<-
-    c("palm","palm oil")
+    c("palm; sugarcane","palm oil; sugar")
   x[["40. Was this source/publication written, funded or commissioned by an organisation taking part in the case?"]]<-c("yes","no")
   base<-grep("^[0-9]{2}\\. ",names(x),value=TRUE)
   for(nm in base) {
@@ -101,8 +101,11 @@ test_that("retrospective commodity explorer merges palm and uses atlas case grou
   expect_true(file.exists(html))
   content<-paste(readLines(html,warn=FALSE,encoding="UTF-8"),collapse="\n")
   inv<-utils::read.csv(file.path(dirname(html),"commodity_inventory.csv"))
-  expect_equal(inv$commodity,"Palm oil")
-  expect_equal(inv$cases,2L)
+  expect_equal(inv$commodity,c("Palm oil","Sugar"))
+  expect_equal(inv$cases,c(2L,2L))
+  expect_false("Sugarcane"%in%inv$commodity)
+  expect_true(grepl("Saccharum",content,fixed=TRUE))
+  expect_false(grepl("Adolphe Millot",content,fixed=TRUE))
   expect_false(grepl('"Palm"',content,fixed=TRUE))
   expect_false(grepl("40. Was this source",content,fixed=TRUE))
   expect_false(grepl("Extraction cohort:",content,fixed=TRUE))
