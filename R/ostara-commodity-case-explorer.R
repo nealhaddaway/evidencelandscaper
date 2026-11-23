@@ -219,8 +219,15 @@ export_ostara_commodity_case_explorer <- function(
           grepl(pattern,f$question,ignore.case=TRUE,perl=TRUE),logical(1)))
       if(length(j))fields[[j[[1L]]]]$display_value else ""
     }
-    name<-find_reported(
-      "^(case name|name of (the )?(case|initiative|collective|organisation))\\b")
+    # The retrospective source calls this "01. Case name".  Match by
+    # schema field number rather than an anchored question-name regex.
+    case_name_fields<-which(vapply(fields,function(f)
+      identical(f$field_number,1L)&&
+      identical(f$status,"reported")&&nzchar(trimws(f$value)),
+      logical(1)))
+    name<-if(length(case_name_fields))
+      trimws(fields[[case_name_fields[[1L]]]]$value) else
+      find_reported("^(?:[0-9]{1,2}\\.\\s*)?(case name|name of (the )?(case|initiative|collective|organisation))\\b")
     if(!nzchar(name))name<-paste0("Case ",scalar(ca$case_id))
     description<-find_reported(
       "(case description|description of (the )?(case|initiative)|brief description)")
