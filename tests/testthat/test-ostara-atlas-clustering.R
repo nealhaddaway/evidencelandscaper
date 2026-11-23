@@ -67,3 +67,26 @@ testthat::test_that("trackpad zoom uses gentle proportional increments", {
   testthat::expect_match(text,"Math.exp(-limited*0.0012)",fixed=TRUE)
   testthat::expect_false(grepl("e.deltaY<0?1.35:1/1.35",text,fixed=TRUE))
 })
+
+
+testthat::test_that("case detail accordion follows Excel row colour groups", {
+  tpl<-testthat::test_path("..","..","inst","atlas",
+                          "ostara_fulltext_prototype.html")
+  html<-paste(readLines(tpl,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  expected<-c(
+    "Case and context"="#EAD1DC",
+    "Collective-action arrangements"="#C9DAF8",
+    "Objectives and outcomes"="#D9EAD3",
+    "Enablers"="#D9D2E9",
+    "Barriers"="#E6B8AF")
+  for(i in seq_along(expected)) {
+    testthat::expect_match(html,names(expected)[[i]],fixed=TRUE)
+    testthat::expect_match(html,unname(expected[[i]]),fixed=TRUE)
+  }
+  for(term in c("if(n>=1&&n<=11)","if(n>=12&&n<=13)",
+                "if(n>=14&&n<=21)","if(n>=22&&n<=30)",
+                "if(n>=31&&n<=39)","if(n===40)",
+                "group-'+groupSlug[name]"))
+    testthat::expect_match(html,term,fixed=TRUE)
+  testthat::expect_false(grepl('name==="Overview and geography"',html,fixed=TRUE))
+})
