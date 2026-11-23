@@ -40,3 +40,21 @@ testthat::test_that("retrospective atlas source and requested presentation are s
   testthat::expect_false(grepl('c.cohort==="first10"',html,fixed=TRUE))
   testthat::expect_match(html,"const totalUnmapped=",fixed=TRUE)
 })
+
+
+testthat::test_that("retrospective field adapter handles trailing spaces", {
+  path<-testthat::test_path("..","..","R","ostara-fulltext-atlas-prototype.R")
+  script<-paste(readLines(path,warn=FALSE),collapse="\n")
+  testthat::expect_match(script,'trimws(f)',fixed=TRUE)
+  testthat::expect_match(script,'ev<-matched_column("evidence")',fixed=TRUE)
+  testthat::expect_match(script,'status<-matched_column("reporting status")',fixed=TRUE)
+  # Representative headers from the user's actual 40-field source.
+  columns<-c("02. What is the status? ",
+    "02. What is the status?  [evidence]",
+    "02. What is the status?  [reporting status]")
+  pick<-function(f,suffix)which(endsWith(columns,paste0(" [",suffix,"]"))&
+    trimws(sub(" \\[(evidence|reporting status)\\]$","",columns))==
+      trimws(f))
+  testthat::expect_equal(pick(columns[[1]],"evidence"),2L)
+  testthat::expect_equal(pick(columns[[1]],"reporting status"),3L)
+})
