@@ -14,7 +14,7 @@ testthat::test_that("full-text atlas offers zooming, clustering, and multi-locat
     testthat::expect_match(t,term,fixed=TRUE)
   testthat::expect_match(g,"coords<-lapply(k,function(j)",fixed=TRUE)
   testthat::expect_match(g,"plotted_points=nrow(geo)",fixed=TRUE)
-  testthat::expect_match(l,"for(code in codes)",fixed=TRUE)
+  testthat::expect_match(l,"for(code in setdiff(codes,country_located))",fixed=TRUE)
   testthat::expect_match(l,"mapped=mapped_count>0L",fixed=TRUE)
 })
 
@@ -69,14 +69,16 @@ testthat::test_that("trackpad zoom uses gentle proportional increments", {
 })
 
 
-testthat::test_that("case detail accordion follows Excel row colour groups", {
-  tpl<-testthat::test_path("..","..","inst","atlas",
-                          "ostara_fulltext_prototype.html")
+testthat::test_that("case popup groups fields 1 through 39 and omits field 40", {
+  root<-testthat::test_path("..","..")
+  tpl<-file.path(root,"inst","atlas","ostara_fulltext_prototype.html")
+  generator<-file.path(root,"R","ostara-fulltext-atlas-prototype.R")
   html<-paste(readLines(tpl,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  script<-paste(readLines(generator,warn=FALSE,encoding="UTF-8"),collapse="\n")
   expected<-c(
-    "Case and context"="#EAD1DC",
-    "Collective-action arrangements"="#C9DAF8",
-    "Objectives and outcomes"="#D9EAD3",
+    "Description"="#EAD1DC",
+    "Activities"="#C9DAF8",
+    "Objectives and Impact"="#D9EAD3",
     "Enablers"="#D9D2E9",
     "Barriers"="#E6B8AF")
   for(i in seq_along(expected)) {
@@ -85,10 +87,15 @@ testthat::test_that("case detail accordion follows Excel row colour groups", {
   }
   for(term in c("if(n>=1&&n<=11)","if(n>=12&&n<=13)",
                 "if(n>=14&&n<=21)","if(n>=22&&n<=30)",
-                "if(n>=31&&n<=39)","if(n===40)",
+                "if(n>=31&&n<=39)",
+                "const n=Number(f.field_number",
+                "if(group)groups.get(group).push(f)",
                 "group-'+groupSlug[name]"))
     testthat::expect_match(html,term,fixed=TRUE)
-  testthat::expect_false(grepl('name==="Overview and geography"',html,fixed=TRUE))
+  testthat::expect_false(grepl('"Other extracted fields"',html,fixed=TRUE))
+  testthat::expect_false(grepl('"Source provenance"',html,fixed=TRUE))
+  testthat::expect_match(script,'field_cols<-field_cols[!grepl("^field_040 :: ",field_cols)]',fixed=TRUE)
+  testthat::expect_match(script,"list(field_number=field_number,question=question",fixed=TRUE)
 })
 
 
