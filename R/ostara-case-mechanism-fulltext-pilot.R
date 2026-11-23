@@ -10,8 +10,9 @@
 #' @param fulltext_manifest_csv CSV with record_id,fulltext_path; paths can be
 #'   absolute or relative to this CSV. PDF and plain TXT are supported.
 #' @param output_dir New directory for locked pilot outputs; reuse to resume.
-#' @param record_ids Optional exact ten record IDs; otherwise choose ten
-#'   available case-positive publications, multi-case first, then record_id.
+#' @param record_ids Optional exact ten record IDs; otherwise randomly sample
+#'   ten eligible case-positive publications using the recorded random seed.
+#' @param seed Reproducible random seed, default 20261123.
 #' @param model Luna model name.
 #' @param run_extraction FALSE (default) only validates inputs and creates the
 #'   frozen pilot manifest. TRUE makes at most max_new paid calls.
@@ -20,7 +21,10 @@
 #' @export
 run_ostara_case_mechanism_fulltext_pilot <- function(
     cases_csv,ontology_csv,fulltext_manifest_csv,output_dir,
-    record_ids=NULL,model="gpt-5.6-luna",run_extraction=FALSE,max_new=10L) {
+    record_ids=NULL,model="gpt-5.6-luna",run_extraction=FALSE,max_new=10L,
+    seed=20261123L) {
+  if(length(seed)!=1L||is.na(seed)||!is.numeric(seed)||
+     seed!=as.integer(seed))stop("seed must be one integer.")
   if(!is.logical(run_extraction)||length(run_extraction)!=1L||
      is.na(run_extraction))stop("run_extraction must be TRUE or FALSE.")
   if(!is.character(model)||length(model)!=1L||is.na(model)||
@@ -78,11 +82,17 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
   available<-intersect(unique(cases$record_id),files$record_id)
   count<-table(cases$record_id)
   if(is.null(record_ids)) {
-    available<-available[order(-as.integer(count[available]),available)]
+    available<-sort(available)
     if(length(available)<10L)
       stop("Need ten distinct case-positive publications with full texts; found ",
            length(available),".")
-    ids<-head(available,10L)
+    # Save/restore caller RNG state to avoid changing unrelated analyses.
+    had_rng<-exists(".Random.seed",envir=.GlobalEnv,inherits=FALSE)
+    if(had_rng)old_rng<-get(".Random.seed",envir=.GlobalEnv)
+    set.seed(as.integer(seed))
+    ids<-sample(available,10L,replace=FALSE)
+    if(had_rng)assign(".Random.seed",old_rng,envir=.GlobalEnv)
+    else rm(".Random.seed",envir=.GlobalEnv)
   } else {
     ids<-as.character(record_ids)
     if(length(ids)!=10L||anyNA(ids)||anyDuplicated(ids)||
@@ -100,7 +110,7 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
     schema="ostara-case-mechanism-fulltext-pilot-v1",
     cases_sha256=sha(cases_csv),ontology_sha256=sha(ontology_csv),
     source_manifest_sha256=sha(fulltext_manifest_csv),
-    prompt_sha256=sha(prompt),model=model,
+    prompt_sha256=sha(prompt),model=model,random_seed=as.integer(seed),
     selected_ids=as.list(ids),
     fulltext_sha256=as.list(selection$source_sha256))
   if(!dir.exists(output_dir))dir.create(output_dir,recursive=TRUE)
