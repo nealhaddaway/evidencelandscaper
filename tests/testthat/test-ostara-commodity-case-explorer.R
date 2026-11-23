@@ -112,4 +112,13 @@ test_that("retrospective commodity explorer merges palm and uses atlas case grou
   expect_true(grepl('formatFieldAnswer(val)',content,fixed=TRUE))
   expect_true(grepl('"field_number":6',content,fixed=TRUE))
   expect_true(grepl('evidence_atlas.html',content,fixed=TRUE))
+  expect_true(grepl('Palm site A',content,fixed=TRUE))
+  expect_true(grepl('Palm site B',content,fixed=TRUE))
+  expect_false(grepl('Case work-a::case_001',content,fixed=TRUE))
+  expect_false(grepl('Case work-b::case_001',content,fixed=TRUE))
+  embedded<-sub("(?s)^.*?<script id=\\"data\\" type=\\"application/json\\">","",content,perl=TRUE)
+  embedded<-sub("(?s)</script>.*$","",embedded,perl=TRUE)
+  payload<-jsonlite::fromJSON(embedded,simplifyVector=FALSE)
+  expect_equal(vapply(payload$cases,function(c)c$name,character(1)),
+               c("Palm site A","Palm site B"))
 })
