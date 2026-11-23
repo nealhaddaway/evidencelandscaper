@@ -64,7 +64,7 @@ testthat::test_that("trackpad zoom uses gentle proportional increments", {
   tpl<-testthat::test_path("..","..","inst","atlas",
                           "ostara_fulltext_prototype.html")
   text<-paste(readLines(tpl,warn=FALSE,encoding="UTF-8"),collapse="\n")
-  testthat::expect_match(text,"Math.exp(-limited*0.0016)",fixed=TRUE)
+  testthat::expect_match(text,"Math.exp(-limited*0.0032)",fixed=TRUE)
   testthat::expect_false(grepl("e.deltaY<0?1.35:1/1.35",text,fixed=TRUE))
 })
 
