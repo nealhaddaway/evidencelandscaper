@@ -58,3 +58,12 @@ testthat::test_that("retrospective field adapter handles trailing spaces", {
   testthat::expect_equal(pick(columns[[1]],"evidence"),2L)
   testthat::expect_equal(pick(columns[[1]],"reporting status"),3L)
 })
+
+
+testthat::test_that("trackpad zoom uses gentle proportional increments", {
+  tpl<-testthat::test_path("..","..","inst","atlas",
+                          "ostara_fulltext_prototype.html")
+  text<-paste(readLines(tpl,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  testthat::expect_match(text,"Math.exp(-limited*0.0012)",fixed=TRUE)
+  testthat::expect_false(grepl("e.deltaY<0?1.35:1/1.35",text,fixed=TRUE))
+})
