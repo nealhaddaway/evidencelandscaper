@@ -134,6 +134,7 @@ export_ostara_commodity_case_explorer <- function(
       return("Dairy")
     # Merge palm with palm oil for this retrospective commodity taxonomy.
     if(key%in%c("palm","palm oil","oil palm","oil-palm"))return("Palm oil")
+    if(key%in%c("sugar","sugarcane","sugar cane"))return("Sugar")
     labels<-c(bananas="Bananas",banana="Bananas",beef="Beef",
       cassava="Cassava",coffee="Coffee",cotton="Cotton",maize="Maize",
       "palm oil"="Palm oil",
@@ -278,7 +279,8 @@ export_ostara_commodity_case_explorer <- function(
   add_plate("Cotton","Gossypium barbadense - Köhler–s Medizinal-Pflanzen-068")
   add_plate("Rice","Oryza sativa - Köhler–s Medizinal-Pflanzen-232")
   add_plate("Rubber","Hevea brasiliensis - Köhler–s Medizinal-Pflanzen-071")
-  add_plate("Sugarcane","Saccharum officinarum - Köhler–s Medizinal-Pflanzen-125")
+  # Unified Sugar tile retains the existing sugarcane botanical artwork.
+  add_plate("Sugar","Saccharum officinarum - Köhler–s Medizinal-Pflanzen-125")
   add_plate("Palm oil","Elaeis guineensis - Köhler–s Medizinal-Pflanzen-056")
   # Different historic sources where a Köhler plate is unavailable.
   add_other_plate<-function(commodity,file,creator,rights) {
@@ -308,10 +310,6 @@ export_ostara_commodity_case_explorer <- function(
   add_other_plate("Pulp and paper",
     "Penny Magazine 1833 377 Paper Making by Hand.jpg",
     "The Penny Magazine (1833), unknown engraver",
-    "Public domain")
-  add_other_plate("Sugar",
-    "Adolphe Millot betterave a sucre.jpg",
-    "Adolphe Millot, Larousse: sugar beet illustration",
     "Public domain")
   add_other_plate("Timber",
     "Illustration Pinus sylvestris0.jpg",
