@@ -9,6 +9,8 @@
 #' @param map_path OSTARA project directory.
 #' @param client_export_dir Completed client database export; when NULL,
 #'   selects the most recently modified complete export.
+#' @param cases_csv Optional retrospective case CSV. When supplied, use it
+#'   directly as the complete case dataset instead of the client export.
 #' @param output_dir New empty output directory; when NULL, writes under
 #'   reports/commodity_case_explorer/<content_sha>.
 #' @param atlas_url Optional URL for a separate geographic atlas navigation
@@ -16,7 +18,8 @@
 #' @return Standalone HTML output path, invisibly.
 #' @export
 export_ostara_commodity_case_explorer <- function(
-    map_path=NULL,client_export_dir=NULL,output_dir=NULL,atlas_url=NULL) {
+    map_path=NULL,client_export_dir=NULL,output_dir=NULL,atlas_url=NULL,
+    cases_csv=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   if(!requireNamespace("jsonlite",quietly=TRUE)||
@@ -25,25 +28,69 @@ export_ostara_commodity_case_explorer <- function(
     stop("Please install jsonlite, digest and countrycode.")
   inputs<-c("ostara_cases_with_adjacent_evidence.csv",
             "ostara_publications.csv")
-  if(is.null(client_export_dir)) {
-    base<-file.path(map_path,"reports","client_databases")
-    if(!dir.exists(base))stop("Client export directory missing: ",base)
-    folders<-list.dirs(base,recursive=FALSE,full.names=TRUE)
-    folders<-folders[vapply(folders,function(p)
-      all(file.exists(file.path(p,inputs))),logical(1))]
-    if(!length(folders))stop("No complete client case export found in ",base)
-    client_export_dir<-folders[order(file.info(folders)$mtime,
-      decreasing=TRUE)[[1L]]]
-  }
-  client_export_dir<-normalizePath(client_export_dir,winslash="/",mustWork=TRUE)
-  input_paths<-file.path(client_export_dir,inputs)
-  if(any(!file.exists(input_paths)))
-    stop("Missing client export CSV: ",
-         paste(basename(input_paths[!file.exists(input_paths)]),collapse=", "))
   readcsv<-function(path)utils::read.csv(path,check.names=FALSE,
     stringsAsFactors=FALSE,fileEncoding="UTF-8-BOM",na.strings=NULL)
-  cases<-readcsv(input_paths[[1L]])
-  pubs<-readcsv(input_paths[[2L]])
+  if(!is.null(cases_csv)) {
+    if(!is.null(client_export_dir))
+      stop("Supply cases_csv or client_export_dir, not both.")
+    cases_csv<-normalizePath(cases_csv,winslash="/",mustWork=TRUE)
+    retrospective<-readcsv(cases_csv)
+    if(!all(c("record_id","case_id","01. Case name")%in%names(retrospective)))
+      stop("Retrospective CSV requires record_id, case_id, and 01. Case name.")
+    numbered<-grep("^[0-9]{2}\\. ",names(retrospective),value=TRUE)
+    numbered<-numbered[!grepl(" \\[(evidence|reporting status)\\]$",numbered)]
+    # Funding/authorship field 40 was excluded from the evidence atlas.
+    numbered<-numbered[!grepl("^40\\. ",numbered)]
+    cases<-retrospective[,intersect(c("record_id","case_id",
+      "assessment_reason","case_boundary_uncertainty"),
+      names(retrospective)),drop=FALSE]
+    cases$cohort<-"retrospective"
+    for(f in numbered) {
+      n<-as.integer(sub("^([0-9]{2})\\..*$","\\1",f))
+      dest<-paste0("field_",sprintf("%03d",n)," :: ",trimws(f))
+      matched_column<-function(suffix) {
+        nms<-names(retrospective)
+        ix<-which(endsWith(nms,paste0(" [",suffix,"]"))&
+          trimws(sub(" \\[(evidence|reporting status)\\]$","",nms))==
+            trimws(f))
+        if(length(ix)!=1L)
+          stop("Expected exactly one ",suffix," column for ",f,
+               "; found ",length(ix),".")
+        nms[[ix]]
+      }
+      cases[[dest]]<-retrospective[[f]]
+      cases[[paste0(dest," [evidence]")]]<-
+        retrospective[[matched_column("evidence")]]
+      cases[[paste0(dest," [reporting status]")]]<-
+        retrospective[[matched_column("reporting status")]]
+    }
+    ids<-unique(as.character(cases$record_id))
+    pubs<-data.frame(record_id=ids,title=rep("",length(ids)),
+      doi=rep("",length(ids)),cohort=rep("retrospective",length(ids)),
+      stringsAsFactors=FALSE)
+    input_paths<-cases_csv
+    client_export_dir<-dirname(cases_csv)
+  } else {
+    inputs<-c("ostara_cases_with_adjacent_evidence.csv",
+              "ostara_publications.csv")
+    if(is.null(client_export_dir)) {
+      base<-file.path(map_path,"reports","client_databases")
+      if(!dir.exists(base))stop("Client export directory missing: ",base)
+      folders<-list.dirs(base,recursive=FALSE,full.names=TRUE)
+      folders<-folders[vapply(folders,function(p)
+        all(file.exists(file.path(p,inputs))),logical(1))]
+      if(!length(folders))stop("No complete client case export found in ",base)
+      client_export_dir<-folders[order(file.info(folders)$mtime,
+        decreasing=TRUE)[[1L]]]
+    }
+    client_export_dir<-normalizePath(client_export_dir,winslash="/",mustWork=TRUE)
+    input_paths<-file.path(client_export_dir,inputs)
+    if(any(!file.exists(input_paths)))
+      stop("Missing client export CSV: ",
+           paste(basename(input_paths[!file.exists(input_paths)]),collapse=", "))
+    cases<-readcsv(input_paths[[1L]])
+    pubs<-readcsv(input_paths[[2L]])
+  }
   if(!nrow(cases)||!all(c("record_id","case_id","cohort")%in%names(cases))||
      anyDuplicated(cases$case_id)||any(!nzchar(cases$case_id)))
     stop("Invalid or empty case extraction table.")
@@ -57,6 +104,8 @@ export_ostara_commodity_case_explorer <- function(
                                 base_fields)]
   if(!length(base_fields))
     stop("Case table does not contain new W09 question columns.")
+  if(!is.null(cases_csv))
+    base_fields<-base_fields[!grepl("^field_040 :: ",base_fields)]
   for(f in base_fields) {
     if(!all(paste0(f,c(" [evidence]"," [reporting status]"))%in%names(cases)))
       stop("Missing evidence/status columns for ",f)
@@ -83,10 +132,11 @@ export_ostara_commodity_case_explorer <- function(
       return("Soybeans")
     if(key%in%c("milk","dairy","dairy products"))
       return("Dairy")
-    # Palm and palm oil remain distinct: palm alone is taxonomically ambiguous.
+    # Merge palm with palm oil for this retrospective commodity taxonomy.
+    if(key%in%c("palm","palm oil","oil palm","oil-palm"))return("Palm oil")
     labels<-c(bananas="Bananas",banana="Bananas",beef="Beef",
       cassava="Cassava",coffee="Coffee",cotton="Cotton",maize="Maize",
-      palm="Palm", "palm oil"="Palm oil",
+      "palm oil"="Palm oil",
       "pulp and paper"="Pulp and paper",rice="Rice",rubber="Rubber",
       sugar="Sugar",sugarcane="Sugarcane",tea="Tea",timber="Timber")
     if(key%in%names(labels))return(unname(labels[[key]]))
@@ -157,6 +207,7 @@ export_ostara_commodity_case_explorer <- function(
           display_value<-paste(parts,collapse="; ")
       }
       fields[[length(fields)+1L]]<-list(
+        field_number=as.integer(sub("^field_([0-9]{3}) :: .*$","\\1",f)),
         question=title,value=value,display_value=display_value,
         status=if(nzchar(status))status else "unknown",
         evidence=evidence)
@@ -259,9 +310,6 @@ export_ostara_commodity_case_explorer <- function(
     "Illustration Pinus sylvestris0.jpg",
     "Otto Wilhelm Thomé, Flora von Deutschland (1885)",
     "Public domain")
-  # Palm is an ambiguous commodity label. The oil palm image is presented
-  # only as a representative botanical plate rather than exact taxonomy.
-  add_plate("Palm","Elaeis guineensis - Köhler–s Medizinal-Pflanzen-056")
   image_manifest<-image_manifest[names(image_manifest)%in%all_commodities]
   payload<-list(schema="ostara-commodity-explorer-v1",cases=rows,
     commodities=as.list(all_commodities),artwork=image_manifest,
