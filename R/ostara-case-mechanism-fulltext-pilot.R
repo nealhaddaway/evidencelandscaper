@@ -76,7 +76,7 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
     normal(p)
   }
   files$fulltext_path<-vapply(files$fulltext_path,resolve_path,character(1))
-  if(any(!tolower(tools::file_ext(files$fulltext_path))%in%c("pdf","txt")))
+  if(any(!tolower(tools::file_ext(files$fulltext_path))%in%c("pdf","txt","xml","json")))
     stop("Only PDF, TXT, XML or JSON full texts are supported.")
   files$source_sha256<-vapply(files$fulltext_path,sha,character(1))
   available<-intersect(unique(cases$record_id),files$record_id)
