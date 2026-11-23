@@ -117,8 +117,9 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
                          pretty=TRUE,auto_unbox=TRUE,null="null")
     utils::write.csv(selection,file.path(output_dir,"pilot_selection.csv"),
                      row.names=FALSE,na="")
-    file.copy(prompt,file.path(output_dir,"prompt.txt"))
-    file.copy(ontology_csv,file.path(output_dir,"ontology.csv"))
+    if(!isTRUE(file.copy(prompt,file.path(output_dir,"prompt.txt")))||
+       !isTRUE(file.copy(ontology_csv,file.path(output_dir,"ontology.csv"))))
+      stop("Could not archive pilot prompt or ontology.")
   }
   if(!identical(sha(file.path(output_dir,"prompt.txt")),sha(prompt))||
      !identical(sha(file.path(output_dir,"ontology.csv")),sha(ontology_csv)))
@@ -199,7 +200,20 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
           stringsAsFactors=FALSE)
       }
     }
-    do.call(rbind,rows)
+    # A shared flag is valid only when at least two distinct registered
+    # cases have an evidenced link to the same mechanism.
+    tab<-do.call(rbind,rows)
+    for(code in unique(tab$mechanism_id)) {
+      sub<-tab[tab$mechanism_id==code,,drop=FALSE]
+      if(any(sub$shared_across_cases)) {
+        evid<-sub$attribution_status%in%
+          c("implemented","proposed_only","mentioned_only","unclear")
+        if(sum(evid)<2L||
+           any(sub$shared_across_cases & !evid))
+          stop("Inconsistent shared_across_cases flag for ",code)
+      }
+    }
+    tab
   }
   ledger<-file.path(output_dir,"validated_responses.jsonl")
   rawlog<-file.path(output_dir,"raw_responses.jsonl")
@@ -293,9 +307,15 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
     stringsAsFactors=FALSE)
   summary_csv<-file.path(output_dir,"pilot_status.csv")
   utils::write.csv(summary,summary_csv,row.names=FALSE,na="")
+  review<-out[out$attribution_status!="not_identified",,drop=FALSE]
+  review$human_decision<-rep("",nrow(review))
+  review$human_notes<-rep("",nrow(review))
+  review_file<-file.path(output_dir,"human_review_queue.csv")
+  utils::write.csv(review,review_file,row.names=FALSE,na="")
   message("[OSTARA case-mechanism] ",sum(summary$validation_status=="validated"),
           "/10 publications completed. Pilot: ",output_dir)
   invisible(list(output_dir=output_dir,selection=file.path(output_dir,
     "pilot_selection.csv"),status=summary_csv,attributions=long_csv,
+    human_review=review_file,
     completed=sum(summary$validation_status=="validated"),total=10L))
 }
