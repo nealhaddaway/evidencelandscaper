@@ -118,3 +118,18 @@ testthat::test_that("multi-location atlas keeps all uniquely resolved sites and 
                 "mapped_point_count=mapped_count"))
     testthat::expect_match(geocode,term,fixed=TRUE)
 })
+
+
+testthat::test_that("case answer presentation uses sentence initials and newline bullets", {
+  tpl<-testthat::test_path("..","..","inst","atlas",
+                          "ostara_fulltext_prototype.html")
+  html<-paste(readLines(tpl,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  for(term in c("function formatFieldAnswer(value)",
+                'replace(/\\r\\n?/g,"\\n")',
+                "if(lines.length===1)return esc(lines[0]);",
+                'return "<ul>"+lines.map(line=>"<li>"+esc(line)+"</li>").join("")+"</ul>";',
+                "formatFieldAnswer(val)",
+                ".answer ul{margin:5px 0 7px"))
+    testthat::expect_match(html,term,fixed=TRUE)
+  testthat::expect_false(grepl("'+esc(val)+'</div>'",html,fixed=TRUE))
+})
