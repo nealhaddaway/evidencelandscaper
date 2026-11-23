@@ -18,7 +18,11 @@ button{cursor:pointer}.secondary-btn{background:#fff;border:1px solid var(--edge
 .item:hover,.item.active{background:#f0f5ef}.item strong{display:block;font-size:13px}.item small{display:block;color:var(--muted);margin-top:3px}
 #maparea{position:relative;overflow:hidden;background:#eaf0e9}#world{width:100%;height:100%;display:block}
 .land{stroke:#a9bdb0;stroke-width:.7;fill:none}.graticule{stroke:#d7e5d9;stroke-width:.65}
-.marker{fill:var(--accent);stroke:#fff;stroke-width:1.4;cursor:pointer}.marker.active{fill:#e5a329;stroke:var(--ink);stroke-width:2.3}
+.marker{fill:var(--accent);stroke:#fff;stroke-width:1.4;cursor:pointer}
+.marker.multi-location{fill:#2581c4}
+.marker.active{stroke:var(--ink);stroke-width:2.3}
+.marker.active:not(.multi-location){fill:#e5a329}
+.marker.multi-location.active{fill:#1769a6}
 #mapcontrols{position:absolute;top:14px;left:14px;z-index:3;display:flex;gap:5px}
 #mapcontrols button{background:#fff;border:1px solid var(--edge);border-radius:6px;
  padding:7px 11px;font-size:16px;box-shadow:0 1px 5px #243a3424}
@@ -30,7 +34,10 @@ button{cursor:pointer}.secondary-btn{background:#fff;border:1px solid var(--edge
  border-top:1px solid var(--edge);padding:9px 2px;text-align:left;
  background:#fff;color:var(--ink)}
 #mapchoices button.case-choice:hover{background:#f0f5ef}
+#mapchoices button.case-choice.multi-location{background:#e0f2ff;border-left:4px solid #2581c4;padding-left:9px}
+#mapchoices button.case-choice.multi-location:hover{background:#c5e7ff}
 .cluster-pin{fill:#2c6956;stroke:#fff;stroke-width:1.7;cursor:pointer}
+.cluster-pin.multi-location{fill:#2581c4}
 .cluster-label{font-weight:700;fill:#fff;text-anchor:middle;pointer-events:none}
 #world{touch-action:none;cursor:grab}#world.dragging{cursor:grabbing}
 #mapnotice{position:absolute;left:15px;bottom:12px;background:#fffffff0;padding:8px 11px;border:1px solid var(--edge);border-radius:7px;font-size:12px;color:var(--muted)}
@@ -277,7 +284,7 @@ function showMapChoices(entries){
  box.append(close,heading);
  for(const e of entries){
   const btn=document.createElement("button");btn.type="button";
-  btn.className="case-choice";
+  btn.className="case-choice"+(e.multiLocation?" multi-location":"");
   btn.textContent=(e.c.display_name||e.c.case_id)+
     (e.coord.coordinate_basis==="country_representative_city_not_case_location"?
       " · indicative country point":"");
@@ -298,7 +305,7 @@ function allMappedPoints(shown){
    if(!Number.isFinite(lat)||!Number.isFinite(lon)||
       Math.abs(lat)>90||Math.abs(lon)>180)continue;
    const [x,y]=project(lon,lat);
-   entries.push({c,coord,x,y});
+   entries.push({c,coord,x,y,multiLocation:locations.length>1});
   }
  }
  return entries;
@@ -333,8 +340,11 @@ function renderMarkers(){
   const circle=document.createElementNS(ns,"circle");
   circle.setAttribute("cx",x);circle.setAttribute("cy",y);
   circle.setAttribute("r",grouped?16/mapView.zoom:radius);
-  circle.setAttribute("class",grouped?"cluster-pin":
-    "marker"+(active?.case_id===entries[0].c.case_id?" active":""));
+  const allMulti=entries.every(e=>e.multiLocation);
+  circle.setAttribute("class",grouped?
+    "cluster-pin"+(allMulti?" multi-location":""):
+    "marker"+(entries[0].multiLocation?" multi-location":"")+
+    (active?.case_id===entries[0].c.case_id?" active":""));
   circle.setAttribute("tabindex","0");circle.setAttribute("role","button");
   circle.setAttribute("aria-label",grouped?
     entries.length+" case points; zoom or select cases":
