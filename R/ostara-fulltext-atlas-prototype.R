@@ -11,12 +11,16 @@
 #' @param coordinates_csv Optional externally reviewed coordinate override with
 #'   case_id,latitude,longitude,coordinate_basis,coordinate_source. When NULL,
 #'   generates approximate points automatically from extracted geography.
+#' @param cases_csv Optional retrospective case CSV with numbered questions,
+#'   evidence and reporting-status columns. When supplied, it is the sole
+#'   source of case records and no prior client export is required.
 #' @param output_dir Optional new empty output directory; defaults to a versioned
 #'   directory under reports/fulltext_atlas_prototype.
 #' @return Path of generated standalone evidence_atlas.html, invisibly.
 #' @export
 export_ostara_fulltext_atlas_prototype <- function(
-    map_path=NULL,client_export_dir=NULL,coordinates_csv=NULL,output_dir=NULL) {
+    map_path=NULL,client_export_dir=NULL,coordinates_csv=NULL,output_dir=NULL,
+    cases_csv=NULL) {
   if(is.null(map_path))map_path<-open_map("Ostara_collective_action_map")
   map_path<-normalizePath(map_path,winslash="/",mustWork=TRUE)
   if(!requireNamespace("jsonlite",quietly=TRUE)||
@@ -27,27 +31,63 @@ export_ostara_fulltext_atlas_prototype <- function(
   csv_names<-c("ostara_publications.csv",
     "ostara_cases_with_adjacent_evidence.csv",
     "ostara_fulltext_mechanisms_with_adjacent_evidence.csv")
-  if(is.null(client_export_dir)) {
-    base<-file.path(map_path,"reports","client_databases")
-    if(!dir.exists(base))stop("No client database export found: ",base)
-    candidates<-list.dirs(base,recursive=FALSE,full.names=TRUE)
-    candidates<-candidates[vapply(candidates,function(p)
-      all(file.exists(file.path(p,csv_names))),logical(1))]
-    if(!length(candidates))
-      stop("No complete client database export found under ",base)
-    client_export_dir<-candidates[order(file.info(candidates)$mtime,
-      decreasing=TRUE)][[1L]]
-  }
-  client_export_dir<-normalizePath(client_export_dir,winslash="/",mustWork=TRUE)
-  files<-file.path(client_export_dir,csv_names)
-  if(any(!file.exists(files)))
-    stop("Client export missing: ",paste(basename(files[!file.exists(files)]),
-                                      collapse=", "))
   readcsv<-function(path)utils::read.csv(path,stringsAsFactors=FALSE,
     check.names=FALSE,fileEncoding="UTF-8-BOM",na.strings=NULL)
-  pubs<-readcsv(files[[1L]])
-  cases<-readcsv(files[[2L]])
-  mechanisms<-readcsv(files[[3L]])
+  if(!is.null(cases_csv)) {
+    if(!is.null(client_export_dir))
+      stop("Choose cases_csv or client_export_dir, not both.")
+    cases_csv<-normalizePath(cases_csv,winslash="/",mustWork=TRUE)
+    raw<-readcsv(cases_csv)
+    if(!all(c("record_id","case_id","01. Case name")%in%names(raw)))
+      stop("Retrospective CSV requires record_id, case_id and 01. Case name.")
+    numbered<-grep("^[0-9]{2}\\. ",names(raw),value=TRUE)
+    numbered<-numbered[!grepl(" \\[(evidence|reporting status)\\]$",numbered)]
+    if(!length(numbered))stop("No numbered retrospective fields.")
+    cases<-raw[,intersect(c("record_id","case_id","assessment_reason",
+      "case_boundary_uncertainty"),names(raw)),drop=FALSE]
+    cases$cohort<-"retrospective"
+    for(f in numbered) {
+      n<-as.integer(sub("^([0-9]{2})\\..*$","\\1",f))
+      dest<-paste0("field_",sprintf("%03d",n)," :: ",f)
+      ev<-paste0(f," [evidence]")
+      status<-paste0(f," [reporting status]")
+      if(!all(c(ev,status)%in%names(raw)))
+        stop("Missing corresponding evidence or status for ",f)
+      cases[[dest]]<-raw[[f]]
+      cases[[paste0(dest," [evidence]")]]<-raw[[ev]]
+      cases[[paste0(dest," [reporting status]")]]<-raw[[status]]
+    }
+    ids<-unique(as.character(cases$record_id))
+    pubs<-data.frame(record_id=ids,title=rep("",length(ids)),
+      doi=rep("",length(ids)),cohort=rep("retrospective",length(ids)),
+      stringsAsFactors=FALSE)
+    mechanisms<-data.frame(record_id=character(),mechanism_id=character(),
+      status=character(),fine_level_mechanism=character(),
+      evidence_quote=character(),evidence_anchor=character(),
+      stringsAsFactors=FALSE)
+    files<-cases_csv
+    client_export_dir<-dirname(cases_csv)
+  } else {
+    if(is.null(client_export_dir)) {
+      base<-file.path(map_path,"reports","client_databases")
+      if(!dir.exists(base))stop("No client database export found: ",base)
+      candidates<-list.dirs(base,recursive=FALSE,full.names=TRUE)
+      candidates<-candidates[vapply(candidates,function(p)
+        all(file.exists(file.path(p,csv_names))),logical(1))]
+      if(!length(candidates))
+        stop("No complete client database export found under ",base)
+      client_export_dir<-candidates[order(file.info(candidates)$mtime,
+        decreasing=TRUE)][[1L]]
+    }
+    client_export_dir<-normalizePath(client_export_dir,winslash="/",mustWork=TRUE)
+    files<-file.path(client_export_dir,csv_names)
+    if(any(!file.exists(files)))
+      stop("Client export missing: ",paste(basename(files[!file.exists(files)]),
+                                        collapse=", "))
+    pubs<-readcsv(files[[1L]])
+    cases<-readcsv(files[[2L]])
+    mechanisms<-readcsv(files[[3L]])
+  }
   if(!all(c("record_id","title","doi","cohort")%in%names(pubs))||
      anyDuplicated(pubs$record_id))
     stop("Invalid publication register.")
