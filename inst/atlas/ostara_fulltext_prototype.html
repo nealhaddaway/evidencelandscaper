@@ -248,7 +248,7 @@ world.addEventListener("wheel",e=>{
  // their magnitude instead of jumping 35% on every event.
  const pixels=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?510:1);
  const limited=Math.max(-80,Math.min(80,pixels));
- const factor=Math.exp(-limited*0.0012);
+ const factor=Math.exp(-limited*0.0016);
  zoomMap(factor,p.x,p.y);
 },{passive:false});
 world.addEventListener("pointerdown",e=>{
