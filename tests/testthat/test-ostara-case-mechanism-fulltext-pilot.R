@@ -58,3 +58,19 @@ test_that("case-mechanism pilot freezes ten case-positive publications without A
   expect_error(run_ostara_case_mechanism_fulltext_pilot(
     cases_csv,ontology_csv,manifest_csv,out,run_extraction=FALSE))
 })
+
+
+test_that("W09 structured XML and JSON full texts are allowed by the pilot validator", {
+  source_file<-testthat::test_path("..","..","R",
+    "ostara-case-mechanism-fulltext-pilot.R")
+  code<-paste(readLines(source_file,warn=FALSE,encoding="UTF-8"),
+              collapse="\n")
+  expect_true(grepl(
+    'file_ext(files$fulltext_path))%in%c("pdf","txt","xml","json")',
+    code,fixed=TRUE))
+  expect_true(grepl(
+    'w09_text_payload(w09,id,max_pages=0L)',code,fixed=TRUE))
+  expect_true(grepl(
+    'Only PDF, TXT, XML or JSON full texts are supported.',code,fixed=TRUE))
+  expect_silent(parse(file=source_file))
+})
