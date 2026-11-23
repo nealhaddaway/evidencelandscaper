@@ -133,3 +133,20 @@ testthat::test_that("case answer presentation uses sentence initials and newline
     testthat::expect_match(html,term,fixed=TRUE)
   testthat::expect_false(grepl("'+esc(val)+'</div>'",html,fixed=TRUE))
 })
+
+
+testthat::test_that("single-location pins use cluster green without recolouring popups", {
+  tpl<-testthat::test_path("..","..","inst","atlas",
+                          "ostara_fulltext_prototype.html")
+  html<-paste(readLines(tpl,warn=FALSE,encoding="UTF-8"),collapse="\n")
+  testthat::expect_match(html,
+    ".marker{fill:#2c6956;stroke:#fff",fixed=TRUE)
+  testthat::expect_match(html,
+    ".cluster-pin{fill:#2c6956;stroke:#fff",fixed=TRUE)
+  testthat::expect_match(html,
+    ".marker.multi-location{fill:#2581c4}",fixed=TRUE)
+  testthat::expect_match(html,
+    ".marker.active:not(.multi-location){fill:#2c6956}",fixed=TRUE)
+  testthat::expect_match(html,
+    "case-choice.multi-location{background:#e0f2ff",fixed=TRUE)
+})
