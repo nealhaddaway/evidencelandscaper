@@ -140,6 +140,24 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
       txt
     }
   }
+  # Validate readability of every selected source before any paid calls.
+  # Short but non-empty texts are flagged for human inspection.
+  preflight<-lapply(seq_len(nrow(selection)),function(i) {
+    p<-selection$fulltext_path[[i]]
+    parsed<-tryCatch(make_text(p),error=function(e)e)
+    if(inherits(parsed,"error"))
+      stop("Selected source unreadable: ",selection$record_id[[i]],
+           " — ",conditionMessage(parsed))
+    data.frame(record_id=selection$record_id[[i]],
+      format=tolower(tools::file_ext(p)),
+      extracted_characters=nchar(parsed),
+      readability_flag=if(nchar(parsed)<1000L)
+        "short_text_review_required" else "readable",
+      stringsAsFactors=FALSE)
+  })
+  utils::write.csv(do.call(rbind,preflight),
+    file.path(output_dir,"fulltext_readability_audit.csv"),
+    row.names=FALSE,na="")
   validate_result<-function(z,id,fulltext) {
     expected<-cases$case_id[cases$record_id==id]
     if(!identical(sc(z$record_id),id)||
