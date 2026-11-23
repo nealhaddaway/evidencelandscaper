@@ -187,3 +187,4 @@ export(export_ostara_all_included_bibliography)
 export(run_ostara_grey_literature_selected_files)
 
 export(code_ostara_case_mechanisms_v5)
+export(run_ostara_case_mechanism_fulltext_pilot)
