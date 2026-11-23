@@ -30,6 +30,12 @@ main{max-width:1320px;padding:26px 22px 80px;margin:auto}
 .case-card{background:#fff;border:1px solid var(--line);border-radius:9px;padding:18px 19px;display:flex;flex-direction:column;gap:9px}
 .case-card h3{font:21px/1.2 Georgia,serif;margin:0}.case-card p{margin:0;color:#40524a;font-size:13px}
 .tags{display:flex;flex-wrap:wrap;gap:6px}.tag{font-size:11px;border:1px solid var(--line);background:#f1f4ee;padding:3px 8px;border-radius:20px;color:#476052}
+.tag-commodity{background:#d9ead3;border-color:#93c47d;color:#274e13}
+.tag-country{background:#cfe2f3;border-color:#6fa8dc;color:#1c4587}
+.tag-stage{background:#fce5cd;border-color:#f6b26b;color:#7f6000}
+.tag-status{background:#f4cccc;border-color:#e06666;color:#7a1f1f}
+.tag-level{background:#d9d2e9;border-color:#8e7cc3;color:#351c75}
+.tag-interest{background:#ead1dc;border-color:#c27ba0;color:#741b47}
 .case-card .bottom{display:flex;justify-content:space-between;align-items:center;margin-top:auto;padding-top:10px;gap:10px}
 .explore{background:#385547;color:white;border:0;border-radius:6px;padding:9px 12px;font-weight:700;font-size:12px}
 .explore:hover{background:#273e33}
@@ -137,7 +143,23 @@ function drawTiles(){
   grid.append(btn);
  }
 }
-function tags(c){return [...fieldvals(c,"commodity").slice(0,3),...fieldvals(c,"country").slice(0,2),...fieldvals(c,"stage").slice(0,2),...fieldvals(c,"status").slice(0,1)]}
+// Preserve facet identity rather than inferring category from displayed text.
+function tags(c){
+ return [
+  ...fieldvals(c,"commodity").slice(0,3).map(value=>({value,facet:"commodity"})),
+  ...fieldvals(c,"country").slice(0,2).map(value=>({value,facet:"country"})),
+  ...fieldvals(c,"stage").slice(0,2).map(value=>({value,facet:"stage"})),
+  ...fieldvals(c,"status").slice(0,1).map(value=>({value,facet:"status"}))
+ ];
+}
+function addTags(container,c){
+ for(const {value,facet} of tags(c)){
+  const tag=document.createElement("span");
+  tag.className="tag tag-"+facet;
+  tag.textContent=value;
+  container.append(tag);
+ }
+}
 function render(){
  syncOptions();drawTiles();
  const filtered=cases.filter(matches),root=$("results");root.replaceChildren();
@@ -150,7 +172,7 @@ function render(){
   const box=document.createElement("article");box.className="case-card";
   const title=document.createElement("h3");title.textContent=c.name;
   const pills=document.createElement("div");pills.className="tags";
-  for(const x of tags(c)){const tag=document.createElement("span");tag.className="tag";tag.textContent=x;pills.append(tag);}
+  addTags(pills,c);
   const summary=document.createElement("p");summary.textContent=c.description||"No case description reported in the structured extraction.";
   const bottom=document.createElement("div");bottom.className="bottom";
   const source=document.createElement("span");source.className="muted";source.textContent=c.title;
@@ -190,7 +212,7 @@ function openCase(c){
  active=c;lastFocus=document.activeElement;showEvidence=false;showMissing=false;
  $("detail-title").textContent=c.name;$("toggle-evidence").textContent="Show all evidence";$("toggle-missing").textContent="Show unreported fields";
  $("detail-tags").replaceChildren();
- for(const x of tags(c)){const tag=document.createElement("span");tag.className="tag";tag.textContent=x;$("detail-tags").append(tag);}
+ addTags($("detail-tags"),c);
  drawDetail();$("overlay").classList.add("open");document.body.style.overflow="hidden";$("close").focus();
 }
 function drawDetail(){
