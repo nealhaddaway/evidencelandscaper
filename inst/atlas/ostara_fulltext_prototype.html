@@ -199,7 +199,13 @@ let pointerDrag=null;
 world.addEventListener("wheel",e=>{
  e.preventDefault();
  const p=svgCoords(e);
- if(p)zoomMap(e.deltaY<0?1.35:1/1.35,p.x,p.y);
+ if(!p)return;
+ // Trackpad pinch emits many small wheel events. Scale continuously with
+ // their magnitude instead of jumping 35% on every event.
+ const pixels=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?510:1);
+ const limited=Math.max(-80,Math.min(80,pixels));
+ const factor=Math.exp(-limited*0.0012);
+ zoomMap(factor,p.x,p.y);
 },{passive:false});
 world.addEventListener("pointerdown",e=>{
  if(e.button!==0||e.target.closest(".marker,.cluster-pin"))return;
