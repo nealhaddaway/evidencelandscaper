@@ -113,6 +113,10 @@ export_ostara_fulltext_atlas_prototype <- function(
     stop("Mechanism database missing required columns.")
   field_cols<-grep("^field_[0-9]{3} :: ",names(cases),value=TRUE)
   field_cols<-field_cols[!grepl(" \\[(evidence|reporting status)\\]$",field_cols)]
+  # Field 040 is an unreliable retrospective funding/authorship question.
+  # Exclude it from the atlas payload and field count; never edit source CSV.
+  if(!is.null(cases_csv))
+    field_cols<-field_cols[!grepl("^field_040 :: ",field_cols)]
   if(!length(field_cols))
     stop("No field_### :: Question columns found in case database.")
   for(f in field_cols) {
@@ -193,7 +197,10 @@ export_ostara_fulltext_atlas_prototype <- function(
       # Old checkpoint schemas may lack a field; skip only genuine absences.
       if(!nzchar(value)&&!nzchar(status)&&!nzchar(evidence))return(NULL)
       question<-strip_field(f)
-      list(question=question,value=value,
+      # Use the schema field index for colour-coded grouping; the question
+      # text may contain whitespace or formatting changes.
+      field_number<-as.integer(sub("^field_([0-9]{3}) :: .*$","\\1",f))
+      list(field_number=field_number,question=question,value=value,
            display_value=if(identical(status,"reported"))
              display_value(question,value) else value,
            evidence=evidence,status=if(nzchar(status))status else "unknown")
