@@ -77,7 +77,7 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
   }
   files$fulltext_path<-vapply(files$fulltext_path,resolve_path,character(1))
   if(any(!tolower(tools::file_ext(files$fulltext_path))%in%c("pdf","txt")))
-    stop("Only PDF and TXT full texts are supported.")
+    stop("Only PDF, TXT, XML or JSON full texts are supported.")
   files$source_sha256<-vapply(files$fulltext_path,sha,character(1))
   available<-intersect(unique(cases$record_id),files$record_id)
   count<-table(cases$record_id)
@@ -142,6 +142,16 @@ run_ostara_case_mechanism_fulltext_pilot <- function(
       paste(vapply(seq_along(page_text),function(i)
         paste0("[PAGE ",i,"]\n",page_text[[i]]),character(1)),
         collapse="\n\n")
+    } else if(tolower(tools::file_ext(p))%in%c("xml","json")) {
+      # Reuse the existing W09 structured-content reader, preserving
+      # established section anchors and extraction safeguards.
+      id<-tools::file_path_sans_ext(basename(p))
+      w09<-dirname(dirname(p))
+      src<-w09_text_payload(w09,id,max_pages=0L)
+      if(!identical(normal(src$path),normal(p)))
+        stop("W09 structured source selected a different file: ",p)
+      if(!nzchar(trimws(src$text)))stop("Empty W09 structured source: ",p)
+      src$text
     } else {
       txt<-paste(readLines(p,warn=FALSE,encoding="UTF-8"),collapse="\n")
       if(!nzchar(trimws(txt)))stop("Empty text source: ",p)
