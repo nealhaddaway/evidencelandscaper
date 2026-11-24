@@ -73,6 +73,7 @@ request_page <- function(cursor_mark, requested) {
         cursorMark=cursor_mark,
         synonym="false"
       ) |>
+      req_timeout(120) |>
       req_error(is_error=function(resp) FALSE)
     resp <- tryCatch(req_perform(req), error=identity)
     if (!inherits(resp,"error")) {
@@ -82,7 +83,10 @@ request_page <- function(cursor_mark, requested) {
       last_error <- sprintf("Europe PMC HTTP %d: %s",status,substr(body,1L,1200L))
       if (!(status==429L || status>=500L)) stop(last_error,call.=FALSE)
     } else last_error <- conditionMessage(resp)
-    if (attempt<6L) Sys.sleep(min(60,2^(attempt-1L)))
+    if (attempt<6L) {
+      message(sprintf("Europe PMC request attempt %d failed: %s; retrying.", attempt, last_error))
+      Sys.sleep(min(60,2^(attempt-1L)))
+    }
   }
   stop(sprintf("Europe PMC request failed after 6 attempts: %s",last_error),call.=FALSE)
 }
@@ -203,6 +207,8 @@ validation <- list(
   workflow="00_europe_pmc_source_ingestion",source_slug=source_slug,source_code=source_code,
   validated_at=now_utc(),records_recounted_from_raw=recount,records_tracked_during_harvest=retrieved,
   unique_source_ids=length(unique(ids)),duplicate_source_ids_n=length(dup_ids),
+  duplicate_source_ids=as.list(dup_ids),
+  duplicate_record_rows_n=sum(duplicated(ids)),
   unexpected_source_codes=bad_sources,first_page_total_reported=reported_total,
   full_harvest_requested=full_harvest,
   count_matches_first_page_total=if(expected_complete) identical(recount,reported_total) else NA,
