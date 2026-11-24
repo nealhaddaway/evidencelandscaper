@@ -15,7 +15,7 @@ source_slug <- arg("--source-slug","")
 source_collection <- arg("--source-collection","")
 allow_empty <- identical(tolower(arg("--allow-empty","false")),"true")
 if (is.null(input_dir)||is.null(output_dir)) stop("--input-dir and --output-dir are required",call.=FALSE)
-if (!source_code %in% c("MED","ETH","CBA","PPR")) stop("--source-code must be MED, ETH, CBA, or PPR",call.=FALSE)
+if (!source_code %in% c("AGR","MED","ETH","CBA","PPR")) stop("--source-code must be AGR, MED, ETH, CBA, or PPR",call.=FALSE)
 if (!nzchar(source_slug)) stop("--source-slug is required",call.=FALSE)
 if (!nzchar(source_collection)) stop("--source-collection is required",call.=FALSE)
 
