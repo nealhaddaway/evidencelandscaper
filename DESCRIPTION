@@ -11,6 +11,7 @@ Imports:
     jsonlite,
     digest,
     httr2,
+    processx,
     DBI,
     RSQLite
 Roxygen: list(markdown = TRUE)
