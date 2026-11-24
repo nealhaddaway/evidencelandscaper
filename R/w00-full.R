@@ -80,12 +80,12 @@ run_w00_full <- function(map) {
     path
   }
   execute <- function(script, args, source) {
-    output <- suppressWarnings(system2(
-      file.path(R.home("bin"), "Rscript"),
-      args = vapply(c(asset(script), args), shQuote, character(1)),
-      stdout = TRUE, stderr = TRUE))
-    status <- attr(output, "status")
-    if (!is.null(status) && status != 0L)
+    result <- processx::run(file.path(R.home("bin"), "Rscript"),
+      args = c(asset(script), args), echo = TRUE,
+      error_on_status = FALSE, cleanup_tree = TRUE)
+    output <- c(strsplit(result$stdout, "\n", fixed = TRUE)[[1L]],
+                strsplit(result$stderr, "\n", fixed = TRUE)[[1L]])
+    if (result$status != 0L)
       stop(source, " harvester failed:\n", paste(tail(output, 35L),
              collapse = "\n"), call. = FALSE)
     invisible(output)
