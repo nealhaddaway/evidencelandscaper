@@ -72,13 +72,15 @@ lens_request <- function(payload) {
         `Content-Type` = 'application/json',
         Accept = 'application/json'
       ) |>
-      req_body_json(payload, auto_unbox = TRUE)
+      req_body_json(payload, auto_unbox = TRUE) |>
+      req_timeout(120) |>
+      req_error(is_error = function(resp) FALSE)
     resp <- tryCatch(req_perform(req), error = identity)
     if (!inherits(resp, 'error')) {
       status <- resp_status(resp)
       if (status < 400L) return(resp_body_json(resp, simplifyVector = FALSE))
       retryable <- status == 429L || status >= 500L
-      last_error <- sprintf('Lens HTTP %s', status)
+      last_error <- sprintf('Lens HTTP %s: %s', status, substr(resp_body_string(resp), 1L, 500L))
       if (!retryable) stop(last_error)
     } else {
       last_error <- conditionMessage(resp)
@@ -100,6 +102,10 @@ duplicate_ids <- 0L
 no_lens_id <- 0L
 batches <- 0L
 reported_total <- NULL
+partial_path <- paste0(canonical_path, '.partial')
+if (file.exists(partial_path)) stop('Existing partial Lens output; archive this attempt before retrying.')
+con <- file(partial_path, open = 'wt', encoding = 'UTF-8')
+message('Lens: starting first request (120-second timeout per attempt).')
 
 repeat {
   body <- lens_request(payload)
@@ -148,9 +154,11 @@ repeat {
       )
     )
     rows[[length(rows) + 1L]] <- rec
+    writeLines(toJSON(rec, auto_unbox = TRUE, null = 'null', na = 'null', digits = NA), con)
     if (length(rows) >= sample_limit) break
   }
-  message(sprintf('Fetched raw=%d; unique Lens IDs=%d', raw_count, length(rows)))
+  flush(con)
+  message(sprintf('Lens page %d: fetched raw=%d; unique Lens IDs=%d; reported total=%d', batches, raw_count, length(rows), reported_total))
   if (length(rows) >= sample_limit || length(data) == 0L || (!is.null(reported_total) && raw_count >= reported_total)) break
   scroll_id <- body$scroll_id %||% ''
   if (!nzchar(scroll_id)) {
@@ -166,9 +174,8 @@ if (!is.finite(sample_limit) && !is.null(reported_total) && raw_count < reported
 lens_ids <- vapply(rows, function(r) r$identity$lens_id, character(1))
 if (anyDuplicated(lens_ids)) stop('Internal Lens-ID uniqueness failure')
 
-con <- file(canonical_path, open = 'wt', encoding = 'UTF-8')
-for (r in rows) writeLines(toJSON(r, auto_unbox = TRUE, null = 'null', na = 'null', digits = NA), con)
 close(con)
+if (file.exists(canonical_path) || !file.rename(partial_path, canonical_path)) stop('Cannot safely promote completed Lens output.')
 
 manifest <- list(
   workflow = 'workflow_00_full_lens_search',
