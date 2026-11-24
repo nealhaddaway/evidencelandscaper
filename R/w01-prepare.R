@@ -123,6 +123,20 @@ prepare_w01 <- function(map,w00_run=NULL) {
     outdir <- file.path(dest, "adapters", src)
     if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
     output <- file.path(dest, paste0(src, ".jsonl"))
+    if (file.exists(output) && src %in% c("cba","pqdt")) {
+      # Older adapters reintroduced exact duplicates already removed by W00.
+      entry <- registry$imports[[src]]
+      mf <- file.path(entry$import_directory,"manifest.json")
+      imported <- jsonlite::fromJSON(mf,simplifyVector=FALSE)
+      n <- sum(nzchar(trimws(readLines(output,warn=FALSE,encoding="UTF-8"))))
+      if (n != expected && n == imported$records$parsed_across_chunks &&
+          n - expected == imported$records$exact_duplicate_rows_removed &&
+          identical(digest::digest(file=mf,algo="sha256",serialize=FALSE),entry$manifest_sha256)) {
+        backup <- tempfile(pattern=paste0(src,"-legacy-"),tmpdir=dest,fileext=".jsonl")
+        if(!file.rename(output,backup)) stop("Cannot archive legacy RIS adapter output.")
+        message("[W01 prepare] Archived legacy ",src," output with repeated export rows: ",backup)
+      }
+    }
     if (file.exists(output)) {
       validate_output(output, src, expected)
       paths[[src]] <- output
@@ -163,22 +177,37 @@ prepare_w01 <- function(map,w00_run=NULL) {
       if (is.null(entry)) stop("Missing manual import registry: ", src)
       imported <- jsonlite::fromJSON(file.path(entry$import_directory,
                                      "manifest.json"), simplifyVector = FALSE)
-      raw_root <- file.path(outdir, "original_ris")
-      dir.create(raw_root)
+      sha <- function(p) digest::digest(file=p,algo="sha256",serialize=FALSE)
+      if (!identical(sha(file.path(entry$import_directory,"manifest.json")),entry$manifest_sha256) ||
+          !identical(imported$status,"success") ||
+          as.integer(imported$records$unique_records_for_handover)!=expected)
+        stop("Manual RIS manifest mismatch: ",src)
       for (f in imported$chunks$files) {
-        original <- file.path(entry$import_directory, f$path)
-        if (!identical(digest::digest(file = original, algo = "sha256",
-                                      serialize = FALSE), f$sha256))
-          stop("Manual RIS checksum mismatch: ", src)
-        dest_file <- file.path(raw_root, basename(original))
-        if (file.exists(dest_file)) stop("Duplicate RIS filename: ", src)
-        if (!file.copy(original, dest_file))
-          stop("Could not copy original RIS: ", src)
+        original <- file.path(entry$import_directory,f$path)
+        if (!identical(sha(original),f$sha256)) stop("Manual RIS checksum mismatch: ",src)
       }
-      run_script("workflow_01_generic_ris_to_sidecar.R",
-        c("--input-dir", raw_root, "--source", src,
-          "--submission-id", basename(dirname(entry$import_directory)),
-          "--output", output))
+      handoff <- file.path(entry$import_directory,"handoff","records.jsonl")
+      if (!identical(sha(handoff),entry$handoff_sha256) ||
+          !identical(sha(handoff),imported$files$handoff_jsonl$sha256))
+        stop("Manual RIS handoff checksum mismatch: ",src)
+      lines <- readLines(handoff,warn=FALSE,encoding="UTF-8")
+      lines <- lines[nzchar(trimws(lines))]
+      if(length(lines)!=expected) stop("Manual RIS handoff count mismatch: ",src)
+      rows <- lapply(lines,jsonlite::fromJSON,simplifyVector=FALSE)
+      rows <- lapply(rows,function(x) {
+        # W01 expects structured author objects, whereas W00 RIS stores names.
+        au <- x$mapped_fields$authors
+        if(length(au)) x$mapped_fields$authors <- lapply(au,function(a)
+          if(is.list(a)) a else list(full_name=as.character(a)))
+        x$mapped_fields$author_string <- if(length(au)) paste(vapply(
+          x$mapped_fields$authors,function(a) as.character(a$full_name),character(1)),collapse="; ") else NULL
+        x
+      })
+      tmp <- tempfile(pattern=paste0(src,"-handoff-"),tmpdir=dest)
+      writeLines(vapply(rows,function(x) as.character(jsonlite::toJSON(x,
+        auto_unbox=TRUE,null="null",na="null",digits=NA)),character(1)),tmp,useBytes=TRUE)
+      validate_output(tmp,src,expected)
+      if(!file.rename(tmp,output)) stop("Cannot promote verified RIS handoff: ",src)
     } else stop("W01 main does not support source: ", src, call. = FALSE)
     validate_output(output, src, expected)
     paths[[src]] <- output
