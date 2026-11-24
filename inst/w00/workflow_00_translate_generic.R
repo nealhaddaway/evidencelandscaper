@@ -70,11 +70,61 @@ translation_notes <- list()
 expand_native_proximity <- function(expr, source) {
   atom_pattern <- '"([^"\\\\]|\\\\.)*"|\\(|\\)|[^[:space:]()"]+'
   toks <- regmatches(expr, gregexpr(atom_pattern, expr, perl=TRUE))[[1L]]
-  if (!length(toks)) stop("W00: empty proximity expression.")
   is_prox <- function(x) grepl("^W/[0-9]+$", x, ignore.case=TRUE)
   if (!any(is_prox(toks))) return(list(expr=expr, notes=character()))
   atom <- function(x) {
-    x <- sub('^"(.*)"translate_advanced <- function(expr, source, fields=NULL) {
+    if (startsWith(x, '"') && endsWith(x, '"')) x <- substr(x,2L,nchar(x)-1L)
+    if (!grepl("^[[:alnum:] _?*-]+$", x) || toupper(x) %in% c("AND","OR","NOT"))
+      stop("W00: unsupported proximity operand; supply database_overrides.", call.=FALSE)
+    x
+  }
+  operand <- function(i, direction) {
+    if (i < 1L || i > length(toks)) stop("W00: missing proximity operand.")
+    boundary <- if (direction<0L) ")" else "("
+    if (toks[[i]] != boundary) return(list(lo=i, hi=i, terms=atom(toks[[i]])))
+    j <- i+direction
+    opposite <- if (direction<0L) "(" else ")"
+    while (j>=1L && j<=length(toks) && toks[[j]]!=opposite) j<-j+direction
+    if (j<1L || j>length(toks)) stop("W00: unbalanced proximity group.")
+    lo<-min(i,j); hi<-max(i,j)
+    if(hi-lo<2L) stop("W00: empty proximity group.")
+    inside<-toks[seq.int(lo+1L,hi-1L)]
+    if (length(inside)%%2L!=1L || (length(inside)>1L &&
+         any(toupper(inside[seq.int(2L,length(inside),by=2L)])!="OR")))
+      stop("W00: proximity group must contain only OR-separated terms; supply database_overrides.",call.=FALSE)
+    list(lo=lo,hi=hi,terms=vapply(inside[seq.int(1L,length(inside),by=2L)],atom,character(1)))
+  }
+  expand_lens <- function(x) {
+    if (!grepl("[*?]",x)) return(x)
+    vals <- unlist(cfg$lens_word_forms[[x]],use.names=FALSE)
+    if (!length(vals) || any(!grepl("^[[:alnum:] _-]+$",vals)))
+      stop("W00: Lens proximity requires lens_word_forms for ",x,
+           " or a complete database_overrides.lens query.",call.=FALSE)
+    unique(vals)
+  }
+  n <- 0L
+  while (any(is_prox(toks))) {
+    i <- which(is_prox(toks))[1L]
+    l <- operand(i-1L,-1L); r <- operand(i+1L,1L)
+    distance<-as.integer(sub("^W/","",toupper(toks[[i]])))
+    if (is.na(distance)||distance<1L) stop("W00: invalid proximity distance.")
+    left<-l$terms; right<-r$terms
+    if(source=="lens") {
+      left<-unique(unlist(lapply(left,expand_lens),use.names=FALSE))
+      right<-unique(unlist(lapply(right,expand_lens),use.names=FALSE))
+    }
+    grid<-expand.grid(left=left,right=right,stringsAsFactors=FALSE)
+    if(source=="openalex") pairs<-sprintf('("%s" and "%s" within %d words of each other)',grid$left,grid$right,distance)
+    else pairs<-sprintf('"%s %s"~%d',grid$left,grid$right,distance)
+    n<-n+length(pairs)
+    toks<-c(if(l$lo>1L)toks[seq_len(l$lo-1L)],paste0("(",paste(unique(pairs),collapse=" OR "),")"),
+            if(r$hi<length(toks))toks[seq.int(r$hi+1L,length(toks))])
+  }
+  list(expr=paste(toks,collapse=" "),
+       notes=c(sprintf("Expanded unordered proximity into %d individual pairs",n),
+       if(source=="lens")"Lens phrase slop and explicit word forms approximate original proximity"))
+}
+translate_advanced <- function(expr, source, fields=NULL) {
   native <- if(source %in% c("openalex","lens")) expand_native_proximity(expr,source) else list(expr=expr,notes=character())
   expr <- native$expr
   # Split into quoted phrases and unquoted spans, retaining every character.
