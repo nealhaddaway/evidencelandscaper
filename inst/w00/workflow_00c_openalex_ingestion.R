@@ -69,12 +69,8 @@ request_page <- function(cursor, count) {
         Authorization = paste("Bearer", api_key),
         `User-Agent` = "LivingEvidenceMap OpenAlex ingestion"
       ) |>
-      req_url_query(
-        oql = query,
-        filter = if (nzchar(filter_query)) filter_query else NULL,
-        `per-page` = count,
-        cursor = cursor
-      ) |>
+      req_url_query(filter = if (nzchar(filter_query)) filter_query else NULL) |>
+      req_body_json(list(oql = query, per_page = count, cursor = cursor)) |>
       req_error(is_error = function(resp) FALSE)
 
     resp <- tryCatch(req_perform(req), error = identity)
