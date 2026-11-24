@@ -201,7 +201,8 @@ run_w00_full <- function(map) {
           "workflow_00d_agricola_ingestion.R" else
           "workflow_00f_europe_pmc_source_ingestion.R"
         args <- c("--query", q, "--max-records", "all",
-                  "--page-size", "100", "--output-dir", dest)
+                  "--page-size", if(src=="agricola") "100" else "1000",
+                  "--output-dir", dest)
         if (src != "agricola") {
           code <- c(pubmed = "MED", ethos = "ETH",
                     epmc_preprints = "PPR")[[src]]
