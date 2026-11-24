@@ -62,6 +62,39 @@ lens_expand_phrase <- function(term) {
   if (!grepl('[[:alpha:]]$', base)) return(term)
   paste0('("', base, '" OR "', base, 's")')
 }
+# Translate unquoted Scopus-style unordered proximity operators only.
+# Unsupported providers deliberately broaden proximity to Boolean AND.
+translation_notes <- list()
+translate_advanced <- function(expr, source, fields=NULL) {
+  # Split into quoted phrases and unquoted spans, retaining every character.
+  parts <- regmatches(expr, gregexpr('"([^"\\\\]|\\\\.)*"|[^"]+', expr, perl=TRUE))[[1L]]
+  if (!identical(paste0(parts, collapse=""), expr))
+    stop("W00: cannot safely tokenize advanced expression", call.=FALSE)
+  notes <- character()
+  for (i in seq_along(parts)) {
+    x <- parts[[i]]
+    if (startsWith(x, '"')) {
+      # Lens query-string phrase wildcard syntax is not equivalent to
+      # wildcard tokens. Broaden to conjunction of the original tokens.
+      if (source=="lens" && grepl("*", x, fixed=TRUE)) {
+        words <- strsplit(substr(x, 2L, nchar(x)-1L), "[[:space:]]+")[[1L]]
+        if (any(!grepl("^[[:alnum:]_-]+[*?]?$", words)))
+          stop("W00: complex Lens wildcard phrase requires database override: ", x, call.=FALSE)
+        parts[[i]] <- paste0("(", paste(words, collapse=" AND "), ")")
+        notes <- c(notes, "Lens wildcard phrases broadened to AND of constituent tokens")
+      }
+      next
+    }
+    pattern <- "\\bW/([0-9]+)\\b"
+    if (grepl(pattern, x, ignore.case=TRUE, perl=TRUE)) {
+      replacement <- if(source=="scopus") "W/\\1" else if(source=="wos") "NEAR/\\1" else if(!is.null(fields)) "N\\1" else "AND"
+      parts[[i]] <- gsub(pattern, replacement, x, ignore.case=TRUE, perl=TRUE)
+      notes <- c(notes, if(replacement=="AND") "Unordered W/n proximity broadened to AND" else paste("Unordered W/n translated for",source))
+    }
+  }
+  translation_notes[[source]] <<- unique(notes)
+  paste0(parts, collapse="")
+}
 render<-function(source,fields=NULL){
   override<-cfg$database_overrides[[source]]
   if(!is.null(override)){
@@ -76,6 +109,7 @@ render<-function(source,fields=NULL){
   }
   if(is.null(concepts)){
     expr<-as.character(cfg$advanced_boolean)
+    expr<-translate_advanced(expr,source,fields)
     if(length(expr)!=1L||!nzchar(trimws(expr)))stop("W00: missing advanced Boolean expression",call.=FALSE)
     if(source=="openalex")return(sprintf("works where title-abstract-keywords has (%s)",expr))
     if(source=="lens")return(sprintf("(title:(%s) OR abstract:(%s) OR keyword:(%s))",expr,expr,expr))
@@ -177,7 +211,7 @@ if(run_type=="fortnightly"){
 dir.create(output_dir,recursive=TRUE,showWarnings=FALSE)
 plan<-list(workflow="00",status="planned",run_type=run_type,search_version=cfg$search_version,
   source_queries=queries,expansion=list(target=if(run_type=="expansion")target else NULL,term=if(run_type=="expansion")additional else NULL),
-  translation="topic-agnostic-v1",fortnightly_window=NULL,
+  translation="topic-agnostic-v1",translation_notes=translation_notes,fortnightly_window=NULL,
   source_mode_support=setNames(lapply(source_names,function(x)list(full=TRUE,fortnightly=TRUE,expansion=TRUE)),source_names))
 writeLines(toJSON(plan,auto_unbox=TRUE,pretty=TRUE,null="null"),file.path(output_dir,"search_plan.json"))
 writeLines(toJSON(queries,auto_unbox=TRUE,pretty=TRUE,null="null"),file.path(output_dir,"source_queries.json"))
