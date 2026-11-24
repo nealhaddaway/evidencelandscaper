@@ -118,7 +118,10 @@ render<-function(source,fields=NULL){
       src<-c(agricola="AGR",pubmed="MED",ethos="ETH",cba="CBA",epmc_preprints="PPR")[[source]]
       return(sprintf("SRC:%s AND TITLE_ABS:(%s)",src,expr))
     }
-    if(source=="wos")return(paste(vapply(c("TI","AB","AK"),function(tag)sprintf("(%s=(%s))",tag,expr),character(1)),collapse=" OR "))
+    if(source=="wos"){
+      translation_notes[[source]] <<- unique(c(translation_notes[[source]], "Starter API TS includes title, abstract, author keywords and Keywords Plus"))
+      return(sprintf("TS=(%s)",expr))
+    }
     if(!is.null(fields))return(paste0("(",paste(sprintf("%s (%s)",fields,expr),collapse=" OR "),")"))
     stop(sprintf("W00: unsupported source %s",source),call.=FALSE)
   }
@@ -160,9 +163,8 @@ render<-function(source,fields=NULL){
       return(sprintf("SRC:%s AND TITLE_ABS:(%s)",src,pair_expr))
     }
     if(source=="wos"){
-      if(is_pair)return(paste(vapply(c("TI","AB","AK"),function(field)
-        sprintf("(%s=(%s))",field,pair_expr),character(1)),collapse=" OR "))
-      return(paste(vapply(c("TI","AB","AK"),function(field)sprintf("%s=(%s)",field,expr),character(1)),collapse=" OR "))
+      translation_notes[[source]] <<- unique(c(translation_notes[[source]], "Starter API TS includes title, abstract, author keywords and Keywords Plus"))
+      return(sprintf("TS=(%s)",pair_expr))
     }
     if(source=="lens"&&is_pair){
       block<-function(t){
