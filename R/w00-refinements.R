@@ -1,3 +1,41 @@
+# Internal renderer for structured, reusable proximity refinement inputs.
+# Each pair uses individual operands, never Boolean groups within proximity.
+.w00_refinement_query <- function(spec, source) {
+  if (is.character(spec) && length(spec)==1L && nzchar(spec)) return(spec)
+  if (!is.list(spec) || !identical(spec$kind, "pairwise_proximity"))
+    stop("Unsupported refinement query specification.")
+  if (!source %in% c("openalex", "lens")) stop("Unsupported proximity provider.")
+  distance <- spec$distance
+  if (!is.numeric(distance) || length(distance)!=1L || is.na(distance) ||
+      distance < 1 || distance != as.integer(distance)) stop("Invalid proximity distance.")
+  quote_term <- function(x) {
+    if (any(!grepl("^[[:alnum:] _?*-]+$", x))) stop("Invalid proximity term.")
+    paste0('"', x, '"')
+  }
+  pairs <- unlist(lapply(spec$groups, function(g) {
+    left <- unlist(g$left, use.names=FALSE)
+    right <- unlist(g$right, use.names=FALSE)
+    if (!length(left) || !length(right)) stop("Empty proximity operand group.")
+    grid <- expand.grid(left=left, right=right, stringsAsFactors=FALSE)
+    if (source=="openalex") {
+      return(sprintf("(%s and %s within %d words of each other)",
+        quote_term(grid$left), quote_term(grid$right), as.integer(distance)))
+    }
+    if (any(grepl("[*?]", c(left,right)))) stop("Lens phrase proximity requires explicit word forms.")
+    sprintf('"%s %s"~%d', grid$left, grid$right, as.integer(distance))
+  }), use.names=FALSE)
+  if (!length(pairs)) stop("No proximity pairs.")
+  terms <- paste0("(", paste(unique(c(pairs, unlist(spec$additional_phrases,use.names=FALSE))), collapse=" OR "), ")")
+  expr <- paste(terms, spec$remainder, sep=" AND ")
+  fields <- unlist(spec$fields,use.names=FALSE)
+  if (source=="openalex") {
+    if (length(fields)!=1L || !fields %in% c("title-abstract","title-abstract-keywords")) stop("Invalid OpenAlex fields.")
+    return(sprintf("works where %s has (%s) and type is not [dataset](dataset)", fields, expr))
+  }
+  if (!length(fields) || any(!fields %in% c("title","abstract","keyword"))) stop("Invalid Lens fields.")
+  paste0("(", paste(sprintf("%s:(%s)",fields,expr),collapse=" OR "), ") AND NOT publication_type:dataset")
+}
+
 #' Scope database-specific search refinements without harvesting records
 #' @param map Existing evidence map path or name.
 #' @param variants JSON file containing variants with id and source-specific complete queries, and baseline_counts and baseline_run.
@@ -38,7 +76,8 @@ scope_w00_refinements <- function(map, variants, strategy) {
       for (src in intersect(sources, names(v))) {
         message("\n[refinement] ", v$id, " | ", src)
         strategy <- base_strategy
-        strategy$database_overrides[[src]] <- v[[src]]
+        query <- .w00_refinement_query(v[[src]], src)
+        strategy$database_overrides[[src]] <- query
         path <- file.path(refinement_dir, paste0(v$id, "-", src, ".json"))
         jsonlite::write_json(strategy, path, auto_unbox=TRUE, pretty=TRUE)
         run_id <- NA_character_
@@ -46,7 +85,7 @@ scope_w00_refinements <- function(map, variants, strategy) {
           p <- plan_w00(map_dir, strategy=path, sources=src, mode="full")
           run_id <- basename(p$run_dir)
           actual <- jsonlite::fromJSON(p$search_plan, simplifyVector=FALSE)$source_queries[[src]]
-          stopifnot(identical(actual, v[[src]]))
+          stopifnot(identical(actual, query))
           saveRDS(p, file.path(p$run_dir, "plan_reference.rds"))
           cts <- read.csv(scope_w00(p), stringsAsFactors=FALSE)
           stopifnot(nrow(cts)==1L, identical(cts$source_slug, src))
