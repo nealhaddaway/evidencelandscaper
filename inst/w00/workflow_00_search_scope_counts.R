@@ -112,7 +112,7 @@ count_openalex <- function(query) {
       Authorization = paste("Bearer", token),
       `User-Agent` = "LivingEvidenceMap W00 search scoping"
     ) |>
-    req_url_query(oql = query, `per-page` = 1L, cursor = "*") |>
+    req_body_json(list(oql = query, per_page = 1L, cursor = "*")) |>
     req_error(is_error = function(resp) FALSE)
   resp <- retry_request(req, "OpenAlex")
   x <- fromJSON(resp_body_string(resp), simplifyVector = FALSE)
