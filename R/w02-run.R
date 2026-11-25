@@ -23,20 +23,30 @@ run_w02_main <- function(scored,use_scopus=TRUE) {
     message("[W02] Reusing verified Europe PMC/Scopus enrichment.")
     return(invisible(folder))
   }
-  if(any(file.exists(c(result,audit))))
-    stop("Incomplete W02-main output present; preserve files for inspection.")
+  checkpoint <- file.path(folder,"checkpoints")
+  if(any(file.exists(c(result,audit)))) {
+    if(!file.exists(file.path(checkpoint,"execution.rds")))
+      stop("Incomplete legacy W02-main output present; preserve files for inspection.")
+    archive <- tempfile(pattern="interrupted-output-",tmpdir=folder)
+    dir.create(archive)
+    for(p in c(result,audit)[file.exists(c(result,audit))])
+      if(!file.rename(p,file.path(archive,basename(p))))
+        stop("Cannot archive incomplete W02 output: ",p)
+    message("[W02] Archived interrupted final output: ",archive)
+  }
   script<-system.file("w02","workflow_02_metadata_enrichment.R",
                       package="evidencelandscaper")
   if(!nzchar(script))stop("Original W02-main enrichment script not installed.")
   args<-c(script,"--input",input,"--output",result,"--audit",audit,
           "--report",report,"--skip-scopus",if(use_scopus)"false" else "true",
-          "--enrich-author-keywords","false")
-  out<-suppressWarnings(system2(file.path(R.home("bin"),"Rscript"),
-    args=vapply(args,shQuote,character(1)),stdout=TRUE,stderr=TRUE))
-  status<-attr(out,"status")
-  if(!is.null(status)&&status!=0L)
-    stop("Original W02-main enrichment failed:\n",
-         paste(tail(out,35L),collapse="\n"),call.=FALSE)
+          "--enrich-author-keywords","false","--checkpoint-dir",checkpoint,
+          "--progress-every","25","--request-timeout","45")
+  message("[W02] Starting resumable enrichment with live output.")
+  out <- processx::run(file.path(R.home("bin"),"Rscript"),args=args,
+    echo=TRUE,error_on_status=FALSE,cleanup_tree=TRUE)
+  if(out$status!=0L)
+    stop("W02-main enrichment failed; completed checkpoints retained:\n",
+         paste(tail(strsplit(paste(out$stdout,out$stderr,sep="\n"),"\n")[[1L]],35L),collapse="\n"),call.=FALSE)
   if(!file.exists(report)||!file.exists(result))
     stop("W02-main outputs missing.")
   message("[W02] Original Europe PMC and Scopus enrichment completed.")
