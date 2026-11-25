@@ -254,11 +254,16 @@ epmc_batch_lookup <- function(ds){
      length(hits)!=n)
     stop("Europe PMC batch incomplete or malformed; use individual lookups.")
   hit_dois <- vapply(hits,function(h)norm_doi(h$doi) %||% "",character(1))
-  if(any(!hit_dois %in% safe)) stop("Unexpected DOI in Europe PMC batch.")
+  # Europe PMC can return approximate matches, including records with no DOI.
+  # Ignore these exactly as the individual lookup does. If any unexpected
+  # hits occur, individually verify all requested DOIs lacking an exact hit.
+  unexpected <- !hit_dois %in% safe
+  if(any(unexpected)) message("[W02] Europe PMC batch: ignoring ",sum(unexpected),
+    " non-exact hits; verifying unmatched DOIs individually.")
   ans <- list()
   for(d in safe){
     ix <- which(hit_dois==d)
-    if(length(ix)>1L) next
+    if(length(ix)>1L || (!length(ix)&&any(unexpected))) next
     if(!length(ix)){
       x <- list(status=st,title=NULL,abstract=NULL,author_keywords=character(),
         returned_doi=NULL,outcome="no_exact_doi_match",attempts=z$attempts)
