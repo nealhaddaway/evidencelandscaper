@@ -22,6 +22,9 @@ report_path <- arg("--report")
 limit_arg <- arg("--limit",NULL)
 record_ids_path <- arg("--record-ids",NULL)
 progress_every <- as.integer(arg("--progress-every","100"))
+checkpoint_dir <- arg("--checkpoint-dir",NULL)
+request_timeout <- as.numeric(arg("--request-timeout","45"))
+if(!is.finite(request_timeout)||request_timeout<=0) stop("Invalid request timeout.")
 delay <- as.numeric(arg("--delay","0.5"))
 max_rate_limit_wait <- as.numeric(arg("--max-rate-limit-wait","60"))
 scopus_rate_limit_trip <- as.integer(arg("--scopus-rate-limit-trip","3"))
@@ -174,7 +177,7 @@ rate_limit_wait_seconds <- function(resp,fallback){
 perform_retry <- function(req,max_attempts=4L){
   errors <- character()
   for(attempt in seq_len(max_attempts)){
-    resp <- tryCatch(req_perform(req),error=identity)
+    resp <- tryCatch(req_perform(req_timeout(req,request_timeout) |> req_error(is_error=function(resp) FALSE)),error=identity)
     if(!inherits(resp,"error")){
       st <- resp_status(resp)
       if(st<400L || !retryable(st)) return(list(resp=resp,attempts=attempt,errors=errors))
@@ -444,6 +447,52 @@ processed_eligible <- 0L
 consecutive_scopus_rate_limits <- 0L
 scopus_rate_limit_circuit_open <- FALSE
 
+# Durable, atomic checkpoints of completed eligible records only. The input
+# remains immutable; replay restores both record data and cumulative counters.
+last_completed_i <- 0L
+checkpoint_spec <- list(schema="w02-record-checkpoint-v1",input_sha256=input_sha,
+  skip_scopus=skip_scopus,enrich_author_keywords=enrich_author_keywords,
+  selected_record_ids=selected_record_ids,limit=limit,delay=delay,
+  max_rate_limit_wait=max_rate_limit_wait,scopus_rate_limit_trip=scopus_rate_limit_trip,
+  recheck_after_days=recheck_after_days,request_timeout=request_timeout)
+atomic_rds <- function(x,path) {
+  tmp <- tempfile(pattern=".pending-",tmpdir=dirname(path))
+  saveRDS(x,tmp,compress=FALSE)
+  if(!file.rename(tmp,path)) stop("Cannot commit W02 checkpoint: ",path)
+}
+if(!is.null(checkpoint_dir)) {
+  dir.create(checkpoint_dir,recursive=TRUE,showWarnings=FALSE)
+  spec_path <- file.path(checkpoint_dir,"execution.rds")
+  if(file.exists(spec_path)) {
+    if(!identical(readRDS(spec_path),checkpoint_spec))
+      stop("W02 checkpoint input/configuration mismatch; refusing resume.")
+  } else {
+    if(length(list.files(checkpoint_dir,pattern="^record-")))
+      stop("W02 checkpoint specification missing.")
+    atomic_rds(checkpoint_spec,spec_path)
+  }
+  saved <- sort(list.files(checkpoint_dir,pattern="^record-[0-9]{8}[.]rds$",full.names=TRUE))
+  for(p in saved) {
+    z <- readRDS(p)
+    i0 <- z$index
+    if(length(i0)!=1L||is.na(i0)||i0<=last_completed_i||i0>length(rows)||
+       !identical(z$input_sha256,input_sha)||
+       !identical(z$row$identity,rows[[i0]]$identity)||
+       !identical(z$audit$record_id,clean_text(rows[[i0]]$identity$record_id %||% rows[[i0]]$identity$lens_id))||
+       !identical(z$processed_eligible,length(audit)+1L))
+      stop("Invalid W02 checkpoint: ",p)
+    rows[[i0]] <- z$row
+    audit[[length(audit)+1L]] <- z$audit
+    counts <- z$counts
+    processed_eligible <- z$processed_eligible
+    consecutive_scopus_rate_limits <- z$consecutive_scopus_rate_limits
+    scopus_rate_limit_circuit_open <- z$scopus_rate_limit_circuit_open
+    last_completed_i <- i0
+  }
+  message("[W02] Restored ",processed_eligible," completed eligible records.")
+}
+message("[W02] Loaded ",length(rows)," canonical records; request timeout ",request_timeout," seconds.")
+
 previous_attempt_due <- function(meta){
   if(is.null(meta) || !is.list(meta)) return(TRUE)
   if(isTRUE(meta$technical_error)) return(TRUE)
@@ -456,6 +505,7 @@ previous_attempt_due <- function(meta){
 }
 
 for(i in seq_along(rows)){
+  if(i<=last_completed_i) next
   r <- rows[[i]]
   if(is.null(r$canonical)) r$canonical <- list()
   record_id <- clean_text((r$identity %||% list())$record_id %||% (r$identity %||% list())$lens_id)
@@ -572,6 +622,7 @@ for(i in seq_along(rows)){
         counts$scopus_rate_limit_events <- counts$scopus_rate_limit_events + 1L
         if(consecutive_scopus_rate_limits >= scopus_rate_limit_trip){
           scopus_rate_limit_circuit_open <- TRUE
+          message("[W02] Scopus rate-limit circuit opened; remaining Scopus requests deferred.")
         }
       } else {
         consecutive_scopus_rate_limits <- 0L
@@ -677,6 +728,19 @@ for(i in seq_along(rows)){
   )
   rows[[i]] <- r
   audit[[length(audit)+1L]] <- rec_audit
+  if(!is.null(checkpoint_dir)) {
+    atomic_rds(list(index=i,input_sha256=input_sha,row=r,audit=rec_audit,
+      counts=counts,processed_eligible=processed_eligible,
+      consecutive_scopus_rate_limits=consecutive_scopus_rate_limits,
+      scopus_rate_limit_circuit_open=scopus_rate_limit_circuit_open),
+      file.path(checkpoint_dir,sprintf("record-%08d.rds",i)))
+  }
+  if(processed_eligible==1L || processed_eligible %% progress_every==0L) {
+    message("[W02] Completed ",processed_eligible," eligible records; abstracts recovered: ",
+      counts$europepmc_abstract_filled+counts$scopus_abstract_filled,
+      "; technical errors: ",counts$technical_error_records)
+    flush.console()
+  }
 }
 
 if(!is.null(selected_record_ids)){
