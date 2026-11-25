@@ -4,9 +4,13 @@
 #' ScienceDirect cached fallback is applied subsequently, never over W01.
 #' @param scored W01 full_scoring output.
 #' @param use_scopus Whether to use the existing Scopus fallback.
+#' @param epmc_batch_size Number of DOI clauses per Europe PMC query (1–100).
 #' @return W02-main output directory, invisibly.
 #' @export
-run_w02_main <- function(scored,use_scopus=TRUE) {
+run_w02_main <- function(scored,use_scopus=TRUE,epmc_batch_size=50L) {
+  epmc_batch_size <- as.integer(epmc_batch_size)
+  if(length(epmc_batch_size)!=1L||is.na(epmc_batch_size)||epmc_batch_size<1L||epmc_batch_size>100L)
+    stop("Europe PMC batch size must be 1–100.")
   input<-prepare_w02(scored)
   folder<-dirname(input)
   result<-file.path(folder,"enriched.jsonl")
@@ -40,7 +44,8 @@ run_w02_main <- function(scored,use_scopus=TRUE) {
   args<-c(script,"--input",input,"--output",result,"--audit",audit,
           "--report",report,"--skip-scopus",if(use_scopus)"false" else "true",
           "--enrich-author-keywords","false","--checkpoint-dir",checkpoint,
-          "--progress-every","25","--request-timeout","45")
+          "--progress-every","25","--request-timeout","45",
+          "--epmc-batch-size",as.character(epmc_batch_size))
   message("[W02] Starting resumable enrichment with live output.")
   out <- processx::run(file.path(R.home("bin"),"Rscript"),args=args,
     echo=TRUE,error_on_status=FALSE,cleanup_tree=TRUE)
