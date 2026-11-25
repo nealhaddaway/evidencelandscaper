@@ -23,6 +23,9 @@ limit_arg <- arg("--limit",NULL)
 record_ids_path <- arg("--record-ids",NULL)
 progress_every <- as.integer(arg("--progress-every","100"))
 checkpoint_dir <- arg("--checkpoint-dir",NULL)
+epmc_batch_size <- as.integer(arg("--epmc-batch-size","1"))
+if(is.na(epmc_batch_size)||epmc_batch_size<1L||epmc_batch_size>100L)
+  stop("Europe PMC batch size must be 1–100.")
 request_timeout <- as.numeric(arg("--request-timeout","45"))
 if(!is.finite(request_timeout)||request_timeout<=0) stop("Invalid request timeout.")
 delay <- as.numeric(arg("--delay","0.5"))
@@ -212,7 +215,10 @@ epmc_lookup <- function(d){
   hits <- dat$resultList$result %||% list()
   exact <- Filter(function(h) identical(norm_doi(h$doi),d),hits)
   if(!length(exact)) return(list(status=st,title=NULL,abstract=NULL,author_keywords=character(),returned_doi=NULL,outcome="no_exact_doi_match",attempts=z$attempts))
-  h <- exact[[1L]]
+  epmc_extract(exact[[1L]],st,z$attempts)
+}
+
+epmc_extract <- function(h,st,attempts){
   kws <- clean_keyword_values((h$keywordList %||% list())$keyword %||% NULL)
   list(
     status=st,
@@ -221,8 +227,49 @@ epmc_lookup <- function(d){
     author_keywords=kws,
     returned_doi=norm_doi(h$doi),
     outcome=if(!is.null(clean_abstract(h$abstractText))||!is.null(clean_text(h$title))||length(kws))"exact_doi_metadata_returned" else "exact_doi_no_metadata",
-    attempts=z$attempts
+    attempts=attempts
   )
+}
+
+# Batch exact DOI clauses. Fall back to the original single-record lookup
+# for ambiguous matches or an unverified/incomplete batch response.
+epmc_batch_lookup <- function(ds){
+  ds <- unique(ds)
+  safe <- ds[!grepl('"',ds,fixed=TRUE) & !grepl(intToUtf8(92),ds,fixed=TRUE)]
+  if(!length(safe)) return(list())
+  query <- paste(sprintf('DOI:"%s"',safe),collapse=" OR ")
+  req <- request("https://www.ebi.ac.uk/europepmc/webservices/rest/search") |>
+    req_url_query(query=paste0("(",query,")"),format="json",resultType="core",pageSize=1000) |>
+    req_headers(Accept="application/json",`User-Agent`="LivingEvidenceMap-Workflow02/1.0")
+  # A batch failure should not multiply provider retries before falling back.
+  z <- perform_retry(req,max_attempts=1L)
+  st <- resp_status(z$resp)
+  if(st!=200L) stop("Europe PMC batch HTTP ",st)
+  dat <- resp_body_json(z$resp,simplifyVector=FALSE)
+  n <- suppressWarnings(as.integer(dat$hitCount))
+  hits <- dat$resultList$result
+  if(length(n)!=1L || is.na(n) || n<0L ||
+     !is.list(dat$resultList) ||
+     (!is.null(hits)&&!is.list(hits)) ||
+     length(hits)!=n)
+    stop("Europe PMC batch incomplete or malformed; use individual lookups.")
+  hit_dois <- vapply(hits,function(h)norm_doi(h$doi) %||% "",character(1))
+  if(any(!hit_dois %in% safe)) stop("Unexpected DOI in Europe PMC batch.")
+  ans <- list()
+  for(d in safe){
+    ix <- which(hit_dois==d)
+    if(length(ix)>1L) next
+    if(!length(ix)){
+      x <- list(status=st,title=NULL,abstract=NULL,author_keywords=character(),
+        returned_doi=NULL,outcome="no_exact_doi_match",attempts=z$attempts)
+    } else {
+      x <- epmc_extract(hits[[ix]],st,z$attempts)
+    }
+    x$lookup_mode <- "batch_exact_doi"
+    x$batch_dois <- length(safe)
+    ans[[d]] <- x
+  }
+  ans
 }
 
 scopus_extract <- function(obj){
@@ -504,6 +551,26 @@ previous_attempt_due <- function(meta){
   is.na(age_days) || age_days >= recheck_after_days
 }
 
+# Determine future eligible records once. Cache only the active batch.
+# Do not include the execution-only batch size in checkpoint_spec: changing
+# transport must not invalidate already completed, identity-validated records.
+pending <- which(vapply(seq_along(rows),function(i){
+  if(i<=last_completed_i) return(FALSE)
+  r <- rows[[i]]
+  rid <- clean_text(r$identity$record_id %||% r$identity$lens_id)
+  !is.null(norm_doi(r$canonical$doi)) &&
+    (is_missing(r$canonical$title) || is_missing(r$canonical$abstract) ||
+     (enrich_author_keywords && keywords_missing(r$canonical$author_keywords))) &&
+    previous_attempt_due(r$metadata_enrichment) &&
+    (is.null(selected_record_ids) || (!is.null(rid)&&rid %in% selected_record_ids))
+},logical(1)))
+if(is.finite(limit)) pending <- head(pending,max(0,limit-processed_eligible))
+batch_cache <- list()
+batch_end <- 0L
+batch_enabled <- epmc_batch_size>1L
+message("[W02] Pending eligible records: ",length(pending),
+        "; Europe PMC batch size: ",epmc_batch_size)
+
 for(i in seq_along(rows)){
   if(i<=last_completed_i) next
   r <- rows[[i]]
@@ -543,8 +610,22 @@ for(i in seq_along(rows)){
     quarantined=list()
   )
 
+  if(batch_enabled && i>batch_end){
+    next_ix <- head(pending[pending>=i],epmc_batch_size)
+    if(length(next_ix)){
+      batch_end <- max(next_ix)
+      ds <- vapply(rows[next_ix],function(x)norm_doi(x$canonical$doi),character(1))
+      batch_cache <- tryCatch(epmc_batch_lookup(ds),error=function(e){
+        message("[W02] Europe PMC batch unavailable; reverting to individual lookups: ",conditionMessage(e))
+        batch_enabled <<- FALSE
+        list()
+      })
+      if(batch_enabled) message("[W02] Europe PMC batch: ",length(batch_cache),
+        " DOI results resolved; ",length(unique(ds))-length(batch_cache)," require individual lookup.")
+    }
+  }
   ep <- tryCatch(
-    epmc_lookup(d),
+    if(!is.null(batch_cache[[d]])) batch_cache[[d]] else epmc_lookup(d),
     error=function(e) list(outcome="technical_error",error=conditionMessage(e),title=NULL,abstract=NULL,author_keywords=character(),returned_doi=NULL,status=NULL,attempts=NULL)
   )
   rec_audit$europe_pmc <- ep
@@ -760,6 +841,8 @@ report <- list(
   policy=list(
     eligibility=if(enrich_author_keywords)"DOI present and title, abstract, or author keywords missing" else "DOI present and title or abstract missing",
     overwrite_existing_fields=FALSE,
+    europe_pmc_batch_size=epmc_batch_size,
+    europe_pmc_batch_policy="Complete exact DOI OR responses; ambiguous or invalid batches fall back to original individual DOI lookup",
     europe_pmc_match="exact normalised DOI plus canonical/provider title similarity >= 0.90 for abstract/author-keyword fills; exact DOI may fill a missing title",
     scopus_match="direct DOI Abstract Retrieval with view=META_ABS only; no Search-to-EID fallback",
     abstract_title_guard="if a title is present on both sides, Jaro-Winkler similarity must be >= 0.90; otherwise quarantine",
