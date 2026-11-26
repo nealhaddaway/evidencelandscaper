@@ -4,7 +4,7 @@
 #' are required. No records are added or deleted. The input corpus and export
 #' remain unchanged, and a separate checksummed result is created.
 #' @param scored Finalised W01 full_scoring directory.
-#' @param csv Path to the manually downloaded UTF-8 CSV export.
+#' @param csv Path to a manually downloaded UTF-8 CSV or RIS export.
 #' @param provider Source database, "scopus" or "wos".
 #' @param input_dir Previous W02 corpus directory; defaults to supplementary.
 #' @return Directory containing updated canonical corpus, audit and summary.
@@ -39,8 +39,48 @@ import_w02_manual_abstracts <- function(scored,csv,provider="scopus",input_dir=N
     s <- trimws(gsub("[[:space:]]+"," ",gsub("<[^>]+>"," ",scalar(x))))
     if(tolower(s) %in% c("","[no abstract available]","no abstract available","[no abstract]","no abstract","abstract unavailable","n/a","na","[no abstract provided]","no abstract provided")) "" else s
   }
-  tab <- utils::read.csv(csv,check.names=FALSE,stringsAsFactors=FALSE,
-    colClasses="character",fileEncoding="UTF-8-BOM",na.strings=character())
+  if(tolower(tools::file_ext(csv))=="ris") {
+    lines <- readLines(csv,warn=FALSE,encoding="UTF-8")
+    if(length(lines)) lines[1L] <- sub("^\ufeff","",lines[1L])
+    records <- list(); rec <- NULL; tag <- NULL
+    for(line in lines) {
+      if(grepl("^[A-Z0-9]{2}  -",line)) {
+        tag <- substr(line,1L,2L)
+        value <- trimws(substring(line,6L))
+        if(tag=="TY") {
+          if(!is.null(rec)) stop("Unterminated RIS record.")
+          rec <- list()
+        } else if(tag=="ER") {
+          if(is.null(rec)) stop("Unexpected RIS record terminator.")
+          records[[length(records)+1L]] <- rec
+          rec <- NULL; tag <- NULL
+        } else if(!is.null(rec)) {
+          rec[[tag]] <- c(rec[[tag]],value)
+        }
+      } else if(!is.null(rec)&&!is.null(tag)&&length(rec[[tag]])&&nzchar(trimws(line))) {
+        n <- length(rec[[tag]])
+        rec[[tag]][n] <- paste(rec[[tag]][n],trimws(line))
+      }
+    }
+    if(!is.null(rec)) stop("Unterminated RIS record.")
+    if(!length(records)) stop("No complete RIS records found.")
+    field <- function(r,tags) {
+      for(t in tags) {
+        v <- scalar(r[[t]])
+        if(nzchar(v)) return(v)
+      }
+      ""
+    }
+    tab <- data.frame(
+      DOI=vapply(records,field,character(1),tags=c("DO")),
+      Title=vapply(records,field,character(1),tags=c("TI","T1","CT")),
+      Abstract=vapply(records,field,character(1),tags=c("AB","N2")),
+      EID=vapply(records,field,character(1),tags=c("AN","ID")),
+      stringsAsFactors=FALSE)
+  } else {
+    tab <- utils::read.csv(csv,check.names=FALSE,stringsAsFactors=FALSE,
+      colClasses="character",fileEncoding="UTF-8-BOM",na.strings=character())
+  }
   headers <- tolower(gsub("[^[:alnum:]]","",names(tab)))
   pick <- function(aliases,required=TRUE) {
     i <- match(aliases,headers,nomatch=0L); i <- i[i>0L]
