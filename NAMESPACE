@@ -207,3 +207,5 @@ export(recover_w02_final_lookups)
 export(lock_w02)
 
 export(sample_w04_validation)
+
+export(export_w04_validation_ris)
