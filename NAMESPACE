@@ -193,3 +193,5 @@ export(search_google_serper)
 export(scope_w00_refinements)
 
 export(recover_w02_abstracts)
+
+export(import_w02_manual_abstracts)
