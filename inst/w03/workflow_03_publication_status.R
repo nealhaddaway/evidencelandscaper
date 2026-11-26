@@ -18,6 +18,7 @@ if(is.na(batch_size)||batch_size<1L||batch_size>100L) stop("--batch-size must be
 clean <- function(x){if(is.null(x)||!length(x))return("");s<-trimws(as.character(x[[1L]]));if(is.na(s))"" else s}
 strip_doi <- function(x){x<-tolower(clean(x));x<-sub("^https?://(dx\\.)?doi\\.org/","",x);x<-sub("^doi:","",x);x}
 openalex_key <- Sys.getenv("OPENALEX_API_KEY")
+if(!nzchar(openalex_key)) openalex_key <- Sys.getenv("OPENALEX_API_TOKEN")
 checked_at <- format(Sys.Date(),"%Y-%m-%d")
 
 patterns <- list(
@@ -86,7 +87,9 @@ meta <- lapply(rows,function(r){
   refs<-r$manifestation_refs%||%list()
   refs<-if(length(refs)) unlist(refs,use.names=FALSE) else character()
   oa_refs<-sub("^openalex:","",refs[grepl("^openalex:",refs,ignore.case=TRUE)])
-  oa_refs<-oa_refs[nzchar(oa_refs)]
+  manifest_refs<-vapply(r$manifestations%||%list(),function(m)clean(m$source_record_id),character(1))
+  manifest_refs<-sub("^openalex:","",manifest_refs[grepl("^openalex:W[0-9]+$",manifest_refs,ignore.case=TRUE)],ignore.case=TRUE)
+  oa_refs<-unique(c(oa_refs[nzchar(oa_refs)],manifest_refs))
   list(record_id=clean((r$identity%||%list())$record_id),title=clean(can$title),doi=strip_doi(can$doi),
        openalex_id=if(length(oa_refs))oa_refs[[1L]] else "")
 })
@@ -95,53 +98,104 @@ make_req <- function(url,query=list()){
   req<-request(url)
   if(length(query)) req<-do.call(req_url_query,c(list(req),query))
   if(nzchar(openalex_key)) req<-req_headers(req,Authorization=paste("Bearer",openalex_key))
-  req |> req_timeout(60) |> req_retry(max_tries=5,retry_on_failure=TRUE,backoff=function(tries)min(30,2^(tries-1L)))
+  req |> req_timeout(60) |> req_retry(max_tries=3,max_seconds=90,retry_on_failure=TRUE,backoff=function(tries)min(15,2^(tries-1L)))
 }
 oa_map <- new.env(parent=emptyenv())
 audit <- list(); audit_n <- 0L
 
-doi_idx <- which(vapply(meta,function(z)nzchar(z$doi),logical(1)))
-if(length(doi_idx)){
-  batches <- split(doi_idx,ceiling(seq_along(doi_idx)/batch_size))
-  for(b in batches){
-    dois <- vapply(meta[b],function(z)z$doi,character(1))
-    filt <- paste(dois,collapse="|")
-    req <- make_req("https://api.openalex.org/works",list(filter=paste0("doi:",filt),per_page=100,select="id,doi,is_retracted,type"))
-    resp <- req |> req_error(is_error=function(resp)FALSE) |> req_perform()
-    st <- resp_status(resp)
-    if(st!=200L){
-      audit_n<-audit_n+1L;audit[[audit_n]]<-list(kind="doi_batch_error",http_status=st,dois=dois)
-      for(d in dois) oa_map[[paste0("doi:",d)]] <- list(
-        work_id=NULL,is_retracted=NULL,type=NULL,lookup_status=paste0("http_",st)
-      )
-      next
+resume_output <- arg("--resume-output")
+resume_report <- arg("--resume-report")
+resume_audit <- arg("--resume-audit")
+if(!is.null(resume_output)){
+  old<-fromJSON(resume_report,simplifyVector=FALSE)
+  if(!identical(old$status,"FAIL_PROVIDER_ERRORS")||
+     !identical(old$input_sha256,digest(file=input_path,algo="sha256",serialize=FALSE))||
+     !identical(old$output_sha256,digest(file=resume_output,algo="sha256",serialize=FALSE)))
+    stop("Cannot resume: prior report or input checksum mismatch.")
+  prior<-read_records(resume_output)
+  if(!identical(vapply(prior,function(r)clean(r$record_id),character(1)),ids))
+    stop("Cannot resume: record identities differ.")
+  for(r in prior){
+    st<-r$publication_status;lk<-st$lookup;ev<-st$evidence$openalex
+    if(!clean(lk$status)%in%c("found","not_found"))next
+    k<-if(identical(lk$identifier_type,"doi"))paste0("doi:",lk$identifier) else if(identical(lk$identifier_type,"openalex"))paste0("wid:",lk$identifier) else ""
+    if(nzchar(k))oa_map[[k]]<-list(work_id=ev$work_id,is_retracted=ev$is_retracted,type=ev$work_type,lookup_status=lk$status)
+  }
+  if(!is.null(resume_audit)&&file.exists(resume_audit)) {
+    audit<-lapply(readLines(resume_audit,warn=FALSE),fromJSON,simplifyVector=FALSE)
+    audit_n<-length(audit)
+  }
+  message("[W03] Restored ",length(ls(oa_map))," completed identifier lookups.")
+}
+record_error <- function(kind,values,status){
+  audit_n<<-audit_n+1L
+  audit[[audit_n]]<<-list(kind=kind,http_status=status,identifiers=values)
+}
+fetch <- function(req){
+  tryCatch({
+    r<-req |> req_error(is_error=function(resp)FALSE) |> req_perform()
+    list(status=resp_status(r),body=if(resp_status(r)==200L)resp_body_json(r,simplifyVector=FALSE)else NULL)
+  },error=function(e)list(status=0L,body=NULL))
+}
+store <- function(key,w=NULL,status="not_found"){
+  oa_map[[key]]<-list(work_id=if(is.null(w))NULL else sub("^https://openalex.org/","",clean(w$id)),
+    is_retracted=if(is.null(w))NULL else isTRUE(w$is_retracted),
+    type=if(is.null(w))NULL else clean(w$type),lookup_status=status)
+}
+lookup_dois <- function(ds){
+  if(!length(ds))return(invisible(NULL))
+  # Reserved filter delimiters cannot safely appear in a DOI OR filter.
+  if(length(ds)==1L){
+    d<-ds[[1L]]
+    z<-fetch(make_req(paste0("https://api.openalex.org/works/doi:",URLencode(d,reserved=TRUE)),list(select="id,doi,is_retracted,type")))
+    if(z$status==200L&&identical(strip_doi(z$body$doi),d))store(paste0("doi:",d),z$body,"found")
+    else if(z$status==404L)store(paste0("doi:",d))
+    else {record_error("doi_single_error",d,z$status);store(paste0("doi:",d),status=paste0("http_",if(z$status==200L)"identity" else z$status))}
+    return(invisible(NULL))
+  }
+  special<-ds[grepl("[|,]",ds)]
+  for(d in special)lookup_dois(d)
+  ds<-setdiff(ds,special)
+  if(length(ds)<2L){lookup_dois(ds);return(invisible(NULL))}
+  z<-fetch(make_req("https://api.openalex.org/works",list(filter=paste0("doi:",paste(ds,collapse="|")),per_page=100,select="id,doi,is_retracted,type")))
+  if(z$status!=200L||is.null(z$body$results)||is.null(z$body$meta$count)||z$body$meta$count>length(z$body$results)){
+    record_error("doi_batch_error",ds,z$status)
+    # Do not multiply requests when authentication or rate limits fail.
+    if(z$status%in%c(401L,403L,429L)){
+      for(d in ds)store(paste0("doi:",d),status=paste0("http_",z$status))
+      return(invisible(NULL))
     }
-    body <- resp_body_json(resp,simplifyVector=FALSE)
-    for(w in body$results%||%list()){
-      d <- strip_doi(w$doi)
-      if(nzchar(d)) oa_map[[paste0("doi:",d)]] <- list(work_id=sub("^https://openalex.org/","",clean(w$id)),is_retracted=isTRUE(w$is_retracted),type=clean(w$type),lookup_status="found")
-    }
+    message("[W03] Batch of ",length(ds)," failed (HTTP ",z$status,"); splitting.")
+    size<-if(length(ds)>20L)20L else if(length(ds)>5L)5L else 1L
+    for(b in split(ds,ceiling(seq_along(ds)/size)))lookup_dois(b)
+    return(invisible(NULL))
+  }
+  hits<-z$body$results
+  for(d in ds){
+    h<-Filter(function(w)identical(strip_doi(w$doi),d),hits)
+    if(length(h)==1L)store(paste0("doi:",d),h[[1L]],"found")
+    else if(length(h)>1L)lookup_dois(d)
+    else store(paste0("doi:",d))
   }
 }
-
-for(i in seq_along(meta)){
-  z<-meta[[i]]
-  if(nzchar(z$doi) && exists(paste0("doi:",z$doi),envir=oa_map,inherits=FALSE)) next
-  if(!nzchar(z$doi) && nzchar(z$openalex_id)){
-    wid<-sub("^https://openalex.org/","",z$openalex_id,ignore.case=TRUE)
-    req<-make_req(paste0("https://api.openalex.org/works/",URLencode(wid,reserved=TRUE)),list(select="id,doi,is_retracted,type"))
-    resp<-req |> req_error(is_error=function(resp)FALSE) |> req_perform()
-    st<-resp_status(resp)
-    if(st==200L){
-      w<-resp_body_json(resp,simplifyVector=FALSE)
-      oa_map[[paste0("wid:",wid)]]<-list(work_id=sub("^https://openalex.org/","",clean(w$id)),is_retracted=isTRUE(w$is_retracted),type=clean(w$type),lookup_status="found")
-    } else {
-      oa_map[[paste0("wid:",wid)]]<-list(work_id=wid,is_retracted=NULL,type=NULL,lookup_status=if(st==404L)"not_found" else paste0("http_",st))
-      if(st!=404L){audit_n<-audit_n+1L;audit[[audit_n]]<-list(kind="openalex_id_error",record_id=z$record_id,openalex_id=wid,http_status=st)}
-    }
-  }
+ds<-unique(vapply(meta,function(z)z$doi,character(1)))
+ds<-ds[nzchar(ds)]
+ds<-ds[!vapply(paste0("doi:",ds),exists,logical(1),envir=oa_map,inherits=FALSE)]
+message("[W03] Outstanding DOI lookups: ",length(ds))
+if(length(ds))for(b in split(ds,ceiling(seq_along(ds)/batch_size)))lookup_dois(b)
+# DOI-less records can also carry an OpenAlex manifestation ID in the local W01 schema.
+wids<-unique(vapply(Filter(function(z)!nzchar(z$doi),meta),function(z)sub("^https://openalex.org/","",z$openalex_id,ignore.case=TRUE),character(1)))
+wids<-wids[nzchar(wids)]
+wids<-wids[!vapply(paste0("wid:",wids),exists,logical(1),envir=oa_map,inherits=FALSE)]
+message("[W03] Outstanding OpenAlex-ID lookups: ",length(wids))
+for(j in seq_along(wids)){
+  wid<-wids[[j]]
+  z<-fetch(make_req(paste0("https://api.openalex.org/works/",URLencode(wid,reserved=TRUE)),list(select="id,doi,is_retracted,type")))
+  if(z$status==200L&&nzchar(clean(z$body$id)))store(paste0("wid:",wid),z$body,"found")
+  else if(z$status==404L)store(paste0("wid:",wid))
+  else {record_error("openalex_id_error",wid,z$status);store(paste0("wid:",wid),status=paste0("http_",if(z$status==200L)"identity" else z$status))}
+  if(j%%100L==0L)message("[W03] OpenAlex IDs: ",j,"/",length(wids))
 }
-
 dir.create(dirname(output_path),recursive=TRUE,showWarnings=FALSE)
 dir.create(dirname(audit_path),recursive=TRUE,showWarnings=FALSE)
 outcon<-file(output_path,"wt",encoding="UTF-8");on.exit(close(outcon),add=TRUE)
