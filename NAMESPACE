@@ -191,3 +191,5 @@ export(run_ostara_case_mechanism_fulltext_pilot)
 export(run_ostara_random_case_mechanism_pilot)
 export(search_google_serper)
 export(scope_w00_refinements)
+
+export(recover_w02_abstracts)
