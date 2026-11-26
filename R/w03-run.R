@@ -72,20 +72,33 @@ run_w03 <- function(scored,limit=0L,batch_size=100L) {
     message("[W03] Reusing verified completed scan.")
     return(invisible(dest))
   }
-  if(dir.exists(dest)&&length(list.files(dest,all.files=TRUE,no..=TRUE)))
-    stop("Partial W03 output exists. Inspect it before re-execution.")
+  resume_args<-character()
+  if(dir.exists(dest)&&length(list.files(dest,all.files=TRUE,no..=TRUE))){
+    if(!all(file.exists(unlist(paths[c("output","audit","report")]))))
+      stop("Incomplete W03 artefacts; cannot safely resume.")
+    old<-jsonlite::fromJSON(paths$report)
+    if(!identical(old$status,"FAIL_PROVIDER_ERRORS")||
+       !identical(old$input_sha256,sha(canonical))||
+       !identical(old$output_sha256,sha(paths$output)))
+      stop("Prior W03 result cannot be safely resumed.")
+    archived<-tempfile(paste0(basename(dest),"-failed-"),tmpdir=dirname(dest))
+    if(!file.rename(dest,archived))stop("Could not archive prior W03 attempt.")
+    resume_args<-c("--resume-output",file.path(archived,"publication_status.jsonl"),
+      "--resume-report",file.path(archived,"report.json"),
+      "--resume-audit",file.path(archived,"api_audit.jsonl"))
+    message("[W03] Archived failed attempt: ",archived)
+  }
   dir.create(dest,recursive=TRUE,showWarnings=FALSE)
   script<-system.file("w03","workflow_03_publication_status.R",
                       package="evidencelandscaper")
   if(!nzchar(script))stop("Upstream W03 script missing.")
   args<-c(script,"--input",canonical,"--output",paths$output,
           "--audit",paths$audit,"--report",paths$report,
-          "--limit",as.character(limit),"--batch-size",as.character(batch_size))
+          "--limit",as.character(limit),"--batch-size",as.character(batch_size),resume_args)
   logs<-suppressWarnings(system2(file.path(R.home("bin"),"Rscript"),
-              args=vapply(args,shQuote,character(1)),stdout=TRUE,stderr=TRUE))
-  status<-attr(logs,"status")
-  if(!is.null(status)&&status!=0L)
-    stop("W03 upstream script failed:\n",paste(tail(logs,35L),collapse="\n"))
+              args=vapply(args,shQuote,character(1)),stdout="",stderr=""))
+  if(!identical(as.integer(logs),0L))
+    stop("W03 upstream script failed; inspect the console and retained report/audit.")
   if(!all(file.exists(unlist(paths[c("output","audit","report")]))))
     stop("W03 output files missing.")
   rep<-jsonlite::fromJSON(paths$report)
