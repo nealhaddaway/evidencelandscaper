@@ -76,6 +76,8 @@ import_w02_manual_abstracts <- function(scored,csv,provider="scopus",input_dir=N
       Title=vapply(records,field,character(1),tags=c("TI","T1","CT")),
       Abstract=vapply(records,field,character(1),tags=c("AB","N2")),
       EID=vapply(records,field,character(1),tags=c("AN","ID")),
+      Year=vapply(records,field,character(1),tags=c("PY","Y1","DA")),
+      Authors=vapply(records,function(r)paste(c(r$AU,r$A1),collapse="; "),character(1)),
       stringsAsFactors=FALSE)
   } else {
     tab <- utils::read.csv(csv,check.names=FALSE,stringsAsFactors=FALSE,
@@ -98,6 +100,39 @@ import_w02_manual_abstracts <- function(scored,csv,provider="scopus",input_dir=N
     provider_id=pick(c("eid","ut","accessionnumber","wosaccessionnumber"),FALSE),
     stringsAsFactors=FALSE)
   exported$norm_title <- vapply(exported$title,norm,character(1))
+  year <- function(x) {
+    x <- scalar(x)
+    if(grepl("^[12][0-9]{3}",x)) substr(x,1L,4L) else ""
+  }
+  surname <- function(x) {
+    x <- scalar(x)
+    if(!nzchar(x)) return("")
+    if(grepl(",",x,fixed=TRUE)) return(norm(sub(",.*$","",x)))
+    # Only use unambiguously surname-first strings with a trailing initial.
+    if(grepl("^[[:alpha:]'-]+[[:space:]]+[[:alpha:]][.]?$",x))
+      return(norm(sub("[[:space:]].*$","",x)))
+    ""
+  }
+  first_author <- function(x) {
+    if(is.null(x)||!length(x)) return("")
+    if(is.list(x)&&!is.null(names(x))) {
+      for(k in c("last_name","family_name","family","surname","lastName","familyName")) {
+        v <- norm(x[[k]])
+        if(nzchar(v)) return(v)
+      }
+      for(k in c("name","display_name","full_name","fullName","author_name")) {
+        v <- surname(x[[k]])
+        if(nzchar(v)) return(v)
+      }
+      if(!is.null(x$author)) return(first_author(x$author))
+      return("")
+    }
+    if(is.list(x)) return(first_author(x[[1L]]))
+    surname(strsplit(scalar(x),";",fixed=TRUE)[[1L]][1L])
+  }
+  exported$year <- vapply(pick(c("year","publicationyear","py"),FALSE),year,character(1))
+  exported$first_author <- vapply(pick(c("authors","author","au"),FALSE),first_author,character(1))
+  
   rows <- lapply(readLines(input,warn=FALSE,encoding="UTF-8"),jsonlite::fromJSON,simplifyVector=FALSE)
   rid <- vapply(rows,function(r)scalar(r$identity$record_id),character(1))
   if(any(!nzchar(rid))||anyDuplicated(rid)) stop("Invalid canonical record identities.")
@@ -108,6 +143,8 @@ import_w02_manual_abstracts <- function(scored,csv,provider="scopus",input_dir=N
   ix <- which(!before)
   by_doi <- split(which(nzchar(exported$doi)),exported$doi[nzchar(exported$doi)])
   target_groups <- split(which(nzchar(ds)),ds[nzchar(ds)])
+  by_title <- split(which(nzchar(exported$norm_title)),exported$norm_title[nzchar(exported$norm_title)])
+  title_groups <- split(which(nzchar(ts)),ts[nzchar(ts)])
   audit <- vector("list",length(ix))
   used <- integer()
   for(j in seq_along(ix)) {
@@ -148,6 +185,41 @@ import_w02_manual_abstracts <- function(scored,csv,provider="scopus",input_dir=N
         }
       }
     }
+    # Title recovery never overrides a conflicting nonempty DOI. Require
+    # unique exact title, matching year and matching first author from the
+    # same original manifestation. Reject conflicting candidate abstracts.
+    if(outcome!="recovered" && nchar(ts[[i]])>=20L &&
+       length(title_groups[[ts[[i]]]])==1L) {
+      tc <- by_title[[ts[[i]]]]
+      tc <- tc[nzchar(exported$abstract[tc]) &
+        (!nzchar(ds[[i]]) | !nzchar(exported$doi[tc]) | exported$doi[tc]==ds[[i]])]
+      if(length(tc)) {
+        mans <- rows[[i]]$manifestations
+        ok <- vapply(tc,function(k) {
+          if(!nzchar(exported$year[[k]])||!nzchar(exported$first_author[[k]])) return(FALSE)
+          any(vapply(mans,function(m) {
+            z <- m$manifestation_metadata
+            y <- year(z$year)
+            a <- first_author(z$authors)
+            nzchar(y)&&nzchar(a)&&identical(y,exported$year[[k]])&&
+              identical(a,exported$first_author[[k]])
+          },logical(1)))
+        },logical(1))
+        tc <- tc[ok]
+        if(length(tc)&&length(unique(exported$abstract[tc]))==1L) {
+          k <- tc[[1L]]
+          rows[[i]]$canonical$abstract <- exported$abstract[[k]]
+          rows[[i]]$manual_abstract_provenance <- list(provider=provider,
+            export_sha256=csv_sha,export_row=k,provider_id=exported$provider_id[[k]],
+            returned_doi=exported$doi[[k]],returned_title=exported$title[[k]],
+            returned_year=exported$year[[k]],first_author=exported$first_author[[k]],
+            match_method="unique_exact_title_year_first_author")
+          used <- c(used,tc)
+          accepted <- tc
+          outcome <- "recovered_title_year_author"
+        }
+      }
+    }
     audit[[j]] <- list(record_id=rid[[i]],doi=ds[[i]],outcome=outcome,
       candidate_export_rows=as.list(candidates),accepted_export_rows=as.list(accepted))
   }
@@ -182,12 +254,19 @@ import_w02_manual_abstracts <- function(scored,csv,provider="scopus",input_dir=N
     export_rows_with_abstract=sum(nzchar(exported$abstract)),
     export_distinct_dois=length(unique(exported$doi[nzchar(exported$doi)])),
     export_rows_used=length(unique(used)),
+    title_year_author_recovered=sum(vapply(audit,function(a)identical(a$outcome,"recovered_title_year_author"),logical(1))),
     missing_before=sum(!before),recovered=sum(after)-sum(before),
     missing_after=sum(!after),abstracts_after=sum(after),
     outcomes=as.list(table(vapply(audit,function(a)a$outcome,character(1)))),
     input_sha256=input_sha,export_sha256=csv_sha,
     output_sha256=sha(canonical),audit_sha256=sha(audit_path)),
     file.path(tmp,"summary.json"),auto_unbox=TRUE,pretty=TRUE)
+  remaining_dois <- sort(unique(ds[!after & nzchar(ds)]))
+  safe <- remaining_dois[!grepl('"',remaining_dois,fixed=TRUE)]
+  if(length(safe)) {
+    query <- paste0('DO=(',paste(sprintf('"%s"',safe),collapse=" OR "),')')
+    writeLines(query,file.path(tmp,"wos_remaining_dois.txt"),useBytes=TRUE)
+  } else writeLines("",file.path(tmp,"wos_remaining_dois.txt"))
   if(!file.rename(tmp,dest)) stop("Cannot publish manual abstract import.")
   message("[W02] ",provider,": ",sum(after)-sum(before)," abstracts recovered; ",sum(!after)," remaining.")
   invisible(dest)
