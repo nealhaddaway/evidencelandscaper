@@ -197,3 +197,5 @@ export(recover_w02_abstracts)
 export(import_w02_manual_abstracts)
 
 export(recover_w02_publishers)
+
+export(recover_w02_crossref_titles)
