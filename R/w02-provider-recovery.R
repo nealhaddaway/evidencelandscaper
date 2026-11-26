@@ -1,9 +1,10 @@
 #' Recover remaining W02 abstracts from Crossref and publisher metadata
 #' @param scored Final W01 scoring directory.
 #' @param input_dir Latest validated W02 corpus.
+#' @param springer_only Run only Springer metadata recovery on unresolved Springer DOI records.
 #' @return New checksummed W02 corpus directory.
 #' @export
-recover_w02_publishers <- function(scored,input_dir) {
+recover_w02_publishers <- function(scored,input_dir,springer_only=FALSE) {
   input_dir <- normalizePath(input_dir,mustWork=TRUE)
   scored <- normalizePath(scored,mustWork=TRUE)
   input <- file.path(input_dir,"canonical.jsonl")
@@ -64,7 +65,9 @@ recover_w02_publishers <- function(scored,input_dir) {
       title=node("//*[local-name()='coredata']/*[local-name()='title']"),
       abstract=clean(node("//*[local-name()='abstract'] | //*[local-name()='coredata']/*[local-name()='description']")))
   }
-  springer_key <- Sys.getenv("SPRINGER_API_KEY")
+  springer_key <- Sys.getenv("SpringerNature_API_KEY")
+  if(!nzchar(springer_key)) springer_key <- Sys.getenv("SPRINGER_API_KEY")
+  if(springer_only&&!nzchar(springer_key)) stop("SpringerNature_API_KEY (or SPRINGER_API_KEY) is required.")
   springer <- function(d) {
     r <- get(httr2::request("https://api.springernature.com/meta/v2/json") |>
       httr2::req_url_query(q=paste0("doi:",d),api_key=springer_key,p=10))
@@ -98,14 +101,22 @@ recover_w02_publishers <- function(scored,input_dir) {
   stopifnot(!anyDuplicated(ids),all(nzchar(ids)))
   groups <- split(which(nzchar(ds)),ds[nzchar(ds)])
   ix <- which(!before)
-  out <- file.path(dirname(scored),"W02_main",paste0("publishers_",substr(input_sha,1L,12L)))
+  if(springer_only) ix <- ix[grepl("^10\\.(1007|1038|1186)/",ds[ix]) & nzchar(ts[ix])]
+  out <- file.path(dirname(scored),"W02_main",paste0(if(springer_only)"springer_" else "publishers_",substr(input_sha,1L,12L)))
   dir.create(out,recursive=TRUE,showWarnings=FALSE)
   cache <- file.path(out,"checkpoints")
   dir.create(cache,showWarnings=FALSE)
   audit <- vector("list",length(ix))
-  sd_enabled <- nzchar(Sys.getenv("SCOPUS_API_TOKEN"))&&nzchar(Sys.getenv("SCOPUS_INSTTOKEN"))
+  sd_enabled <- !springer_only&&nzchar(Sys.getenv("SCOPUS_API_TOKEN"))&&nzchar(Sys.getenv("SCOPUS_INSTTOKEN"))
   message("[W02] Missing abstracts: ",length(ix),"; with DOI: ",sum(nzchar(ds[ix])),
     "; ScienceDirect enabled: ",sd_enabled,"; Springer key available: ",nzchar(springer_key))
+  if(springer_only&&length(ix)) {
+    message("[W02] Springer-only target: ",length(ix)," publications.")
+    # Check authentication and transport before creating record checkpoints.
+    tryCatch(springer(ds[ix[[1L]]]),error=function(e)
+      stop("Springer metadata preflight failed. Check key entitlement and network; no record checkpoints written by preflight.",call.=FALSE))
+    message("[W02] Springer metadata preflight passed.")
+  }
   for(j in seq_along(ix)) {
     i <- ix[[j]]; d <- ds[[i]]; t <- ts[[i]]
     p <- file.path(cache,paste0(digest::digest(ids[[i]],algo="sha256",serialize=FALSE),".rds"))
@@ -129,10 +140,10 @@ recover_w02_publishers <- function(scored,input_dir) {
         Sys.sleep(0.25)
       }
       if(nzchar(d)&&nzchar(t)) {
-        attempt("crossref",crossref)
+        if(!springer_only) attempt("crossref",crossref)
         if(is.null(a$match)&&sd_enabled&&grepl("^10\\.(1016|1006|1053|1067|1011)/",d)) attempt("sciencedirect",sciencedirect)
         if(is.null(a$match)&&nzchar(springer_key)&&grepl("^10\\.(1007|1038|1186)/",d)) attempt("springer",springer)
-        if(is.null(a$match)) attempt("publisher_citation_metadata",landing)
+        if(!springer_only&&is.null(a$match)) attempt("publisher_citation_metadata",landing)
       }
       tmp <- tempfile(tmpdir=cache); saveRDS(a,tmp)
       if(!file.rename(tmp,p)) stop("Cannot save checkpoint.")
@@ -158,7 +169,7 @@ recover_w02_publishers <- function(scored,input_dir) {
   outcomes <- vapply(audit,function(a)if(is.null(a$provider))"unresolved" else a$provider,character(1))
   attempts <- unlist(lapply(audit,function(a)unlist(a$attempts)),use.names=FALSE)
   jsonlite::write_json(list(status="complete",publication_clusters=length(rows),
-    missing_before=sum(!before),recovered=sum(after)-sum(before),missing_after=sum(!after),
+    missing_before=sum(!before),targeted_records=length(ix),springer_only=springer_only,recovered=sum(after)-sum(before),missing_after=sum(!after),
     abstracts_after=sum(after),remaining_with_doi=sum(!after&nzchar(ds)),outcomes=as.list(table(outcomes)),
     request_errors=sum(attempts=="request_error"),springer_enabled=nzchar(springer_key),
     sciencedirect_enabled=sd_enabled,input_sha256=input_sha,output_sha256=sha(canonical),audit_sha256=sha(ap)),
