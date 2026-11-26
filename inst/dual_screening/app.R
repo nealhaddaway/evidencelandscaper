@@ -8,6 +8,9 @@ accounts <- c(neal="ramonycajal", maria="ramonycajal")
 users <- names(accounts)
 ss <- Sys.getenv("RYC_SCREENING_SHEET_ID")
 credential <- Sys.getenv("LEM_GOOGLE_SERVICE_ACCOUNT_JSON")
+storage_ready <- FALSE
+initialise_storage <- function(){
+if (storage_ready) return(invisible(TRUE))
 if(!nzchar(ss)||!nzchar(credential))
   stop("Configure a dedicated RYC_SCREENING_SHEET_ID and the existing Google service account credential.")
 if(!file.exists(credential)){
@@ -19,6 +22,13 @@ if(!file.exists(credential)){
   gs4_auth(path=keyfile,cache=FALSE)
   unlink(keyfile)
 } else gs4_auth(path=credential,cache=FALSE)
+for(k in names(tabs)){
+  if(!tabs[[k]] %in% sheet_names(ss))
+    sheet_write(empty(if(k=="records") record_cols else event_cols),ss=ss,sheet=tabs[[k]])
+}
+storage_ready <<- TRUE
+invisible(TRUE)
+}
 
 tabs <- c(records="ryc_records",events="ryc_events")
 record_cols <- c("batch","record_id","position","title","abstract","authors","year","journal","doi","volume","issue","pages","keywords","source_hash")
@@ -31,10 +41,6 @@ read_tab <- function(name,cols){
   x
 }
 # Dedicated sheet only; initialise headers once, never replace an existing tab.
-for(k in names(tabs)){
-  if(!tabs[[k]]%in%sheet_names(ss))
-    sheet_write(empty(if(k=="records")record_cols else event_cols),ss=ss,sheet=tabs[[k]])
-}
 load_records <- function()read_tab(tabs[["records"]],record_cols)
 load_events <- function()read_tab(tabs[["events"]],event_cols)
 append_event <- function(batch,id,user,kind,decision="",notes=""){
@@ -134,13 +140,13 @@ body{background:#f5f7fa;color:#203245;font-family:system-ui,sans-serif}
 ui<-fluidPage(tags$head(tags$style(HTML(css)),tags$script(HTML("
 document.addEventListener('keydown',function(e){
  if(e.repeat||e.ctrlKey||e.metaKey||e.altKey||/INPUT|TEXTAREA|SELECT|BUTTON/.test(e.target.tagName)||e.target.isContentEditable)return;
- var ids={i:'include',e:'exclude',ArrowLeft:'previous',ArrowRight:'next'};
+ var ids={i:'include',e:'exclude',ArrowLeft:'previous',ArrowRight:'next_record'};
  var b=document.getElementById(ids[e.key]);if(b&&!b.disabled&&b.offsetParent!==null){e.preventDefault();b.click();}
 });"))),uiOutput("body"))
 server<-function(input,output,session){
   user<-reactiveVal(NULL); records<-reactiveVal(NULL);events<-reactiveVal(NULL)
   idx<-reactiveVal(1L);ci<-reactiveVal(1L)
-  refresh<-function(){records(load_records());events(load_events())}
+  refresh<-function(){initialise_storage(); records(load_records());events(load_events())}
   guard<-function(fun)tryCatch(fun(),error=function(e)showNotification(conditionMessage(e),type="error",duration=12))
   output$body<-renderUI({
     if(is.null(user()))return(div(class="panelbox login",h2("Ramón y Cajal"),p("Independent abstract screening"),
@@ -155,14 +161,20 @@ server<-function(input,output,session){
   })
   observeEvent(input$login,{
     u<-tolower(trimws(input$username))
-    if(u%in%users&&identical(input$password,unname(accounts[u])))guard(function(){refresh();user(u)})
-    else showNotification("Incorrect username or password.",type="error")
+    if(length(u)==1L && u %in% users && identical(input$password,unname(accounts[u]))) {
+      guard(function(){refresh();user(u)})
+    } else {
+      showNotification("Incorrect username or password.",type="error")
+    }
   })
   observeEvent(input$logout,{user(NULL);records(NULL);events(NULL);idx(1L);ci(1L)})
   observeEvent(input$refresh,{req(user());guard(refresh)})
   output$batch_picker<-renderUI({
     req(user(),records());choices<-sort(unique(records()$batch))
-    selectInput("batch","Validation batch",choices=choices,selected=if(isolate(input$batch)%in%choices)isolate(input$batch)else choices[1])
+    current <- isolate(input$batch)
+    if (!length(choices)) return(p("No batches uploaded."))
+    selectInput("batch","Validation batch",choices=choices,
+      selected=if(length(current)==1L && current %in% choices) current else choices[1L])
   })
   observeEvent(input$batch,{idx(1L);ci(1L);if(!is.null(user()))guard(refresh)},ignoreInit=TRUE)
   state<-reactive({req(user(),records(),events(),input$batch);snapshot(records(),events(),input$batch)})
@@ -187,7 +199,7 @@ server<-function(input,output,session){
         record_card(s$records[i,,drop=FALSE]),
         textAreaInput("note","Reviewer notes (optional)",value=s$notes[i,u],rows=2),
         div(class="actions",actionButton("include","Include (I)",class="btn-success"),actionButton("exclude","Exclude (E)",class="btn-danger"),
-          actionButton("previous","← Previous"),actionButton("next","Next →"),actionButton("next_pending","Next unscreened")),
+          actionButton("previous","← Previous"),actionButton("next_record","Next →"),actionButton("next_pending","Next unscreened")),
         if(done==n)actionButton("submit","Submit and lock independent decisions",class="btn-primary")
       ),
       if(!s$unlocked)p("Other reviewer decisions remain hidden until both reviewers submit this batch."))
@@ -205,7 +217,7 @@ server<-function(input,output,session){
   observeEvent(input$include,save_screen("include"))
   observeEvent(input$exclude,save_screen("exclude"))
   observeEvent(input$previous,{req(user());idx(max(1L,idx()-1L))})
-  observeEvent(input$next,{req(user());idx(min(nrow(state()$records),idx()+1L))})
+  observeEvent(input$next_record,{req(user());idx(min(nrow(state()$records),idx()+1L))})
   observeEvent(input$next_pending,{req(user());q<-which(!nzchar(state()$decision[,user()]));if(length(q))idx(q[1])})
   observeEvent(input$submit,{
     req(user(),input$batch)
@@ -253,15 +265,18 @@ server<-function(input,output,session){
   }
   observeEvent(input$resolve_include,resolve("include"))
   observeEvent(input$resolve_exclude,resolve("exclude"))
-  output$management<-renderUI({
+  output$progress_table<-renderTable({
     req(user(),records(),events())
     bs<-sort(unique(records()$batch))
-    table<-if(length(bs))do.call(rbind,lapply(bs,function(b){
+    if(length(bs))do.call(rbind,lapply(bs,function(b){
       s<-snapshot(records(),events(),b)
       data.frame(Batch=b,Records=nrow(s$records),Neal=sum(nzchar(s$decision[,"neal"])),Maria=sum(nzchar(s$decision[,"maria"])),
         Status=if(!s$unlocked)"Blind screening"else if(all(nzchar(s$final)))"Resolved"else "Adjudication")
     }))else data.frame(Status="No batches uploaded")
-    tagList(div(class="panelbox",h4("Batch progress"),renderTable(table)),
+  })
+  output$management<-renderUI({
+    req(user())
+    tagList(div(class="panelbox",h4("Batch progress"),tableOutput("progress_table")),
       if(user()=="neal")div(class="panelbox",h4("Upload a batch"),selectInput("batch_name","Batch",paste("batch",1:5)),
         fileInput("ris","RIS file",accept=".ris"),actionButton("upload","Upload immutable batch",class="btn-primary")))
   })
