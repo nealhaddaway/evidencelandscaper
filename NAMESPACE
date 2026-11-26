@@ -203,3 +203,5 @@ export(recover_w02_crossref_titles)
 export(recover_w02_doi_metadata)
 
 export(recover_w02_final_lookups)
+
+export(lock_w02)
